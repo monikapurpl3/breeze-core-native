@@ -24,11 +24,15 @@
 //! * the canonical string in [`signing`], reproduced byte for byte by three
 //!   separate clients.
 
+pub mod enroll;
+pub mod net;
 pub mod nonce;
 pub mod reject;
 pub mod signing;
 pub mod verify;
 
+pub use enroll::EnrollmentService;
+pub use net::{client_ip, is_private_ip};
 pub use nonce::NonceCache;
 pub use reject::{Reason, Rejection, RejectionBody, SkewInfo};
 pub use verify::{bearer_from_header, hash_secret, Authenticated, Decision, Presented, Verifier};

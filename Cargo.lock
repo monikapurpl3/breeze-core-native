@@ -47,6 +47,7 @@ dependencies = [
  "base64",
  "breeze-store",
  "ed25519-dalek",
+ "getrandom",
  "serde",
  "serde_json",
  "sha2",

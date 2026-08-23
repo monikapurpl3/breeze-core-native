@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock};
 
-use breeze_auth::{NonceCache, Verifier};
+use breeze_auth::{EnrollmentService, NonceCache, Verifier};
 use breeze_device::{DeviceManager, UnitConfig as DeviceUnit};
 use breeze_store::{AppConfig, DevicesDoc};
 
@@ -23,6 +23,10 @@ pub struct Settings {
     /// device working, which is the drop-in default.
     pub min_auth_version: u8,
     pub worker_threads: usize,
+    /// Whether to trust `X-Forwarded-For`. Only true behind a real proxy:
+    /// otherwise any client could claim a private address and approve its own
+    /// pairing.
+    pub behind_proxy: bool,
 }
 
 impl Settings {
@@ -49,6 +53,10 @@ impl Settings {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(8),
+            behind_proxy: matches!(
+                std::env::var("AC_BEHIND_PROXY").as_deref(),
+                Ok("1") | Ok("true") | Ok("yes")
+            ),
         }
     }
 }
@@ -73,6 +81,9 @@ pub struct AppState {
     pub verifier: Verifier,
     /// Shared, because replay protection is only meaningful across all threads.
     pub nonces: Mutex<NonceCache>,
+    /// Pending pairings. In memory only: they live for a minute, and losing
+    /// them on restart just means whoever was mid-pairing starts again.
+    pub enrollment: Mutex<EnrollmentService>,
     pub started_at: std::time::SystemTime,
 }
 
@@ -124,6 +135,7 @@ impl AppState {
             manager,
             verifier,
             nonces: Mutex::new(NonceCache::default()),
+            enrollment: Mutex::new(EnrollmentService::default()),
             started_at: std::time::SystemTime::now(),
         })
     }
@@ -235,6 +247,7 @@ mod tests {
             bind: "127.0.0.1:8420".into(),
             min_auth_version: 1,
             worker_threads: 8,
+            behind_proxy: false,
         };
         assert_eq!(
             s.min_auth_version, 1,
@@ -244,6 +257,10 @@ mod tests {
         assert!(
             s.bind.starts_with("127.0.0.1"),
             "must not bind every interface by default"
+        );
+        assert!(
+            !s.behind_proxy,
+            "must not trust X-Forwarded-For unless told to"
         );
     }
 }

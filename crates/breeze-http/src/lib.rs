@@ -12,6 +12,7 @@
 //! there are a handful of clients, so an async runtime would cost a megabyte of
 //! binary and buy nothing measurable.
 
+pub mod auth_routes;
 pub mod control;
 pub mod respond;
 pub mod server;

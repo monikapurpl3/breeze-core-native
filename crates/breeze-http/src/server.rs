@@ -15,7 +15,14 @@ use crate::units;
 /// when `sleep_timer` is absent, for instance. So it must describe reality, not
 /// ambition: advertising `live_stream` before SSE exists would make every client
 /// open a stream that never arrives. Entries get added as routes land.
-const FEATURES: &[&str] = &["batch_state", "beep_control", "config_api", "ed25519_auth"];
+const FEATURES: &[&str] = &[
+    "batch_state",
+    "beep_control",
+    "config_api",
+    "device_pairing",
+    "ed25519_auth",
+    "whoami",
+];
 
 const AUTH_VERSIONS: &[u8] = &[1, 2];
 
@@ -34,6 +41,10 @@ struct Incoming {
     timestamp: Option<String>,
     nonce: Option<String>,
     signature: Option<String>,
+    /// The socket peer, and the forwarded header. Which one counts depends on
+    /// `behind_proxy`; see `breeze_auth::net`.
+    peer: Option<std::net::IpAddr>,
+    forwarded_for: Option<String>,
 }
 
 impl Incoming {
@@ -69,6 +80,8 @@ impl Incoming {
         let timestamp = header("x-breeze-timestamp");
         let nonce = header("x-breeze-nonce");
         let signature = header("x-breeze-signature");
+        let forwarded_for = header("x-forwarded-for");
+        let peer = request.remote_addr().map(|a| a.ip());
 
         // Now the mutable borrow. A v2 signature covers the body's digest, so
         // authentication cannot proceed without having read it.
@@ -90,6 +103,8 @@ impl Incoming {
             timestamp,
             nonce,
             signature,
+            peer,
+            forwarded_for,
         }
     }
 
@@ -118,6 +133,10 @@ enum Guard {
     ApiKey,
     /// API key *and* a per-device credential. Everything that touches a unit.
     Full,
+    /// API key *and* a private client address. Approving a pairing and
+    /// managing devices: a leaked key must not be enough to gain control, so
+    /// somebody has to be on the trusted network.
+    AdminLan,
 }
 
 /// Run the server until the listener dies.
@@ -211,6 +230,31 @@ fn resolve(method: &str, path: &str) -> Resolved {
         ("GET", "/api/units", Guard::Full, route_units),
         ("GET", "/api/units/state", Guard::Full, route_all_states),
         ("GET", "/api/config", Guard::Full, route_config),
+        (
+            "POST",
+            "/api/auth/enroll/start",
+            Guard::ApiKey,
+            route_enroll_start,
+        ),
+        (
+            "POST",
+            "/api/auth/enroll/poll",
+            Guard::ApiKey,
+            route_enroll_poll,
+        ),
+        (
+            "POST",
+            "/api/auth/enroll/approve",
+            Guard::AdminLan,
+            route_enroll_approve,
+        ),
+        (
+            "GET",
+            "/api/auth/devices",
+            Guard::AdminLan,
+            route_list_devices,
+        ),
+        ("GET", "/api/auth/whoami", Guard::Full, route_whoami),
     ];
     for (m, p, guard, handler) in fixed {
         if *p == path {
@@ -220,6 +264,17 @@ fn resolve(method: &str, path: &str) -> Resolved {
                 Resolved::MethodNotAllowed(m)
             };
         }
+    }
+
+    if let Some(token_id) = path.strip_prefix("/api/auth/devices/") {
+        if token_id.is_empty() || token_id.contains('/') {
+            return Resolved::NotFound;
+        }
+        return if method == "DELETE" {
+            Resolved::Route(Guard::AdminLan, route_revoke_device)
+        } else {
+            Resolved::MethodNotAllowed("DELETE")
+        };
     }
 
     // /api/units/{id}/state and /api/units/{id}/control
@@ -256,6 +311,23 @@ fn authorise(state: &AppState, incoming: &Incoming, guard: &Guard) -> Result<(),
     if matches!(guard, Guard::ApiKey) {
         return Ok(());
     }
+    if matches!(guard, Guard::AdminLan) {
+        let ip = breeze_auth::client_ip(
+            incoming.peer,
+            incoming.forwarded_for.as_deref(),
+            state.settings.behind_proxy,
+        );
+        if !breeze_auth::is_private_ip(ip) {
+            // Deliberately a 403, not a 401: the credential was fine, the
+            // *location* was not, and a client retrying with better credentials
+            // would never succeed.
+            return Err(Reply::detail(
+                403,
+                "this admin action must come from the local network",
+            ));
+        }
+        return Ok(());
+    }
 
     let devices = state
         .devices
@@ -281,6 +353,69 @@ fn authorise(state: &AppState, incoming: &Incoming, guard: &Guard) -> Result<(),
 }
 
 // ---------------------------------------------------------------- handlers
+
+fn route_enroll_start(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::auth_routes::start(state, &incoming.body)
+}
+
+fn route_enroll_poll(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::auth_routes::poll(state, &incoming.body)
+}
+
+fn route_enroll_approve(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::auth_routes::approve(state, &incoming.body)
+}
+
+fn route_list_devices(state: &AppState, _: &Incoming) -> Reply {
+    crate::auth_routes::list_devices(state)
+}
+
+fn route_revoke_device(state: &AppState, incoming: &Incoming) -> Reply {
+    let token_id = incoming
+        .path
+        .strip_prefix("/api/auth/devices/")
+        .unwrap_or_default();
+    crate::auth_routes::revoke(state, token_id)
+}
+
+/// `GET /api/auth/whoami` — which device is calling.
+///
+/// Needs the device credential it then describes, so a client can confirm what
+/// the server thinks it is without guessing.
+fn route_whoami(state: &AppState, incoming: &Incoming) -> Reply {
+    let devices = match state.devices.read() {
+        Ok(d) => d,
+        Err(_) => return Reply::detail(500, "device store unavailable"),
+    };
+    let mut nonces = match state.nonces.lock() {
+        Ok(n) => n,
+        Err(_) => return Reply::detail(500, "nonce cache unavailable"),
+    };
+    // Re-running verification is what identifies the caller: the guard only said
+    // yes, it did not say who.
+    let now = breeze_auth::signing::now_seconds();
+    let who = match state
+        .verifier
+        .verify_device(&devices, &incoming.presented(), &mut nonces, now)
+    {
+        breeze_auth::Decision::Allow(who) => who,
+        _ => return Reply::detail(401, "not an authenticated device"),
+    };
+    let record = devices.devices.iter().find(|d| d.token_id == who.token_id);
+    match record {
+        Some(d) => Reply::json(
+            200,
+            &serde_json::json!({
+                "token_id": d.token_id,
+                "label": d.label,
+                "auth_version": d.auth_version,
+                "created_at": d.created_at,
+                "expires_at": d.expires_at,
+            }),
+        ),
+        None => Reply::detail(404, "device not found"),
+    }
+}
 
 fn route_health(_: &AppState, _: &Incoming) -> Reply {
     Reply::json(200, &serde_json::json!({ "status": "ok" }))
@@ -477,9 +612,54 @@ mod tests {
     }
 
     #[test]
+    fn pairing_is_split_between_the_key_and_the_lan() {
+        // The whole point of the scheme: the key gets a client as far as asking.
+        assert_eq!(guard_of("POST", "/api/auth/enroll/start"), Guard::ApiKey);
+        assert_eq!(guard_of("POST", "/api/auth/enroll/poll"), Guard::ApiKey);
+        // Approving, listing and revoking are admin actions from the LAN.
+        assert_eq!(
+            guard_of("POST", "/api/auth/enroll/approve"),
+            Guard::AdminLan
+        );
+        assert_eq!(guard_of("GET", "/api/auth/devices"), Guard::AdminLan);
+        assert_eq!(
+            guard_of("DELETE", "/api/auth/devices/abc123"),
+            Guard::AdminLan
+        );
+    }
+
+    #[test]
+    fn whoami_needs_the_credential_it_describes() {
+        assert_eq!(guard_of("GET", "/api/auth/whoami"), Guard::Full);
+    }
+
+    #[test]
+    fn a_device_id_is_required_to_revoke() {
+        // A stray trailing slash must not look like a revoke of everything.
+        for path in ["/api/auth/devices/", "/api/auth/devices/a/b"] {
+            match resolve("DELETE", path) {
+                Resolved::NotFound => {}
+                other => panic!("{path} gave {other:?}, expected 404"),
+            }
+        }
+    }
+
+    #[test]
+    fn revoking_by_the_wrong_method_says_which_one_works() {
+        match resolve("GET", "/api/auth/devices/abc123") {
+            Resolved::MethodNotAllowed(a) => assert_eq!(a, "DELETE"),
+            other => panic!("expected 405, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn advertised_features_are_only_those_implemented() {
         // Clients branch on this list. Advertising live_stream before SSE exists
         // would make every client open a stream that never arrives.
+        assert!(
+            FEATURES.contains(&"device_pairing"),
+            "pairing does work now"
+        );
         assert!(
             !FEATURES.contains(&"live_stream"),
             "SSE is not implemented yet"

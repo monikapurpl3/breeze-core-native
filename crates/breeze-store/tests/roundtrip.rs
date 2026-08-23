@@ -176,6 +176,33 @@ fn a_devices_document_with_awkward_timestamps_round_trips() {
     assert_eq!(to_json(&parsed).unwrap(), doc);
 }
 
+/// Non-ASCII text is written as raw UTF-8, never as an ASCII escape.
+///
+/// pydantic writes raw UTF-8; Python's own `json.dumps` escapes by default
+/// (ensure_ascii=True). Comparing against `json.dumps` made a correct
+/// implementation look broken, so this exists to stop anyone re-diagnosing it.
+/// The fixture label is Erkondišn precisely to cover this.
+///
+/// Stated in bytes because escaped output would be pure ASCII: a byte above
+/// 0x7F *is* the property, and saying it that way needs no escaping.
+#[test]
+fn non_ascii_labels_stay_raw_utf8() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/devices.json");
+    let original = std::fs::read(&path).unwrap();
+    assert!(
+        original.iter().any(|b| *b > 0x7F),
+        "fixture should hold raw UTF-8, not an ASCII escape"
+    );
+
+    let doc: DevicesDoc = serde_json::from_slice(&original).unwrap();
+    let rewritten = to_json(&doc).unwrap();
+    assert!(
+        rewritten.bytes().any(|b| b > 0x7F),
+        "we must write raw UTF-8 too, or every non-ASCII label rewrites the file"
+    );
+    assert_eq!(rewritten.as_bytes(), &original[..]);
+}
+
 /// An unknown key must not be silently dropped on load and then lost on save —
 /// or rather, if it is dropped, we need to know, because a newer Breeze Core
 /// could add a field this build does not understand.

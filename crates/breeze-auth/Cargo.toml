@@ -16,6 +16,9 @@ sha3 = "0.10"
 base64 = "0.22"
 # Constant-time comparison for the API key and stored token hashes.
 subtle = "2"
+# OS entropy for pairing codes and bearer tokens. Nothing else needed: these are
+# high-entropy random strings, not derived from anything.
+getrandom = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 
