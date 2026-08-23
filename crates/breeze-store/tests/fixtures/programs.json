@@ -1,0 +1,79 @@
+{
+  "programs": [
+    {
+      "name": "Favourite",
+      "enabled": true,
+      "unit_ids": [],
+      "kind": "favourite",
+      "favourite": {
+        "power_state": true,
+        "operational_mode": null,
+        "target_temperature": 24.5,
+        "fan_speed": null,
+        "swing_mode": null,
+        "eco": null,
+        "turbo": null,
+        "beep": null
+      },
+      "schedule": [],
+      "curve": null,
+      "id": "p1"
+    },
+    {
+      "name": "Weekday",
+      "enabled": true,
+      "unit_ids": [
+        "153931628470980"
+      ],
+      "kind": "schedule",
+      "favourite": null,
+      "schedule": [
+        {
+          "days": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "time": "07:30",
+          "settings": {
+            "power_state": true,
+            "operational_mode": "COOL",
+            "target_temperature": null,
+            "fan_speed": null,
+            "swing_mode": null,
+            "eco": null,
+            "turbo": null,
+            "beep": null
+          }
+        }
+      ],
+      "curve": null,
+      "id": "p2"
+    },
+    {
+      "name": "Curve",
+      "enabled": false,
+      "unit_ids": [],
+      "kind": "curve",
+      "favourite": null,
+      "schedule": [],
+      "curve": {
+        "operational_mode": "HEAT",
+        "fan_speed": 60,
+        "points": [
+          {
+            "time": "00:00",
+            "temperature": 20.0
+          },
+          {
+            "time": "12:00",
+            "temperature": 23.5
+          }
+        ]
+      },
+      "id": "p3"
+    }
+  ]
+}

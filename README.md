@@ -81,7 +81,14 @@ cargo clippy --all-targets
 
 ## What is deliberately not here
 
-- **The commercial-appliance class (`0xCC`).** Nobody here owns one.
+- **The commercial-appliance class (`0xCC`).** Not for want of hardware — the
+  criterion is verifiability. An s390x build can be checked without a
+  mainframe: cross-compile, run the suite under emulation, and being wrong
+  fails in CI. A `0xCC` implementation could only be checked against
+  msmart's vectors, never against reality, and being wrong fails silently in
+  someone's building. The architecture keeps the door open: outside tests,
+  only `frame::DeviceType` and the `ac` module know what an appliance is, so
+  adding it is one enum variant and a module, not a refactor.
 - **V1 devices.** They answer discovery with XML and need a separate TCP query.
 - **Cloud pairing.** Coming, in this same binary; it needs TLS.
 

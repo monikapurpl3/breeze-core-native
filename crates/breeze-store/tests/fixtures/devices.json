@@ -1,0 +1,24 @@
+{
+  "devices": [
+    {
+      "token_id": "abc123",
+      "label": "Monique",
+      "auth_version": 1,
+      "token_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "public_key": null,
+      "created_at": 1787488496.123456,
+      "expires_at": null,
+      "last_used": null
+    },
+    {
+      "token_id": "def456",
+      "label": "Erkondišn",
+      "auth_version": 2,
+      "token_hash": null,
+      "public_key": "ZGVhZGJlZWZkZWFkYmVlZmRlYWRiZWVmZGVhZGJlZWZkZWE",
+      "created_at": 1787000000.0,
+      "expires_at": 1790000000.5,
+      "last_used": 1787488000.25
+    }
+  ]
+}

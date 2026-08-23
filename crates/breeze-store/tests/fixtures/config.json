@@ -1,0 +1,21 @@
+{
+  "api_key": "0123456789abcdef0123456789abcdef",
+  "units": [
+    {
+      "name": "Lijeva Soba",
+      "ip": "192.168.1.73",
+      "port": 6444,
+      "id": 153931628470980,
+      "token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "name": "No Creds",
+      "ip": "192.168.1.99",
+      "port": 6444,
+      "id": 1,
+      "token": null,
+      "key": null
+    }
+  ]
+}
