@@ -17,3 +17,7 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 # clients, and every request spends ~1.8s waiting on an air conditioner anyway,
 # so an async runtime would add a megabyte and buy nothing.
 tiny_http = "0.12"
+# Timer ids.
+getrandom = "0.2"
+# Naive local time, matching the scheduler.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

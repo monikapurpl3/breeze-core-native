@@ -20,6 +20,7 @@ const FEATURES: &[&str] = &[
     "beep_control",
     "config_api",
     "device_pairing",
+    "sleep_timer",
     "ed25519_auth",
     "whoami",
 ];
@@ -255,15 +256,35 @@ fn resolve(method: &str, path: &str) -> Resolved {
             route_list_devices,
         ),
         ("GET", "/api/auth/whoami", Guard::Full, route_whoami),
+        // Before the /{id} pattern, or "status" is captured as a timer id.
+        ("GET", "/api/timers/status", Guard::Full, route_timer_status),
+        ("GET", "/api/timers", Guard::Full, route_timers_list),
+        ("POST", "/api/timers", Guard::Full, route_timer_create),
     ];
+    // Two passes, because one path may accept more than one method: returning
+    // on the first *path* match made POST /api/timers answer 405 pointing at GET,
+    // since the GET entry came first.
     for (m, p, guard, handler) in fixed {
-        if *p == path {
-            return if *m == method {
-                Resolved::Route(*guard, *handler)
-            } else {
-                Resolved::MethodNotAllowed(m)
-            };
+        if *p == path && *m == method {
+            return Resolved::Route(*guard, *handler);
         }
+    }
+    // The path exists but not under this method; name one that works.
+    for (m, p, _, _) in fixed {
+        if *p == path {
+            return Resolved::MethodNotAllowed(m);
+        }
+    }
+
+    if let Some(timer_id) = path.strip_prefix("/api/timers/") {
+        if timer_id.is_empty() || timer_id.contains('/') {
+            return Resolved::NotFound;
+        }
+        return if method == "DELETE" {
+            Resolved::Route(Guard::Full, route_timer_cancel)
+        } else {
+            Resolved::MethodNotAllowed("DELETE")
+        };
     }
 
     if let Some(token_id) = path.strip_prefix("/api/auth/devices/") {
@@ -353,6 +374,26 @@ fn authorise(state: &AppState, incoming: &Incoming, guard: &Guard) -> Result<(),
 }
 
 // ---------------------------------------------------------------- handlers
+
+fn route_timers_list(state: &AppState, _: &Incoming) -> Reply {
+    crate::timer_routes::list(state)
+}
+
+fn route_timer_create(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::timer_routes::create(state, &incoming.body)
+}
+
+fn route_timer_status(state: &AppState, _: &Incoming) -> Reply {
+    crate::timer_routes::status(state)
+}
+
+fn route_timer_cancel(state: &AppState, incoming: &Incoming) -> Reply {
+    let id = incoming
+        .path
+        .strip_prefix("/api/timers/")
+        .unwrap_or_default();
+    crate::timer_routes::cancel(state, id)
+}
 
 fn route_enroll_start(state: &AppState, incoming: &Incoming) -> Reply {
     crate::auth_routes::start(state, &incoming.body)
@@ -653,6 +694,26 @@ mod tests {
     }
 
     #[test]
+    fn a_path_that_accepts_two_methods_routes_both() {
+        // /api/timers takes GET and POST. Resolving on the first path match
+        // made POST answer 405 pointing at GET, which is how the live test
+        // found it -- no unit test here had tried the second method.
+        assert_eq!(guard_of("GET", "/api/timers"), Guard::Full);
+        assert_eq!(guard_of("POST", "/api/timers"), Guard::Full);
+        // And a method neither entry offers is still a 405.
+        match resolve("PUT", "/api/timers") {
+            Resolved::MethodNotAllowed(_) => {}
+            other => panic!("expected 405, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_timer_status_route_is_not_read_as_a_timer_id() {
+        assert_eq!(guard_of("GET", "/api/timers/status"), Guard::Full);
+        assert_eq!(guard_of("DELETE", "/api/timers/abc123"), Guard::Full);
+    }
+
+    #[test]
     fn advertised_features_are_only_those_implemented() {
         // Clients branch on this list. Advertising live_stream before SSE exists
         // would make every client open a stream that never arrives.
@@ -660,6 +721,7 @@ mod tests {
             FEATURES.contains(&"device_pairing"),
             "pairing does work now"
         );
+        assert!(FEATURES.contains(&"sleep_timer"), "timers do work now");
         assert!(
             !FEATURES.contains(&"live_stream"),
             "SSE is not implemented yet"
@@ -667,10 +729,6 @@ mod tests {
         assert!(
             !FEATURES.contains(&"programs"),
             "programs are not implemented yet"
-        );
-        assert!(
-            !FEATURES.contains(&"sleep_timer"),
-            "timers are not implemented yet"
         );
         assert!(FEATURES.contains(&"ed25519_auth"), "v2 auth does work");
     }

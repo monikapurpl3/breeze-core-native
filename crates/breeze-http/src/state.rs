@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use breeze_auth::{EnrollmentService, NonceCache, Verifier};
 use breeze_device::{DeviceManager, UnitConfig as DeviceUnit};
-use breeze_store::{AppConfig, DevicesDoc};
+use breeze_store::{AppConfig, DevicesDoc, TimersDoc};
 
 /// Where the four store files live, and the knobs that change behaviour.
 #[derive(Debug, Clone)]
@@ -27,6 +27,10 @@ pub struct Settings {
     /// otherwise any client could claim a private address and approve its own
     /// pairing.
     pub behind_proxy: bool,
+    /// Seconds between due-checks. Finer than a scheduler's tick because a
+    /// schedule only has to hit the right minute, while a timer is a promise
+    /// about a moment.
+    pub timer_tick_seconds: u64,
 }
 
 impl Settings {
@@ -53,6 +57,10 @@ impl Settings {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(8),
+            timer_tick_seconds: std::env::var("AC_TIMER_TICK")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(15),
             behind_proxy: matches!(
                 std::env::var("AC_BEHIND_PROXY").as_deref(),
                 Ok("1") | Ok("true") | Ok("yes")
@@ -84,6 +92,10 @@ pub struct AppState {
     /// Pending pairings. In memory only: they live for a minute, and losing
     /// them on restart just means whoever was mid-pairing starts again.
     pub enrollment: Mutex<EnrollmentService>,
+    /// Pending one-shot timers. Durable, unlike enrolment sessions: a timer
+    /// is a promise that must survive a restart.
+    pub timers: RwLock<TimersDoc>,
+    pub runner: Mutex<crate::timer_routes::RunnerStats>,
     pub started_at: std::time::SystemTime,
 }
 
@@ -123,6 +135,9 @@ impl AppState {
         let devices: DevicesDoc = breeze_store::load(&settings.devices_path)
             .map_err(|e| StartupError::Store(e.to_string()))?;
 
+        let timers: TimersDoc = breeze_store::load(&settings.timers_path)
+            .map_err(|e| StartupError::Store(e.to_string()))?;
+
         let units: Vec<DeviceUnit> = config.units.iter().filter_map(to_device_unit).collect();
         let manager = Arc::new(DeviceManager::new(units));
         let verifier = Verifier::new(settings.min_auth_version);
@@ -136,6 +151,8 @@ impl AppState {
             verifier,
             nonces: Mutex::new(NonceCache::default()),
             enrollment: Mutex::new(EnrollmentService::default()),
+            timers: RwLock::new(timers),
+            runner: Mutex::new(crate::timer_routes::RunnerStats::default()),
             started_at: std::time::SystemTime::now(),
         })
     }
@@ -248,6 +265,7 @@ mod tests {
             min_auth_version: 1,
             worker_threads: 8,
             behind_proxy: false,
+            timer_tick_seconds: 15,
         };
         assert_eq!(
             s.min_auth_version, 1,

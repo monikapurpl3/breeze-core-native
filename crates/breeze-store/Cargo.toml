@@ -7,6 +7,10 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+# Timers and schedules work in naive server-local time, matching Python's
+# datetime.now(). std has no local-time support, and chrono resolves the zone
+# soundly (no unsound_local_offset caveat) and handles the DST database.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 serde = { version = "1", features = ["derive"] }
 # float_roundtrip is REQUIRED, not an optimisation. serde_json's default float
 # parser is fast but may be off by one ULP, and devices.json stores every

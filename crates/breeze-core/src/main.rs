@@ -17,6 +17,10 @@ fn main() {
             std::process::exit(1);
         }
     };
+    // Its own thread, so a disk error while a timer deletes itself cannot take
+    // the HTTP server down with it.
+    let _runner = breeze_http::timer_routes::spawn_runner(std::sync::Arc::clone(&state));
+
     if let Err(e) = breeze_http::serve(state) {
         eprintln!("breeze-core: {e}");
         std::process::exit(1);

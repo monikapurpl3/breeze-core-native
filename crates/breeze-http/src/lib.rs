@@ -17,6 +17,7 @@ pub mod control;
 pub mod respond;
 pub mod server;
 pub mod state;
+pub mod timer_routes;
 pub mod units;
 
 pub use respond::Reply;
