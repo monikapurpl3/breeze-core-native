@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Read-only by default; nothing here needs to write to the repo.
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # A dependency that fails to fetch should fail the job, not retry for minutes.
+  CARGO_NET_RETRY: 2
+
+jobs:
+  test:
+    name: test, clippy, fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      # The protocol layer is pure codec, so the whole suite runs without
+      # hardware or a network. If that ever stops being true, this job is the
+      # thing that will notice.
+      - run: cargo test --all-features --workspace
+      - run: cargo clippy --all-targets --workspace -- -D warnings
+      - run: cargo fmt --all --check
+
+  cross:
+    name: cross-compile (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The architectures the Python build could not reach cheaply. Each one is
+        # a plain library build; linking a binary comes with the server crate.
+        target:
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+          - armv7-unknown-linux-musleabihf
+          - s390x-unknown-linux-gnu
+          - riscv64gc-unknown-linux-gnu
+          - powerpc64le-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: mlugg/setup-zig@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      # Zig supplies libc and the linker for every target, which is why this
+      # matrix needs no per-architecture toolchain.
+      - run: cargo install cargo-zigbuild --locked
+      - run: cargo zigbuild --release --target ${{ matrix.target }} --workspace

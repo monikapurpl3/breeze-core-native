@@ -1,0 +1,17 @@
+[workspace]
+members = ["crates/breeze-proto"]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/monikapurpl3/breeze-core-native"
+
+# Size is a headline goal of this rewrite -- the Python packages it replaces are
+# 25 MB. These settings are what get a full daemon into ~2 MB.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

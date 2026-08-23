@@ -1,0 +1,12 @@
+[package]
+name = "breeze-proto"
+version = "0.1.0"
+description = "Midea LAN protocol (V2/V3) for air conditioners, without Python"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+aes = "0.8"
+md-5 = "0.10"
+sha2 = "0.10"
