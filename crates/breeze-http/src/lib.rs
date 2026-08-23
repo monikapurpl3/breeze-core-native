@@ -12,8 +12,13 @@
 //! there are a handful of clients, so an async runtime would cost a megabyte of
 //! binary and buy nothing measurable.
 
+pub mod control;
 pub mod respond;
+pub mod server;
+pub mod state;
 pub mod units;
 
 pub use respond::Reply;
+pub use server::serve;
+pub use state::{AppState, Settings, StartupError};
 pub use units::{UnitState, UnitSummary};

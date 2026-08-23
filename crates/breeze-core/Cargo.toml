@@ -1,0 +1,10 @@
+[package]
+name = "breeze-core"
+version = "4.0.0-dev"
+description = "LAN-first REST API and control panel for Midea air conditioners"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+breeze-http = { path = "../breeze-http" }

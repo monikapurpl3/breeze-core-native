@@ -55,6 +55,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "breeze-core"
+version = "4.0.0-dev"
+dependencies = [
+ "breeze-http",
+]
+
+[[package]]
 name = "breeze-device"
 version = "0.1.0"
 dependencies = [
