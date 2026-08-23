@@ -20,6 +20,7 @@ const FEATURES: &[&str] = &[
     "beep_control",
     "config_api",
     "device_pairing",
+    "programs",
     "sleep_timer",
     "ed25519_auth",
     "whoami",
@@ -260,6 +261,15 @@ fn resolve(method: &str, path: &str) -> Resolved {
         ("GET", "/api/timers/status", Guard::Full, route_timer_status),
         ("GET", "/api/timers", Guard::Full, route_timers_list),
         ("POST", "/api/timers", Guard::Full, route_timer_create),
+        // Likewise before /{id}, or "status" is read as a program id.
+        (
+            "GET",
+            "/api/programs/status",
+            Guard::Full,
+            route_program_status,
+        ),
+        ("GET", "/api/programs", Guard::Full, route_programs_list),
+        ("POST", "/api/programs", Guard::Full, route_program_create),
     ];
     // Two passes, because one path may accept more than one method: returning
     // on the first *path* match made POST /api/timers answer 405 pointing at GET,
@@ -284,6 +294,29 @@ fn resolve(method: &str, path: &str) -> Resolved {
             Resolved::Route(Guard::Full, route_timer_cancel)
         } else {
             Resolved::MethodNotAllowed("DELETE")
+        };
+    }
+
+    if let Some(rest) = path.strip_prefix("/api/programs/") {
+        // Either "{id}" or "{id}/apply" -- nothing else.
+        if let Some(id) = rest.strip_suffix("/apply") {
+            if id.is_empty() || id.contains('/') {
+                return Resolved::NotFound;
+            }
+            return if method == "POST" {
+                Resolved::Route(Guard::Full, route_program_apply)
+            } else {
+                Resolved::MethodNotAllowed("POST")
+            };
+        }
+        if rest.is_empty() || rest.contains('/') {
+            return Resolved::NotFound;
+        }
+        return match method {
+            "GET" => Resolved::Route(Guard::Full, route_program_get),
+            "PUT" => Resolved::Route(Guard::Full, route_program_update),
+            "DELETE" => Resolved::Route(Guard::Full, route_program_delete),
+            _ => Resolved::MethodNotAllowed("GET"),
         };
     }
 
@@ -393,6 +426,42 @@ fn route_timer_cancel(state: &AppState, incoming: &Incoming) -> Reply {
         .strip_prefix("/api/timers/")
         .unwrap_or_default();
     crate::timer_routes::cancel(state, id)
+}
+
+fn route_programs_list(state: &AppState, _: &Incoming) -> Reply {
+    crate::program_routes::list(state)
+}
+
+fn route_program_create(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::program_routes::create(state, &incoming.body)
+}
+
+fn route_program_status(state: &AppState, _: &Incoming) -> Reply {
+    crate::program_routes::status(state)
+}
+
+/// The id in `/api/programs/{id}`.
+fn program_id_from(path: &str) -> &str {
+    path.strip_prefix("/api/programs/").unwrap_or_default()
+}
+
+fn route_program_get(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::program_routes::get(state, program_id_from(&incoming.path))
+}
+
+fn route_program_update(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::program_routes::update(state, program_id_from(&incoming.path), &incoming.body)
+}
+
+fn route_program_delete(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::program_routes::delete(state, program_id_from(&incoming.path))
+}
+
+fn route_program_apply(state: &AppState, incoming: &Incoming) -> Reply {
+    let id = program_id_from(&incoming.path)
+        .strip_suffix("/apply")
+        .unwrap_or_default();
+    crate::program_routes::apply_now(state, id)
 }
 
 fn route_enroll_start(state: &AppState, incoming: &Incoming) -> Reply {
@@ -709,6 +778,7 @@ mod tests {
 
     #[test]
     fn the_timer_status_route_is_not_read_as_a_timer_id() {
+        assert_eq!(guard_of("GET", "/api/programs/status"), Guard::Full);
         assert_eq!(guard_of("GET", "/api/timers/status"), Guard::Full);
         assert_eq!(guard_of("DELETE", "/api/timers/abc123"), Guard::Full);
     }
@@ -727,9 +797,61 @@ mod tests {
             "SSE is not implemented yet"
         );
         assert!(
-            !FEATURES.contains(&"programs"),
-            "programs are not implemented yet"
+            FEATURES.contains(&"programs"),
+            "favourites, schedules and curves do work now"
         );
         assert!(FEATURES.contains(&"ed25519_auth"), "v2 auth does work");
+    }
+
+    #[test]
+    fn every_program_route_resolves_under_full_auth() {
+        // Programs are user features, so any enrolled client manages them --
+        // but nothing weaker than a paired device.
+        assert_eq!(guard_of("GET", "/api/programs"), Guard::Full);
+        assert_eq!(guard_of("POST", "/api/programs"), Guard::Full);
+        assert_eq!(guard_of("GET", "/api/programs/abc123"), Guard::Full);
+        assert_eq!(guard_of("PUT", "/api/programs/abc123"), Guard::Full);
+        assert_eq!(guard_of("DELETE", "/api/programs/abc123"), Guard::Full);
+        assert_eq!(guard_of("POST", "/api/programs/abc123/apply"), Guard::Full);
+    }
+
+    #[test]
+    fn status_is_not_mistaken_for_a_program_id() {
+        // The static entry has to be matched before the /{id} pattern, or
+        // GET /api/programs/status looks up a program called "status" and 404s.
+        match resolve("GET", "/api/programs/status") {
+            Resolved::Route(..) => {}
+            other => panic!("status did not route: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_wrong_method_on_a_program_names_one_that_works() {
+        match resolve("PATCH", "/api/programs/abc123") {
+            Resolved::MethodNotAllowed(m) => assert_eq!(m, "GET"),
+            other => panic!("expected 405, got {other:?}"),
+        }
+        // apply is POST-only.
+        match resolve("GET", "/api/programs/abc123/apply") {
+            Resolved::MethodNotAllowed(m) => assert_eq!(m, "POST"),
+            other => panic!("expected 405, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn nonsense_program_paths_are_not_found() {
+        assert!(matches!(
+            resolve("GET", "/api/programs/"),
+            Resolved::NotFound
+        ));
+        assert!(matches!(
+            resolve("POST", "/api/programs//apply"),
+            Resolved::NotFound
+        ));
+        // A deeper path is not a program id with a slash in it.
+        assert!(matches!(
+            resolve("GET", "/api/programs/abc/def"),
+            Resolved::NotFound
+        ));
     }
 }

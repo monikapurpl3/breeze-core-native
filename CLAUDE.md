@@ -76,10 +76,34 @@ from the same reading as the code:
 - the V3 session key is 32 bytes (AES-256, not 128) — caught by real hardware refusing every handshake;
 - `Program.id` serialises **last** — caught by round-tripping pydantic's own bytes;
 - serde_json's default float parser is off by 1 ULP — caught by the real `devices.json`, not by my fixtures, which passed;
-- `/api/units/state` is an envelope, not an array — caught by `breeze-core diag`.
+- `/api/units/state` is an envelope, not an array — caught by `breeze-core diag`;
+- a schedule normalises its `days` (`sorted(set(...))`) and a curve upper-cases its
+  `operational_mode` *before* being stored, so skipping either writes different
+  bytes for the same request — caught by diffing what two servers wrote;
+- Python's `round()` is banker's rounding and Rust's `f64::round` is not, so every exact
+  midpoint a temperature curve produces landed half a degree apart — caught by
+  running the reference `curve_setpoint` over 4,300 samples and diffing.
 
 So: msmart's test vectors for the protocol, pydantic-generated fixtures for the
 stores, Python-generated signatures for auth, and `diag` for the HTTP surface.
+
+### Read the reference from `~/Desktop/breeze-core`, nowhere else
+
+Three copies of the Python project exist on the maintainer's machine and only one
+is current:
+
+| Path | What it is |
+|---|---|
+| `~/Desktop/breeze-core` | **The reference.** The tree 3.2.0 was built from. |
+| `~/Desktop/MEOWAC` | A stale working copy. Its `CLAUDE.md` still loads if you start a session there, which makes it look authoritative. |
+| `mrrp:/opt/meow-ac` + `meow-ac.service` | A dead legacy deployment, inactive. The live service is `breeze-core.service` from the RPM, with its stores in `/etc/breeze-core` — *not* `/etc/meow-ac`. |
+
+This has already cost real time: `MEOWAC` and `/opt/meow-ac` predate the `beep`
+field and the whole timers feature, and the stale `/etc/meow-ac/programs.json`
+has no `beep` key. Reading those, it looks exactly like the native port invented
+a field and broke byte-compatibility — a convincing bug that does not exist.
+**Before trusting any Python file as the reference, `md5sum` it against
+`~/Desktop/breeze-core`.**
 
 ## Conventions and gotchas specific to this repo
 
@@ -178,8 +202,34 @@ pydantic models.
   the door open: outside tests only `frame::DeviceType` and the `ac` module know
   what an appliance is.
 - **V1 devices** (XML discovery, separate TCP query).
-- Still to come in Phase 3: `/api/auth/*` enrolment, programs, timers, SSE, the
-  embedded panel.
+- Still to come: SSE (`GET /api/units/stream`) and the embedded web panel. Both
+  are absent from `FEATURES` until they exist.
+
+## Known deliberate divergences
+
+Two places where the native server does not match the reference byte for byte.
+Both were found by diffing the two servers side by side, and both are recorded
+here so nobody "fixes" them by accident or, worse, discovers them from a bug
+report.
+
+**Validation errors are a flat message, not pydantic's error list.** FastAPI
+answers a bad request body with `{"detail": [{"type", "loc", "msg", "input",
+"ctx"}, ...]}`; this server answers `{"detail": "name must not be empty"}`. The
+status code (422) and *which* inputs get rejected are identical — verified across
+17 rejection cases. Nothing consumes the list shape: the Android app falls back
+to `detail.toString()`, the web UI reads only the structured *auth*-rejection
+fields (`error`, `retryable`, `server_time`), and `diag` checks the code alone.
+Reproducing pydantic's objects faithfully would mean guessing `loc` paths for a
+body nobody parses.
+
+**Keys in hand-built response objects come out alphabetised.** `serde_json`'s
+`Value` is a `BTreeMap` by default, so `serde_json::json!` output is sorted;
+the reference emits declaration order. Purely cosmetic — JSON objects are
+unordered and every client reads by name. It does *not* affect anything that
+matters: responses serialised from structs, and every stored file, keep
+declaration order, which is what the byte-compatibility guarantee rests on.
+Fixing it would mean pulling in `indexmap` via the `preserve_order` feature, for
+a difference visible only when pretty-printing.
 
 ## The README is not the shape to ship
 

@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use breeze_auth::{EnrollmentService, NonceCache, Verifier};
 use breeze_device::{DeviceManager, UnitConfig as DeviceUnit};
-use breeze_store::{AppConfig, DevicesDoc, TimersDoc};
+use breeze_store::{AppConfig, DevicesDoc, ProgramsDoc, TimersDoc};
 
 /// Where the four store files live, and the knobs that change behaviour.
 #[derive(Debug, Clone)]
@@ -31,6 +31,9 @@ pub struct Settings {
     /// schedule only has to hit the right minute, while a timer is a promise
     /// about a moment.
     pub timer_tick_seconds: u64,
+    /// Seconds between scheduler passes. A schedule only has to land inside the
+    /// right minute, so this is coarser than the timer runner.
+    pub sched_tick_seconds: u64,
 }
 
 impl Settings {
@@ -61,6 +64,10 @@ impl Settings {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(15),
+            sched_tick_seconds: std::env::var("AC_SCHED_TICK")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(30),
             behind_proxy: matches!(
                 std::env::var("AC_BEHIND_PROXY").as_deref(),
                 Ok("1") | Ok("true") | Ok("yes")
@@ -96,6 +103,10 @@ pub struct AppState {
     /// is a promise that must survive a restart.
     pub timers: RwLock<TimersDoc>,
     pub runner: Mutex<crate::timer_routes::RunnerStats>,
+    /// Stored favourites, schedules and curves.
+    pub programs: RwLock<ProgramsDoc>,
+    /// The scheduler's counters and its per-trigger firing memory.
+    pub scheduler: Mutex<crate::program_routes::SchedulerState>,
     pub started_at: std::time::SystemTime,
 }
 
@@ -138,6 +149,9 @@ impl AppState {
         let timers: TimersDoc = breeze_store::load(&settings.timers_path)
             .map_err(|e| StartupError::Store(e.to_string()))?;
 
+        let programs: ProgramsDoc = breeze_store::load(&settings.programs_path)
+            .map_err(|e| StartupError::Store(e.to_string()))?;
+
         let units: Vec<DeviceUnit> = config.units.iter().filter_map(to_device_unit).collect();
         let manager = Arc::new(DeviceManager::new(units));
         let verifier = Verifier::new(settings.min_auth_version);
@@ -153,6 +167,8 @@ impl AppState {
             enrollment: Mutex::new(EnrollmentService::default()),
             timers: RwLock::new(timers),
             runner: Mutex::new(crate::timer_routes::RunnerStats::default()),
+            programs: RwLock::new(programs),
+            scheduler: Mutex::new(crate::program_routes::SchedulerState::default()),
             started_at: std::time::SystemTime::now(),
         })
     }
@@ -266,6 +282,7 @@ mod tests {
             worker_threads: 8,
             behind_proxy: false,
             timer_tick_seconds: 15,
+            sched_tick_seconds: 30,
         };
         assert_eq!(
             s.min_auth_version, 1,

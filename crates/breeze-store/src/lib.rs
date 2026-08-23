@@ -26,6 +26,7 @@
 
 pub mod control;
 pub mod models;
+pub mod programs;
 mod store;
 pub mod timers;
 
@@ -33,6 +34,10 @@ pub use control::{ControlRequest, ValidationError};
 pub use models::{
     AppConfig, CurveConfig, CurvePoint, DeviceRecord, DevicesDoc, Program, ProgramsDoc,
     ScheduleEntry, Timer, TimersDoc, UnitConfig,
+};
+pub use programs::{
+    curve_request, curve_setpoint, due_entries, minute_stamp, round_half, ProgramError,
+    ProgramSpec, PROGRAM_KINDS,
 };
 pub use store::{load, save, to_json, Mode, StoreError};
 pub use timers::{build_timer, now_local, TimerError, MAX_MINUTES, MAX_UNITS};
