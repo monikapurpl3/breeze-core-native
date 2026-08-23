@@ -52,7 +52,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - uses: mlugg/setup-zig@v1
+      # v1 predates Zig renaming its release artifacts (arch before OS, and
+      # under /download/ rather than /builds/), so it resolved "latest" to 0.16.0
+      # and then 404'd on every mirror. Pin the version too, so CI builds with
+      # the same Zig as the developer machine instead of drifting.
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
