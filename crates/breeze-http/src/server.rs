@@ -12,35 +12,45 @@ use crate::units;
 /// Features this build actually implements.
 ///
 /// Clients feature-detect on this list — the Android app hides its hourglass
-/// when `sleep_timer` is absent, for instance. So it must describe reality, not
-/// ambition: advertising `live_stream` before SSE exists would make every client
-/// open a stream that never arrives. Entries get added as routes land.
-/// Every entry here must be a feature a client can actually *use*, not one this
-/// build has some of.
+/// when `sleep_timer` is absent, for instance. So every entry must be a feature
+/// a client can actually *use*, not one this build has some of.
 ///
-/// `config_api` was listed here while only its read half existed — `GET
-/// /api/config` worked, and the `POST /api/units` and `PATCH /api/units/{id}`
-/// that the flag also promises did not. The panel calls all three from its
-/// manage screen, so advertising it produced buttons that failed. Removed until
-/// the write half lands. The lesson generalises: when the reference groups
-/// several endpoints under one flag, the flag means all of them.
+/// That distinction is here because it was got wrong: `config_api` was listed
+/// while only its read half existed. `GET /api/config` worked; the
+/// `POST /api/units` and `PATCH /api/units/{id}` the same flag promises did not,
+/// and the panel calls all three from its manage screen — so the flag produced
+/// buttons that failed. When the reference groups several endpoints under one
+/// flag, the flag means all of them, and `a_flag_covering_several_endpoints_
+/// needs_all_of_them` now enforces that for this one.
 const FEATURES: &[&str] = &[
     "batch_state",
     "beep_control",
+    "config_api",
+    "delete_unit",
     "device_pairing",
+    "ed25519_auth",
     "live_stream",
     "programs",
     "sleep_timer",
-    // Signing genuinely works, end to end, and is the only reason to claim this.
-    // `/api/auth/upgrade` -- which the reference also files under this flag --
-    // does not exist yet, so a v1 device cannot migrate in place. Kept anyway:
-    // dropping it would make v2-capable clients pair as v1, which is worse than
-    // a missing migration path for the handful of v1 devices left.
-    "ed25519_auth",
+    "system_info",
+    "unit_history",
+    "metrics",
+    "unit_scan",
     "whoami",
 ];
 
 const AUTH_VERSIONS: &[u8] = &[1, 2];
+
+/// The advertised feature list, so `/api/system` reports the same one
+/// `/api/version` does rather than a second copy that could drift.
+pub fn features() -> &'static [&'static str] {
+    FEATURES
+}
+
+/// Device auth versions this build understands.
+pub fn auth_versions() -> &'static [u8] {
+    AUTH_VERSIONS
+}
 
 /// A request, decomposed into the parts routing and auth need.
 struct Incoming {
@@ -300,15 +310,29 @@ fn resolve(method: &str, path: &str) -> Resolved {
             Resolved::MethodNotAllowed("GET")
         };
     }
+    // Also ahead of the /{id} patterns, or "scan" is taken for a unit id and a
+    // DELETE would try to remove a unit called "scan".
+    if path == "/api/units/scan" {
+        return if method == "GET" {
+            Resolved::Route(Guard::Full, route_scan)
+        } else {
+            Resolved::MethodNotAllowed("GET")
+        };
+    }
 
     // Fixed paths first, so `/api/units/state` is never mistaken for a unit whose
     // id is "state".
     let fixed: &[(&str, &str, Guard, Handler)] = &[
         ("GET", "/api/health", Guard::Open, route_health),
         ("GET", "/api/version", Guard::ApiKey, route_version),
+        // Not under /api: Prometheus convention, and the reference does the
+        // same. Key-gated, because indoor temperature says whether anyone is in.
+        ("GET", "/metrics", Guard::ApiKey, route_metrics),
         ("GET", "/api/units", Guard::Full, route_units),
         ("GET", "/api/units/state", Guard::Full, route_all_states),
         ("GET", "/api/config", Guard::Full, route_config),
+        ("GET", "/api/system", Guard::Full, route_system),
+        ("POST", "/api/units", Guard::Full, route_add_unit),
         (
             "POST",
             "/api/auth/enroll/start",
@@ -334,6 +358,7 @@ fn resolve(method: &str, path: &str) -> Resolved {
             route_list_devices,
         ),
         ("GET", "/api/auth/whoami", Guard::Full, route_whoami),
+        ("POST", "/api/auth/upgrade", Guard::Full, route_upgrade),
         // Before the /{id} pattern, or "status" is captured as a timer id.
         ("GET", "/api/timers/status", Guard::Full, route_timer_status),
         ("GET", "/api/timers", Guard::Full, route_timers_list),
@@ -408,15 +433,25 @@ fn resolve(method: &str, path: &str) -> Resolved {
         };
     }
 
-    // /api/units/{id}/state and /api/units/{id}/control
+    // /api/units/{id}, and /api/units/{id}/{action}
     let Some(rest) = path.strip_prefix("/api/units/") else {
         return Resolved::NotFound;
     };
     let Some((_, tail)) = rest.split_once('/') else {
-        return Resolved::NotFound;
+        // No action: the unit itself. Renaming and removing live here.
+        if rest.is_empty() {
+            return Resolved::NotFound;
+        }
+        return match method {
+            "PATCH" => Resolved::Route(Guard::Full, route_rename_unit),
+            "DELETE" => Resolved::Route(Guard::Full, route_delete_unit),
+            _ => Resolved::MethodNotAllowed("PATCH"),
+        };
     };
     match tail {
         "state" if method == "GET" => Resolved::Route(Guard::Full, route_unit_state),
+        "history" if method == "GET" => Resolved::Route(Guard::Full, route_unit_history),
+        "history" => Resolved::MethodNotAllowed("GET"),
         "state" => Resolved::MethodNotAllowed("GET"),
         "control" if method == "POST" => Resolved::Route(Guard::Full, route_control),
         "control" => Resolved::MethodNotAllowed("POST"),
@@ -573,6 +608,10 @@ fn route_program_apply(state: &AppState, incoming: &Incoming) -> Reply {
     crate::program_routes::apply_now(state, id)
 }
 
+fn route_upgrade(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::auth_routes::upgrade(state, incoming.device_token_id.as_deref(), &incoming.body)
+}
+
 fn route_enroll_start(state: &AppState, incoming: &Incoming) -> Reply {
     crate::auth_routes::start(state, &incoming.body)
 }
@@ -634,6 +673,30 @@ fn route_whoami(state: &AppState, incoming: &Incoming) -> Reply {
     }
 }
 
+/// `GET /api/system`
+fn route_system(state: &AppState, incoming: &Incoming) -> Reply {
+    // How this client is reaching us, reported back because it is the fastest
+    // way to explain a class of confusing failures: a request that arrives
+    // looking like 127.0.0.1 means the proxy is not forwarding the real
+    // address, which is what silently breaks LAN-only approval.
+    let peer = breeze_auth::client_ip(
+        incoming.peer,
+        incoming.forwarded_for.as_deref(),
+        state.settings.behind_proxy,
+    );
+    let connection = serde_json::json!({
+        "client_ip": peer.map(|ip| ip.to_string()),
+        "client_is_private": breeze_auth::is_private_ip(peer),
+        "forwarded_for": incoming.forwarded_for,
+        "behind_proxy_enabled": state.settings.behind_proxy,
+    });
+    Reply::json(200, &crate::system::snapshot(state, connection))
+}
+
+fn route_metrics(state: &AppState, _: &Incoming) -> Reply {
+    crate::metrics::render(state)
+}
+
 fn route_health(_: &AppState, _: &Incoming) -> Reply {
     Reply::json(200, &serde_json::json!({ "status": "ok" }))
 }
@@ -644,7 +707,7 @@ fn route_version(state: &AppState, _: &Incoming) -> Reply {
         &serde_json::json!({
             "name": "Breeze Core",
             "version": state.version,
-            "commit": option_env!("BREEZE_COMMIT").unwrap_or("unknown"),
+            "commit": crate::build_commit(),
             "features": FEATURES,
             "auth_versions": AUTH_VERSIONS,
             "min_auth_version": state.settings.min_auth_version,
@@ -658,7 +721,18 @@ fn route_units(state: &AppState, _: &Incoming) -> Reply {
 }
 
 fn route_all_states(state: &AppState, _: &Incoming) -> Reply {
-    Reply::json_body(200, &units::all_states(&state.manager))
+    let envelope = units::all_states(&state.manager);
+    // Both halves of the envelope are readings worth keeping: an unreachable
+    // unit is exactly the thing a graph should show a gap for.
+    let now = crate::history::now_unix();
+    for key in ["states", "errors"] {
+        if let Some(list) = envelope.get(key).and_then(|v| v.as_array()) {
+            for state_value in list {
+                state.history.record(state_value, now);
+            }
+        }
+    }
+    Reply::json_body(200, &envelope)
 }
 
 /// The sanitised configuration.
@@ -667,25 +741,33 @@ fn route_all_states(state: &AppState, _: &Incoming) -> Reply {
 /// greps this response for anything secret-looking, so the omissions are checked
 /// rather than trusted.
 fn route_config(state: &AppState, _: &Incoming) -> Reply {
-    let config = match state.config.read() {
-        Ok(c) => c,
-        Err(_) => return Reply::detail(500, "configuration unavailable"),
-    };
-    let units: Vec<serde_json::Value> = config
-        .units
-        .iter()
-        .map(|u| {
-            serde_json::json!({
-                "id": u.id.to_string(),
-                "name": u.name,
-                "ip": u.ip,
-                "port": u.port,
-                // Whether credentials exist, never what they are.
-                "has_v3_credentials": u.token.is_some() && u.key.is_some(),
-            })
-        })
-        .collect();
-    Reply::json(200, &serde_json::json!({ "units": units }))
+    // Delegated so there is exactly one place that decides what a unit looks
+    // like to a client -- and therefore exactly one place a credential could
+    // leak from, with one test guarding it.
+    crate::config_routes::get_config(state)
+}
+
+fn route_add_unit(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::config_routes::add_unit(state, &incoming.body)
+}
+
+fn route_rename_unit(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::config_routes::rename_unit(state, unit_segment(&incoming.path), &incoming.body)
+}
+
+fn route_delete_unit(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::config_routes::delete_unit(state, unit_segment(&incoming.path))
+}
+
+fn route_scan(state: &AppState, incoming: &Incoming) -> Reply {
+    // The query lives on `signed_path`, which is the full URL; `path` has been
+    // stripped of it.
+    let query = incoming
+        .signed_path
+        .split_once('?')
+        .map(|(_, q)| q)
+        .unwrap_or_default();
+    crate::config_routes::scan(state, query)
 }
 
 /// Pull the unit id out of `/api/units/{id}/...`.
@@ -721,9 +803,32 @@ fn route_unit_state(state: &AppState, incoming: &Incoming) -> Reply {
         return unknown_unit(&incoming.path);
     }
     match units::unit_state(&state.manager, id) {
-        Ok(value) => Reply::json(200, &value),
+        Ok(value) => {
+            // Remembered on the way past: history costs no extra LAN traffic,
+            // it just keeps a reading something else already asked for.
+            state.history.record(&value, crate::history::now_unix());
+            Reply::json(200, &value)
+        }
         Err(e) => Reply::detail(503, e),
     }
+}
+
+/// `GET /api/units/{id}/history`
+fn route_unit_history(state: &AppState, incoming: &Incoming) -> Reply {
+    let Some(id) = unit_id_from(&incoming.path) else {
+        return unknown_unit(&incoming.path);
+    };
+    if !state.manager.contains(id) {
+        return unknown_unit(&incoming.path);
+    }
+    let unit_id = id.to_string();
+    Reply::json_body(
+        200,
+        &serde_json::json!({
+            "id": unit_id,
+            "samples": state.history.samples(&unit_id),
+        }),
+    )
 }
 
 fn route_control(state: &AppState, incoming: &Incoming) -> Reply {
@@ -929,17 +1034,7 @@ mod tests {
         );
         assert!(FEATURES.contains(&"ed25519_auth"), "v2 auth does work");
         // Still not implemented, and so still not advertised.
-        for absent in [
-            "unit_history",
-            "metrics",
-            "unit_scan",
-            "compression",
-            "delete_unit",
-            "unit_capabilities",
-            "system_info",
-            // Only its read half exists. See the note on FEATURES.
-            "config_api",
-        ] {
+        for absent in ["compression", "unit_capabilities"] {
             assert!(
                 !FEATURES.contains(&absent),
                 "{absent} is advertised but not implemented"
@@ -1061,5 +1156,60 @@ mod tests {
         let body: serde_json::Value =
             serde_json::from_slice(&unknown_unit("/api/units/abc/state").body).unwrap();
         assert_eq!(body["detail"], "Unknown unit 'abc'");
+    }
+
+    #[test]
+    fn the_config_write_routes_all_resolve() {
+        // The flag test above ties `config_api` to these, so this is what makes
+        // that assertion meaningful rather than circular.
+        assert_eq!(guard_of("GET", "/api/config"), Guard::Full);
+        assert_eq!(guard_of("POST", "/api/units"), Guard::Full);
+        assert_eq!(guard_of("PATCH", "/api/units/153931628470980"), Guard::Full);
+        assert_eq!(
+            guard_of("DELETE", "/api/units/153931628470980"),
+            Guard::Full
+        );
+        assert_eq!(guard_of("GET", "/api/units/scan"), Guard::Full);
+    }
+
+    #[test]
+    fn scan_is_not_mistaken_for_a_unit_id() {
+        // Without its own arm, "scan" reads as an id -- and a DELETE would try
+        // to remove a unit by that name.
+        match resolve("GET", "/api/units/scan") {
+            Resolved::Route(..) => {}
+            other => panic!("scan did not route: {other:?}"),
+        }
+        match resolve("DELETE", "/api/units/scan") {
+            Resolved::MethodNotAllowed(m) => assert_eq!(m, "GET"),
+            other => panic!("expected 405 for DELETE on scan, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_bare_unit_path_takes_only_patch_and_delete() {
+        // GET /api/units/{id} is not a route in the reference either -- state
+        // lives at /api/units/{id}/state.
+        match resolve("GET", "/api/units/7") {
+            Resolved::MethodNotAllowed(m) => assert_eq!(m, "PATCH"),
+            other => panic!("expected 405, got {other:?}"),
+        }
+        assert!(matches!(resolve("GET", "/api/units/"), Resolved::NotFound));
+    }
+
+    #[test]
+    fn the_batch_and_stream_paths_still_win_over_the_id_pattern() {
+        // Three static paths now sit where a unit id would go. Each must be
+        // matched before the pattern, and this is the regression test for all
+        // of them at once.
+        assert_eq!(guard_of("GET", "/api/units/state"), Guard::Full);
+        assert!(matches!(
+            resolve("GET", "/api/units/stream"),
+            Resolved::Stream(_)
+        ));
+        assert_eq!(guard_of("GET", "/api/units/scan"), Guard::Full);
+        // And a real id still reaches its own routes.
+        assert_eq!(guard_of("GET", "/api/units/7/state"), Guard::Full);
+        assert_eq!(guard_of("POST", "/api/units/7/control"), Guard::Full);
     }
 }

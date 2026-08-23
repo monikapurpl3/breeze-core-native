@@ -201,8 +201,13 @@ pub fn poll_once(state: &AppState) {
                 }
             }
         };
-        // Only on change: a unit whose temperature has not moved is not news,
-        // and waking every client every tick is what this feature exists to stop.
+        // Recorded every tick, changed or not: a flat line is data, and this is
+        // the only sampler that runs on a clock rather than when somebody asks.
+        state.history.record(&value, crate::history::now_unix());
+
+        // Broadcast only on change: a unit whose temperature has not moved is
+        // not news, and waking every client every tick is what this feature
+        // exists to stop.
         if changed {
             state.stream.broadcast(("state", value));
         }

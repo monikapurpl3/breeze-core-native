@@ -21,6 +21,7 @@
 mod device;
 mod error;
 mod manager;
+pub mod scan;
 mod session;
 
 #[cfg(test)]
@@ -29,4 +30,5 @@ mod testing;
 pub use device::{Device, UnitConfig};
 pub use error::DeviceError;
 pub use manager::DeviceManager;
+pub use scan::{scan, scan_subnet, ScanError, ScanReport};
 pub use session::Session;

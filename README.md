@@ -4,13 +4,17 @@ A native rewrite of [Breeze Core](https://github.com/monikapurpl3/breeze-core) �
 the LAN-first REST API and web panel for Midea air conditioners — in Rust, with
 Zig as the cross-linker.
 
-**Status: phase 3 complete.** The whole HTTP surface is implemented and verified
-against Breeze Core 3.2.0 running side by side — protocol, device layer, stores,
-authentication (API key, v1 bearer, v2 Ed25519), pairing, units, control,
-programs, timers, the SSE stream, and the web panel compiled into the binary.
-313 tests; every endpoint's response byte-identical to the reference bar one
-documented difference; `breeze-core diag --auto` passes against real hardware
-with no failures. Next: phase 4 — CLI subcommands and packaging.
+**Status: phase 3 in progress — 21 of 30 endpoints.** The protocol, device layer,
+stores and authentication are done; so are units, control, programs, timers, the
+SSE stream and the web panel compiled into the binary. Everything implemented is
+verified against Breeze Core 3.2.0 running side by side: responses byte-identical
+bar one documented difference, and `breeze-core diag --auto` passing against real
+hardware.
+
+Still missing, and tracked in `CLAUDE.md`: the config write API, unit scan,
+capabilities, history, `/api/system`, `/metrics`, `/api/auth/upgrade` and response
+compression. `FEATURES` advertises only what exists, so a client feature-detects
+its way around the gaps rather than hitting them.
 
 ## Why
 

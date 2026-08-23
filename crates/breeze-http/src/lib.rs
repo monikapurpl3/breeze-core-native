@@ -13,13 +13,17 @@
 //! binary and buy nothing measurable.
 
 pub mod auth_routes;
+pub mod config_routes;
 pub mod control;
+pub mod history;
+pub mod metrics;
 pub mod panel;
 pub mod program_routes;
 pub mod respond;
 pub mod server;
 pub mod state;
 pub mod stream;
+pub mod system;
 pub mod timer_routes;
 pub mod units;
 
@@ -27,3 +31,11 @@ pub use respond::Reply;
 pub use server::serve;
 pub use state::{AppState, Settings, StartupError};
 pub use units::{UnitState, UnitSummary};
+
+/// The commit this binary was built from, or `"unknown"`.
+///
+/// Set by CI via `BREEZE_COMMIT`. Shared by `/api/version` and `/metrics` so a
+/// scrape and a client see the same build identity.
+pub fn build_commit() -> &'static str {
+    option_env!("BREEZE_COMMIT").unwrap_or("unknown")
+}

@@ -102,6 +102,35 @@ impl DeviceManager {
         units.remove(&id).is_some()
     }
 
+    /// Whether a unit currently has a live session.
+    ///
+    /// For diagnostics only. Reading it must not open one: `/api/system` reports
+    /// this for every unit at once, and connecting each would cost ~700ms apiece
+    /// while somebody watches a spinner.
+    pub fn is_connected(&self, id: u64) -> bool {
+        match self.get(id) {
+            Some(handle) => handle.lock().map(|d| d.is_connected()).unwrap_or(false),
+            None => false,
+        }
+    }
+
+    /// Rename a unit in place, keeping its connection.
+    ///
+    /// Returns whether the unit was there. Separate from `upsert` because that
+    /// drops the session, which a label change has no reason to do.
+    pub fn rename(&self, id: u64, name: &str) -> bool {
+        match self.get(id) {
+            Some(handle) => match handle.lock() {
+                Ok(mut device) => {
+                    device.set_name(name);
+                    true
+                }
+                Err(_) => false,
+            },
+            None => false,
+        }
+    }
+
     /// Drop a unit's cached connection without forgetting the unit.
     pub fn forget(&self, id: u64) {
         if let Some(handle) = self.get(id) {

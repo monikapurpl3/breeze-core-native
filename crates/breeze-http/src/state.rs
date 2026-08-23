@@ -40,6 +40,8 @@ pub struct Settings {
     /// Seconds between central state polls, while at least one client is
     /// streaming. Matches the cadence clients used to poll at themselves.
     pub stream_tick_seconds: u64,
+    /// Samples kept per unit for the history endpoint and /metrics.
+    pub history_size: usize,
 }
 
 impl Settings {
@@ -70,6 +72,10 @@ impl Settings {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(15),
+            history_size: std::env::var("AC_HISTORY_SIZE")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(crate::history::DEFAULT_SIZE),
             stream_tick_seconds: std::env::var("AC_STREAM_TICK")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -123,6 +129,12 @@ pub struct AppState {
     pub scheduler: Mutex<crate::program_routes::SchedulerState>,
     /// The central state poller and its SSE subscribers.
     pub stream: crate::stream::StateStream,
+    /// Held for the duration of a LAN scan. One at a time: a scan is hundreds
+    /// of packets over several seconds, and two would double the traffic to
+    /// answer the same question.
+    pub scanning: Mutex<()>,
+    /// Recent readings, filled by whatever happens to read a state.
+    pub history: crate::history::History,
     pub started_at: std::time::SystemTime,
 }
 
@@ -172,6 +184,7 @@ impl AppState {
         let manager = Arc::new(DeviceManager::new(units));
         let verifier = Verifier::new(settings.min_auth_version);
         let stream = crate::stream::StateStream::new(settings.stream_tick_seconds);
+        let history = crate::history::History::new(settings.history_size);
 
         Ok(Self {
             settings,
@@ -187,6 +200,8 @@ impl AppState {
             programs: RwLock::new(programs),
             scheduler: Mutex::new(crate::program_routes::SchedulerState::default()),
             stream,
+            scanning: Mutex::new(()),
+            history,
             started_at: std::time::SystemTime::now(),
         })
     }
@@ -200,7 +215,7 @@ impl AppState {
 ///
 /// A unit with an unparseable address or a malformed key is skipped rather than
 /// fatal: one bad entry in `config.json` must not stop the other units working.
-fn to_device_unit(unit: &breeze_store::UnitConfig) -> Option<DeviceUnit> {
+pub(crate) fn to_device_unit(unit: &breeze_store::UnitConfig) -> Option<DeviceUnit> {
     let ip = unit.ip.parse().ok()?;
     let key = unit
         .key
@@ -302,6 +317,7 @@ mod tests {
             timer_tick_seconds: 15,
             sched_tick_seconds: 30,
             stream_tick_seconds: 5,
+            history_size: 720,
             security_headers: true,
         };
         assert_eq!(

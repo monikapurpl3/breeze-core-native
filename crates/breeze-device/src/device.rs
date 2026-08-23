@@ -77,8 +77,25 @@ impl Device {
         &self.config
     }
 
+    /// Change the display name, keeping the live session.
+    ///
+    /// A rename touches nothing the connection depends on, so replacing the
+    /// whole device for it would cost a needless reconnect -- about 1.8s on the
+    /// next request, for an edit to a label.
+    pub fn set_name(&mut self, name: impl Into<String>) {
+        self.config.name = name.into();
+    }
+
     /// Whether the last exchange succeeded. This is a record of the past, not a
     /// probe: it says nothing about whether the unit would answer right now.
+    /// Whether a session is currently open.
+    ///
+    /// Distinct from [`Device::online`], which records whether the last exchange
+    /// worked: a unit can be `online` from a minute ago with no session now.
+    pub fn is_connected(&self) -> bool {
+        self.session.is_some()
+    }
+
     pub fn online(&self) -> bool {
         self.online
     }

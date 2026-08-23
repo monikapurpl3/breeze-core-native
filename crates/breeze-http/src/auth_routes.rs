@@ -38,6 +38,77 @@ pub struct ApproveRequest {
     pub code: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpgradeRequest {
+    /// The Ed25519 public key the already-enrolled device has just generated.
+    pub public_key: String,
+}
+
+/// The reference bounds this, and so does this: a public key is 43 characters of
+/// base64url, so anything near the limit is already wrong.
+const PUBLIC_KEY_MAX: usize = 128;
+
+/// `POST /api/auth/upgrade` — move the calling device from v1 to v2 in place.
+///
+/// Authorised by the device's *existing* credential and nothing else: no admin
+/// approval, and no LAN gate. That is not a gap. It trusts nobody new — it
+/// re-keys a device that has just proved it holds a working credential, and the
+/// old bearer token stops working the moment this returns. Requiring somebody to
+/// walk to the LAN to let a phone improve its own crypto would mean most phones
+/// never did.
+pub fn upgrade(state: &AppState, token_id: Option<&str>, body: &[u8]) -> Reply {
+    // Identified by `authorise`, not re-verified here: a second verification
+    // would spend the v2 nonce twice. (A v1 device has no nonce, but this route
+    // is also reachable by an already-upgraded device re-keying again.)
+    let Some(token_id) = token_id else {
+        return Reply::detail(401, "no authenticated device to upgrade");
+    };
+    let request: UpgradeRequest = match serde_json::from_slice(body) {
+        Ok(r) => r,
+        Err(e) => return Reply::detail(422, format!("invalid upgrade request: {e}")),
+    };
+    if request.public_key.len() > PUBLIC_KEY_MAX {
+        return Reply::detail(400, "invalid Ed25519 public_key");
+    }
+    // Checked now, once, rather than on every later request: a malformed key
+    // stored here would lock the device out of everything with no way back.
+    if !breeze_auth::signing::public_key_is_valid(&request.public_key) {
+        return Reply::detail(400, "invalid Ed25519 public_key");
+    }
+
+    let mut devices = match state.devices.write() {
+        Ok(d) => d,
+        Err(_) => return Reply::detail(500, "device store unavailable"),
+    };
+    let Some(record) = devices.devices.iter_mut().find(|d| d.token_id == token_id) else {
+        return Reply::detail(404, "device not found");
+    };
+
+    let previous = record.clone();
+    record.auth_version = 2;
+    record.public_key = Some(request.public_key);
+    // Dropped deliberately: leaving it would keep a second, weaker way in to a
+    // device that has just been told to use signatures.
+    record.token_hash = None;
+
+    if let Err(e) = breeze_store::save(
+        &state.settings.devices_path,
+        &*devices,
+        breeze_store::Mode::Private,
+    ) {
+        // Roll back: a device that believes it upgraded, against a server that
+        // forgot, can authenticate neither way.
+        if let Some(record) = devices.devices.iter_mut().find(|d| d.token_id == token_id) {
+            *record = previous;
+        }
+        return Reply::detail(500, format!("cannot write the device store: {e}"));
+    }
+    Reply::json(
+        200,
+        &serde_json::json!({ "token_id": token_id, "auth_version": 2 }),
+    )
+}
+
 /// `POST /api/auth/enroll/start`
 pub fn start(state: &AppState, body: &[u8]) -> Reply {
     // An absent body is a v1 enrolment with no label, which is what an older
@@ -249,5 +320,14 @@ mod tests {
         let r: StartRequest =
             serde_json::from_slice(br#"{"label":"x","future_field":true}"#).unwrap();
         assert_eq!(r.label, "x");
+    }
+
+    #[test]
+    fn an_upgrade_request_is_just_a_public_key() {
+        let r: UpgradeRequest = serde_json::from_slice(br#"{"public_key":"abc"}"#).unwrap();
+        assert_eq!(r.public_key, "abc");
+        // And it is required: an upgrade with nothing to upgrade *to* would
+        // leave a device with no credential at all.
+        assert!(serde_json::from_slice::<UpgradeRequest>(b"{}").is_err());
     }
 }

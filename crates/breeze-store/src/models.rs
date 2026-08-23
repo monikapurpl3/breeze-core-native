@@ -63,6 +63,56 @@ pub struct AppConfig {
     pub units: Vec<UnitConfig>,
 }
 
+impl AppConfig {
+    /// A unit by its id as a **string**, which is how it arrives in a URL.
+    ///
+    /// Ids are stored as JSON numbers but are 48-bit and travel as strings
+    /// everywhere else; comparing the rendered form avoids a parse that could
+    /// fail on an id no client should have to know is numeric.
+    pub fn find_unit(&self, unit_id: &str) -> Option<&UnitConfig> {
+        self.units.iter().find(|u| u.id.to_string() == unit_id)
+    }
+
+    pub fn find_unit_mut(&mut self, unit_id: &str) -> Option<&mut UnitConfig> {
+        self.units.iter_mut().find(|u| u.id.to_string() == unit_id)
+    }
+
+    /// Insert a unit, or update the entry that already has its id.
+    ///
+    /// Updating keeps existing V3 credentials when the incoming record has
+    /// none: re-running discovery against a paired unit must not silently
+    /// unpair it, and discovery alone does not produce a token. Returns whether
+    /// this was an insert.
+    pub fn add_or_update_unit(&mut self, unit: UnitConfig) -> bool {
+        match self.units.iter_mut().find(|u| u.id == unit.id) {
+            Some(existing) => {
+                existing.ip = unit.ip;
+                existing.port = unit.port;
+                existing.name = unit.name;
+                // Only overwrite credentials *with* credentials.
+                if unit.token.is_some() {
+                    existing.token = unit.token;
+                }
+                if unit.key.is_some() {
+                    existing.key = unit.key;
+                }
+                false
+            }
+            None => {
+                self.units.push(unit);
+                true
+            }
+        }
+    }
+
+    /// Remove a unit by string id. Returns whether anything went.
+    pub fn remove_unit(&mut self, unit_id: &str) -> bool {
+        let before = self.units.len();
+        self.units.retain(|u| u.id.to_string() != unit_id);
+        self.units.len() != before
+    }
+}
+
 // --------------------------------------------------------------- devices.json
 
 /// One enrolled client.
