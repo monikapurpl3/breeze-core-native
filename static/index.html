@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Breeze Core</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <div class="page-header">
+    <h1>Breeze Core</h1>
+    <span id="globalStatus"></span>
+    <div class="header-actions">
+      <button class="ghost-btn" id="unitToggle" title="Toggle temperature unit">°C</button>
+      <button class="ghost-btn" id="beepToggle" title="Chirp when a unit accepts a command">🔕</button>
+      <button class="ghost-btn" id="programsBtn" title="Favourites, schedules and curves">Programs</button>
+      <button class="ghost-btn" id="nerdBtn" title="Server, host and runtime details">Nerd</button>
+      <button class="ghost-btn" id="addUnitBtn" title="Add a unit by its LAN IP">+ Add unit</button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <template id="panelTemplate">
+    <div class="unit-panel">
+      <div class="topbar">
+        <div class="unit-name" data-role="name"></div>
+        <div class="topbar-right">
+          <div class="status"><span class="dot" data-role="dot"></span><span data-role="statusText">connecting</span></div>
+          <div class="unit-menu">
+            <button class="menu-btn" data-role="menuBtn" aria-label="unit options">⋮</button>
+            <div class="menu hidden" data-role="menu">
+              <button data-role="renameBtn">Rename</button>
+              <button data-role="removeBtn">Remove unit</button>
+            </div>
+          </div>
+          <div class="switch power-switch" data-role="powerSwitch"></div>
+        </div>
+      </div>
+
+      <div class="dial-wrap">
+        <svg viewBox="0 0 180 180">
+          <circle class="dial-track" cx="90" cy="90" r="78"></circle>
+          <circle class="dial-fill" data-role="dialFill" cx="90" cy="90" r="78"
+                  stroke-dasharray="490" stroke-dashoffset="490"></circle>
+        </svg>
+        <div class="dial-center">
+          <div class="indoor-temp" data-role="indoorTemp">--°</div>
+          <div class="indoor-label">indoor</div>
+          <div class="target-row">target <span class="target-val" data-role="targetReadout">--°</span></div>
+        </div>
+      </div>
+
+      <div class="stepper">
+        <button data-role="tempDown">−</button>
+        <div class="target" data-role="targetBig">--°</div>
+        <button data-role="tempUp">+</button>
+      </div>
+
+      <div class="row" data-role="modeRow">
+        <div class="pill" data-mode="AUTO">auto</div>
+        <div class="pill" data-mode="COOL">cool</div>
+        <div class="pill" data-mode="DRY">dry</div>
+        <div class="pill" data-mode="HEAT">heat</div>
+        <div class="pill" data-mode="FAN_ONLY">fan</div>
+      </div>
+
+      <div class="row" data-role="fanRow">
+        <div class="pill" data-fan="20">low</div>
+        <div class="pill" data-fan="60">med</div>
+        <div class="pill" data-fan="100">high</div>
+        <div class="pill" data-fan="102">auto</div>
+      </div>
+
+      <div class="toggles">
+        <div class="toggle">eco <div class="switch" data-role="ecoSwitch"></div></div>
+        <div class="toggle">turbo <div class="switch" data-role="turboSwitch"></div></div>
+        <div class="toggle">flap ↕ <div class="switch" data-role="vSwitch"></div></div>
+        <div class="toggle">flap ↔ <div class="switch" data-role="hSwitch"></div></div>
+      </div>
+
+      <div class="error" data-role="errorBox"></div>
+      <div class="footer" data-role="footer">—</div>
+    </div>
+  </template>
+
+  <div class="empty-state hidden" id="emptyState">
+    <p>No units configured yet.</p>
+    <p>Run <code>setup_device.py</code> on the server to discover them, or add one by its LAN IP:</p>
+    <button class="ghost-btn" id="emptyAddBtn">+ Add unit by IP</button>
+  </div>
+
+  <!-- Server build info, filled from /api/version. -->
+  <footer class="app-footer" id="appFooter"></footer>
+
+  <!-- Enrollment overlay: shown when this browser has no device token yet.
+       The pairing code is displayed here; an admin approves it on the LAN. -->
+  <div class="enroll-overlay hidden" id="enrollOverlay">
+    <div class="enroll-card">
+      <h2>pair this device</h2>
+      <p class="enroll-intro" id="enrollIntro">
+        This device isn't paired yet. Give it a name and start pairing — a
+        one-time code will appear that an admin approves on the local network.
+      </p>
+
+      <div id="enrollStep1">
+        <input class="enroll-input" id="enrollLabel" type="text"
+               maxlength="64" placeholder="device name (e.g. living-room tablet)">
+        <button class="enroll-btn" id="enrollStartBtn">start pairing</button>
+      </div>
+
+      <div class="hidden" id="enrollStep2">
+        <div class="enroll-code" id="enrollCode">····-····</div>
+        <div class="enroll-countdown">expires in <span id="enrollCountdown">–</span>s</div>
+        <p class="enroll-hint">
+          Enter this code in the approval tool on the server within the time
+          limit. Waiting for approval…
+        </p>
+      </div>
+
+      <div class="enroll-error hidden" id="enrollError"></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

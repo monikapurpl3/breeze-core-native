@@ -14,10 +14,12 @@
 
 pub mod auth_routes;
 pub mod control;
+pub mod panel;
 pub mod program_routes;
 pub mod respond;
 pub mod server;
 pub mod state;
+pub mod stream;
 pub mod timer_routes;
 pub mod units;
 

@@ -20,6 +20,7 @@ const FEATURES: &[&str] = &[
     "beep_control",
     "config_api",
     "device_pairing",
+    "live_stream",
     "programs",
     "sleep_timer",
     "ed25519_auth",
@@ -47,6 +48,12 @@ struct Incoming {
     /// `behind_proxy`; see `breeze_auth::net`.
     peer: Option<std::net::IpAddr>,
     forwarded_for: Option<String>,
+    /// Set by `authorise` once a device has been identified, so a route never
+    /// re-verifies. Re-verifying would spend the v2 nonce twice and reject the
+    /// caller as a replay -- which is exactly what `whoami` used to do.
+    device_token_id: Option<String>,
+    /// For the panel: lets an unchanged file answer 304 instead of resending.
+    if_none_match: Option<String>,
 }
 
 impl Incoming {
@@ -83,6 +90,7 @@ impl Incoming {
         let nonce = header("x-breeze-nonce");
         let signature = header("x-breeze-signature");
         let forwarded_for = header("x-forwarded-for");
+        let if_none_match = header("if-none-match");
         let peer = request.remote_addr().map(|a| a.ip());
 
         // Now the mutable borrow. A v2 signature covers the body's digest, so
@@ -107,6 +115,8 @@ impl Incoming {
             signature,
             peer,
             forwarded_for,
+            if_none_match,
+            device_token_id: None,
         }
     }
 
@@ -164,10 +174,15 @@ pub fn serve(state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error>> {
             // Hold the receiver lock only long enough to take one request.
             let next = { rx.lock().ok().and_then(|r| r.recv().ok()) };
             match next {
-                Some(mut request) => {
-                    let reply = handle(&state, &mut request);
-                    let _ = request.respond(reply.into_http());
-                }
+                Some(mut request) => match handle(&state, &mut request) {
+                    Outcome::Reply(reply) => {
+                        let _ = request.respond(reply.into_http(state.settings.security_headers));
+                    }
+                    // An endless response cannot be handed to `respond()`, and
+                    // it must not hold a pooled worker either: eight open
+                    // streams would starve the whole API. It gets its own thread.
+                    Outcome::Stream => crate::stream::hijack(Arc::clone(&state), request),
+                },
                 None => break,
             }
         }));
@@ -185,21 +200,55 @@ pub fn serve(state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Route one request, authenticating first.
-fn handle(state: &AppState, request: &mut tiny_http::Request) -> Reply {
-    let incoming = Incoming::read(request);
-    let (guard, route) = match resolve(&incoming.method, &incoming.path) {
-        Resolved::Route(guard, route) => (guard, route),
-        Resolved::MethodNotAllowed(allow) => {
-            return Reply::detail(405, "Method Not Allowed").with_header("Allow", allow)
-        }
-        Resolved::NotFound => return Reply::detail(404, "Not Found"),
-    };
+/// What the worker should do with a request once it has been routed.
+enum Outcome {
+    Reply(Reply),
+    /// Hand the connection over to the SSE machinery, which owns it from then on.
+    Stream,
+}
 
-    if let Err(reply) = authorise(state, &incoming, &guard) {
-        return reply;
+/// Route one request, authenticating first.
+fn handle(state: &AppState, request: &mut tiny_http::Request) -> Outcome {
+    let mut incoming = Incoming::read(request);
+    match resolve(&incoming.method, &incoming.path) {
+        Resolved::MethodNotAllowed(allow) => {
+            Outcome::Reply(Reply::detail(405, "Method Not Allowed").with_header("Allow", allow))
+        }
+        // The panel is the last resort, tried only once every `/api/*` path has
+        // failed to match -- the same ordering as the reference, whose static
+        // mount sits at `/` below the routers. It needs no credentials, also as
+        // there: the page prompts for the API key itself, and gating it would
+        // leave nowhere to type one in.
+        Resolved::NotFound => {
+            if incoming.method == "GET" || incoming.method == "HEAD" {
+                if let Some(mut reply) =
+                    crate::panel::serve(&incoming.path, incoming.if_none_match.as_deref())
+                {
+                    if incoming.method == "HEAD" {
+                        reply.body.clear();
+                    }
+                    return Outcome::Reply(reply);
+                }
+            }
+            Outcome::Reply(Reply::detail(404, "Not Found"))
+        }
+        Resolved::Route(guard, route) => match authorise(state, &incoming, &guard) {
+            Err(reply) => Outcome::Reply(reply),
+            Ok(who) => {
+                // Handed to the route rather than left for it to work out again:
+                // a second verification would spend the v2 nonce twice.
+                incoming.device_token_id = who;
+                Outcome::Reply(route(state, &incoming))
+            }
+        },
+        // Authenticated exactly like any other route -- a stream reads live
+        // state, so it sits behind the same guard as reading one unit. Nothing
+        // is written here; the caller passes the connection on.
+        Resolved::Stream(guard) => match authorise(state, &incoming, &guard) {
+            Err(reply) => Outcome::Reply(reply),
+            Ok(_) => Outcome::Stream,
+        },
     }
-    route(state, &incoming)
 }
 
 type Handler = fn(&AppState, &Incoming) -> Reply;
@@ -215,6 +264,9 @@ enum Resolved {
     /// The path exists but not under this method.
     MethodNotAllowed(&'static str),
     NotFound,
+    /// `GET /api/units/stream` — the connection is handed to the SSE machinery
+    /// rather than answered with a body.
+    Stream(Guard),
 }
 
 /// Match a method and path to a guard and a handler.
@@ -224,6 +276,18 @@ enum Resolved {
 /// under the wrong method is a 405 with an `Allow` header, as FastAPI gives, so a
 /// client can tell "wrong verb" from "no such thing".
 fn resolve(method: &str, path: &str) -> Resolved {
+    // Before anything else: a stream is not a `Handler`. It never produces a
+    // body to hand back, so it cannot be expressed as one — and it has to be
+    // matched ahead of the `/api/units/{id}` patterns, or "stream" reads as a
+    // unit id.
+    if path == "/api/units/stream" {
+        return if method == "GET" {
+            Resolved::Stream(Guard::Full)
+        } else {
+            Resolved::MethodNotAllowed("GET")
+        };
+    }
+
     // Fixed paths first, so `/api/units/state` is never mistaken for a unit whose
     // id is "state".
     let fixed: &[(&str, &str, Guard, Handler)] = &[
@@ -348,9 +412,33 @@ fn resolve(method: &str, path: &str) -> Resolved {
 }
 
 /// Apply a route's guard, returning the rejection to send if it fails.
-fn authorise(state: &AppState, incoming: &Incoming, guard: &Guard) -> Result<(), Reply> {
+/// Record that a device just authenticated successfully.
+///
+/// In memory only, deliberately: the reference keeps the verify path free of
+/// disk I/O, and writing `devices.json` on every request would turn each read of
+/// a thermostat into a file rewrite. The consequence is that `last_used` resets
+/// on restart, which is the reference's behaviour too.
+///
+/// This was missing entirely at first — `last_used` was written as `null` at
+/// enrolment and never touched again, so `/api/auth/whoami` reported a device
+/// that had never been seen while answering the very request that used it.
+/// Caught by diffing whoami against the reference.
+fn mark_used(state: &AppState, token_id: &str, now: f64) {
+    if let Ok(mut devices) = state.devices.write() {
+        if let Some(record) = devices.devices.iter_mut().find(|d| d.token_id == token_id) {
+            record.last_used = Some(now);
+        }
+    }
+}
+
+/// Returns the identified device's token id, when the guard involved one.
+fn authorise(
+    state: &AppState,
+    incoming: &Incoming,
+    guard: &Guard,
+) -> Result<Option<String>, Reply> {
     if matches!(guard, Guard::Open) {
-        return Ok(());
+        return Ok(None);
     }
 
     // API key first, always: it is the cheaper check and the one that keeps
@@ -363,7 +451,7 @@ fn authorise(state: &AppState, incoming: &Incoming, guard: &Guard) -> Result<(),
         return Err(Reply::json_body(rejection.status, &rejection.body()));
     }
     if matches!(guard, Guard::ApiKey) {
-        return Ok(());
+        return Ok(None);
     }
     if matches!(guard, Guard::AdminLan) {
         let ip = breeze_auth::client_ip(
@@ -380,7 +468,7 @@ fn authorise(state: &AppState, incoming: &Incoming, guard: &Guard) -> Result<(),
                 "this admin action must come from the local network",
             ));
         }
-        return Ok(());
+        return Ok(None);
     }
 
     let devices = state
@@ -397,7 +485,15 @@ fn authorise(state: &AppState, incoming: &Incoming, guard: &Guard) -> Result<(),
         .verifier
         .verify_device(&devices, &incoming.presented(), &mut nonces, now)
     {
-        Decision::Allow(_) => Ok(()),
+        Decision::Allow(who) => {
+            let token_id = who.token_id.to_string();
+            // Release the read lock before asking for the write lock, or this
+            // deadlocks on the first authenticated request.
+            drop(nonces);
+            drop(devices);
+            mark_used(state, &token_id, now);
+            Ok(Some(token_id))
+        }
         Decision::Reject(r) => Err(Reply::json_body(r.status, &r.body())),
         Decision::UpgradeRequired { min_auth_version } => Err(Reply::json(
             426,
@@ -493,26 +589,20 @@ fn route_revoke_device(state: &AppState, incoming: &Incoming) -> Reply {
 /// Needs the device credential it then describes, so a client can confirm what
 /// the server thinks it is without guessing.
 fn route_whoami(state: &AppState, incoming: &Incoming) -> Reply {
+    // Uses the identity `authorise` already established. This used to re-run
+    // verification here, on the theory that the guard says yes without saying
+    // who -- which works for a v1 bearer token and is *broken* for v2: the
+    // nonce was spent by the first verification, so the second is a replay and
+    // every Ed25519 client got a 401 from the one route meant to tell it who it
+    // is.
+    let Some(token_id) = incoming.device_token_id.as_deref() else {
+        return Reply::detail(401, "not an authenticated device");
+    };
     let devices = match state.devices.read() {
         Ok(d) => d,
         Err(_) => return Reply::detail(500, "device store unavailable"),
     };
-    let mut nonces = match state.nonces.lock() {
-        Ok(n) => n,
-        Err(_) => return Reply::detail(500, "nonce cache unavailable"),
-    };
-    // Re-running verification is what identifies the caller: the guard only said
-    // yes, it did not say who.
-    let now = breeze_auth::signing::now_seconds();
-    let who = match state
-        .verifier
-        .verify_device(&devices, &incoming.presented(), &mut nonces, now)
-    {
-        breeze_auth::Decision::Allow(who) => who,
-        _ => return Reply::detail(401, "not an authenticated device"),
-    };
-    let record = devices.devices.iter().find(|d| d.token_id == who.token_id);
-    match record {
+    match devices.devices.iter().find(|d| d.token_id == token_id) {
         Some(d) => Reply::json(
             200,
             &serde_json::json!({
@@ -521,6 +611,10 @@ fn route_whoami(state: &AppState, incoming: &Incoming) -> Reply {
                 "auth_version": d.auth_version,
                 "created_at": d.created_at,
                 "expires_at": d.expires_at,
+                // Was missing here while the reference sent it -- caught by
+                // diffing the two responses. A client showing "last seen" for
+                // this device would have had nothing to show.
+                "last_used": d.last_used,
             }),
         ),
         None => Reply::detail(404, "device not found"),
@@ -590,12 +684,28 @@ fn unit_id_from(path: &str) -> Option<u64> {
         .ok()
 }
 
+/// The raw `{id}` segment, so an error can quote what was actually asked for.
+fn unit_segment(path: &str) -> &str {
+    path.strip_prefix("/api/units/")
+        .and_then(|rest| rest.split('/').next())
+        .unwrap_or("")
+}
+
+/// The reference's exact wording, id included.
+///
+/// It said `Unknown unit '999'` where this said `unknown unit` — caught by
+/// diffing the two servers. Clients surface this string to a person, so the
+/// difference is one a user could see.
+fn unknown_unit(path: &str) -> Reply {
+    Reply::detail(404, format!("Unknown unit '{}'", unit_segment(path)))
+}
+
 fn route_unit_state(state: &AppState, incoming: &Incoming) -> Reply {
     let Some(id) = unit_id_from(&incoming.path) else {
-        return Reply::detail(404, "unknown unit");
+        return unknown_unit(&incoming.path);
     };
     if !state.manager.contains(id) {
-        return Reply::detail(404, "unknown unit");
+        return unknown_unit(&incoming.path);
     }
     match units::unit_state(&state.manager, id) {
         Ok(value) => Reply::json(200, &value),
@@ -605,10 +715,10 @@ fn route_unit_state(state: &AppState, incoming: &Incoming) -> Reply {
 
 fn route_control(state: &AppState, incoming: &Incoming) -> Reply {
     let Some(id) = unit_id_from(&incoming.path) else {
-        return Reply::detail(404, "unknown unit");
+        return unknown_unit(&incoming.path);
     };
     if !state.manager.contains(id) {
-        return Reply::detail(404, "unknown unit");
+        return unknown_unit(&incoming.path);
     }
     let request: ControlRequest = match serde_json::from_slice(&incoming.body) {
         Ok(r) => r,
@@ -793,14 +903,50 @@ mod tests {
         );
         assert!(FEATURES.contains(&"sleep_timer"), "timers do work now");
         assert!(
-            !FEATURES.contains(&"live_stream"),
-            "SSE is not implemented yet"
+            FEATURES.contains(&"live_stream"),
+            "SSE does work now -- and the route must exist for this to be true"
+        );
+        assert!(
+            matches!(resolve("GET", "/api/units/stream"), Resolved::Stream(_)),
+            "live_stream is advertised, so the route has to be there"
         );
         assert!(
             FEATURES.contains(&"programs"),
             "favourites, schedules and curves do work now"
         );
         assert!(FEATURES.contains(&"ed25519_auth"), "v2 auth does work");
+        // Still not implemented, and so still not advertised.
+        for absent in ["unit_history", "metrics", "unit_scan", "compression"] {
+            assert!(
+                !FEATURES.contains(&absent),
+                "{absent} is advertised but not implemented"
+            );
+        }
+    }
+
+    #[test]
+    fn the_stream_is_behind_the_same_guard_as_reading_a_unit() {
+        match resolve("GET", "/api/units/stream") {
+            Resolved::Stream(guard) => assert_eq!(guard, Guard::Full),
+            other => panic!("stream did not route: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stream_is_not_mistaken_for_a_unit_id() {
+        // `/api/units/{id}/state` would otherwise swallow it, and a GET would
+        // 404 looking for a unit called "stream".
+        assert!(matches!(
+            resolve("GET", "/api/units/stream"),
+            Resolved::Stream(_)
+        ));
+        // The batch route is still its own thing.
+        assert_eq!(guard_of("GET", "/api/units/state"), Guard::Full);
+        // And the wrong verb on the stream names the right one.
+        match resolve("POST", "/api/units/stream") {
+            Resolved::MethodNotAllowed(m) => assert_eq!(m, "GET"),
+            other => panic!("expected 405, got {other:?}"),
+        }
     }
 
     #[test]
@@ -853,5 +999,23 @@ mod tests {
             resolve("GET", "/api/programs/abc/def"),
             Resolved::NotFound
         ));
+    }
+
+    #[test]
+    fn an_unknown_unit_is_reported_the_way_the_reference_reports_it() {
+        // Not cosmetic: clients put this string in front of a person, and the
+        // two servers disagreed until a byte-level diff caught it.
+        assert_eq!(unit_segment("/api/units/999/state"), "999");
+        assert_eq!(unit_segment("/api/units/abc/control"), "abc");
+        assert_eq!(unit_segment("/api/units/7"), "7");
+        assert_eq!(unit_segment("/nonsense"), "");
+
+        let body: serde_json::Value =
+            serde_json::from_slice(&unknown_unit("/api/units/999/state").body).unwrap();
+        assert_eq!(body["detail"], "Unknown unit '999'");
+        // A non-numeric id is quoted as given rather than swallowed.
+        let body: serde_json::Value =
+            serde_json::from_slice(&unknown_unit("/api/units/abc/state").body).unwrap();
+        assert_eq!(body["detail"], "Unknown unit 'abc'");
     }
 }

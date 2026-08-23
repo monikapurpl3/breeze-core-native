@@ -27,6 +27,9 @@ pub struct Settings {
     /// otherwise any client could claim a private address and approve its own
     /// pairing.
     pub behind_proxy: bool,
+    /// Whether to send the hardening headers. Off when a reverse proxy already
+    /// sets them: duplicated CSP headers are intersected, not deduplicated.
+    pub security_headers: bool,
     /// Seconds between due-checks. Finer than a scheduler's tick because a
     /// schedule only has to hit the right minute, while a timer is a promise
     /// about a moment.
@@ -34,6 +37,9 @@ pub struct Settings {
     /// Seconds between scheduler passes. A schedule only has to land inside the
     /// right minute, so this is coarser than the timer runner.
     pub sched_tick_seconds: u64,
+    /// Seconds between central state polls, while at least one client is
+    /// streaming. Matches the cadence clients used to poll at themselves.
+    pub stream_tick_seconds: u64,
 }
 
 impl Settings {
@@ -64,10 +70,18 @@ impl Settings {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(15),
+            stream_tick_seconds: std::env::var("AC_STREAM_TICK")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(5),
             sched_tick_seconds: std::env::var("AC_SCHED_TICK")
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(30),
+            security_headers: !matches!(
+                std::env::var("AC_SECURITY_HEADERS").as_deref(),
+                Ok("0") | Ok("false") | Ok("no")
+            ),
             behind_proxy: matches!(
                 std::env::var("AC_BEHIND_PROXY").as_deref(),
                 Ok("1") | Ok("true") | Ok("yes")
@@ -107,6 +121,8 @@ pub struct AppState {
     pub programs: RwLock<ProgramsDoc>,
     /// The scheduler's counters and its per-trigger firing memory.
     pub scheduler: Mutex<crate::program_routes::SchedulerState>,
+    /// The central state poller and its SSE subscribers.
+    pub stream: crate::stream::StateStream,
     pub started_at: std::time::SystemTime,
 }
 
@@ -155,6 +171,7 @@ impl AppState {
         let units: Vec<DeviceUnit> = config.units.iter().filter_map(to_device_unit).collect();
         let manager = Arc::new(DeviceManager::new(units));
         let verifier = Verifier::new(settings.min_auth_version);
+        let stream = crate::stream::StateStream::new(settings.stream_tick_seconds);
 
         Ok(Self {
             settings,
@@ -169,6 +186,7 @@ impl AppState {
             runner: Mutex::new(crate::timer_routes::RunnerStats::default()),
             programs: RwLock::new(programs),
             scheduler: Mutex::new(crate::program_routes::SchedulerState::default()),
+            stream,
             started_at: std::time::SystemTime::now(),
         })
     }
@@ -283,6 +301,8 @@ mod tests {
             behind_proxy: false,
             timer_tick_seconds: 15,
             sched_tick_seconds: 30,
+            stream_tick_seconds: 5,
+            security_headers: true,
         };
         assert_eq!(
             s.min_auth_version, 1,

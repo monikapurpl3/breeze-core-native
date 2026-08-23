@@ -4,7 +4,13 @@ A native rewrite of [Breeze Core](https://github.com/monikapurpl3/breeze-core) �
 the LAN-first REST API and web panel for Midea air conditioners — in Rust, with
 Zig as the cross-linker.
 
-Status: well it's one of the phases innit except it won't say, last time I updated this it was at phase 3 I think?
+**Status: phase 3 complete.** The whole HTTP surface is implemented and verified
+against Breeze Core 3.2.0 running side by side — protocol, device layer, stores,
+authentication (API key, v1 bearer, v2 Ed25519), pairing, units, control,
+programs, timers, the SSE stream, and the web panel compiled into the binary.
+313 tests; every endpoint's response byte-identical to the reference bar one
+documented difference; `breeze-core diag --auto` passes against real hardware
+with no failures. Next: phase 4 — CLI subcommands and packaging.
 
 ## Why
 
@@ -40,6 +46,13 @@ OpenWrt SDK toolchain instead, which this project already uses for `.ipk` builds
 
 ```
 crates/breeze-proto     the Midea LAN protocol: framing, crypto, discovery, AC commands
+crates/breeze-device    connections, retries, per-unit locking
+crates/breeze-store     the four JSON store files, written byte-compatibly
+crates/breeze-auth      API key, v1 bearer tokens, v2 Ed25519 signatures
+crates/breeze-http      routes, guards, the SSE stream, the embedded panel
+crates/breeze-core      the binary
+static/                 the web panel, compiled into that binary by build.rs
+tools/                  scripts that diff this server against the Python one
 ```
 
 The protocol is four layers, wrapped one inside the next:

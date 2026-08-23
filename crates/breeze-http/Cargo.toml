@@ -12,7 +12,20 @@ breeze-device = { path = "../breeze-device" }
 breeze-proto = { path = "../breeze-proto" }
 breeze-store = { path = "../breeze-store" }
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["float_roundtrip"] }
+# Both features are required, not optimisations.
+#
+# preserve_order: serde_json's Value is a BTreeMap by default, so every object
+# built through Value comes out with its keys sorted alphabetically, while the
+# reference emits declaration order. That reached every unit state, every batch
+# response and every SSE frame -- measured against the live server, which
+# answered `id, name, ip, online, ...` where this one answered `eco, fan_speed,
+# id, ...`. Nothing parses JSON by position, so it broke nothing; it did make
+# byte-for-byte comparison against the reference impossible, which is the tool
+# this whole project is verified with. And it costs nothing: indexmap replaces
+# BTreeMap and the stripped binary came out 1 KB *smaller*.
+#
+# float_roundtrip: see breeze-store's note. The default parser is off by 1 ULP.
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 # A small blocking HTTP/1.1 server. Blocking suits this workload: a handful of
 # clients, and every request spends ~1.8s waiting on an air conditioner anyway,
 # so an async runtime would add a megabyte and buy nothing.
