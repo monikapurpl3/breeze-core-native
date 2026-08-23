@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/breeze-proto"]
+members = ["crates/breeze-proto", "crates/breeze-device"]
 resolver = "2"
 
 [workspace.package]

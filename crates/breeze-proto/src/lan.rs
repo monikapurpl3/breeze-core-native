@@ -182,6 +182,41 @@ pub fn encode_encrypted(
     Ok(pkt)
 }
 
+/// Verify and decrypt an encrypted packet of **either** direction.
+///
+/// [`decode`] deliberately refuses to read a request as a response — a client
+/// receiving its own request back is a bug worth surfacing. But the device side
+/// of this protocol has to read requests, and so does anything standing in for a
+/// device, so the shared half lives here.
+pub fn decode_encrypted(
+    packet: &[u8],
+    session_key: &[u8; 32],
+) -> Result<(PacketType, Vec<u8>), LanError> {
+    if packet.len() < 6 + 32 {
+        return Err(LanError::TooShort(packet.len()));
+    }
+    let flags = packet[5];
+    let kind = match flags & 0xF {
+        x if x == PacketType::EncryptedRequest as u8 => PacketType::EncryptedRequest,
+        x if x == PacketType::EncryptedResponse as u8 => PacketType::EncryptedResponse,
+        other => return Err(LanError::UnexpectedType(other)),
+    };
+    let (hdr, rest) = packet.split_at(6);
+    let (body, rx_digest) = rest.split_at(rest.len() - 32);
+    let plain = security::decrypt_aes_cbc(session_key, body)?;
+    let mut h = sha2::Sha256::new();
+    h.update(hdr);
+    h.update(&plain);
+    if h.finalize()[..] != *rx_digest {
+        return Err(LanError::BadSignature);
+    }
+    let pad = (flags >> 4) as usize;
+    if plain.len() < 2 + pad {
+        return Err(LanError::TooShort(plain.len()));
+    }
+    Ok((kind, plain[2..plain.len() - pad].to_vec()))
+}
+
 /// The payload of a decoded packet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decoded {
@@ -223,23 +258,8 @@ pub fn decode(packet: &[u8], session_key: Option<&[u8; 32]>) -> Result<Decoded, 
         }
         x if x == PacketType::EncryptedResponse as u8 => {
             let key = session_key.ok_or(LanError::UnexpectedType(x))?;
-            if packet.len() < 6 + 32 {
-                return Err(LanError::TooShort(packet.len()));
-            }
-            let (hdr, rest) = packet.split_at(6);
-            let (body, rx_digest) = rest.split_at(rest.len() - 32);
-            let plain = security::decrypt_aes_cbc(key, body)?;
-            let mut h = sha2::Sha256::new();
-            h.update(hdr);
-            h.update(&plain);
-            if h.finalize()[..] != *rx_digest {
-                return Err(LanError::BadSignature);
-            }
-            let pad = (flags >> 4) as usize;
-            if plain.len() < 2 + pad {
-                return Err(LanError::TooShort(plain.len()));
-            }
-            Ok(Decoded::Response(plain[2..plain.len() - pad].to_vec()))
+            let (_, payload) = decode_encrypted(packet, key)?;
+            Ok(Decoded::Response(payload))
         }
         other => Err(LanError::UnexpectedType(other)),
     }
@@ -373,6 +393,31 @@ mod tests {
                 need: pkt.len(),
                 have: short.len()
             })
+        );
+    }
+
+    #[test]
+    fn decode_encrypted_reads_both_directions() {
+        let session = [0x21u8; 32];
+        let data = [1u8, 2, 3, 4, 5];
+        for kind in [PacketType::EncryptedRequest, PacketType::EncryptedResponse] {
+            let pkt = encode_encrypted(&session, 3, &data, 0, kind).unwrap();
+            let (got, payload) = decode_encrypted(&pkt, &session).unwrap();
+            assert_eq!(got, kind);
+            assert_eq!(payload, data);
+        }
+    }
+
+    #[test]
+    fn decode_still_refuses_a_request_even_though_decode_encrypted_accepts_one() {
+        // The strict behaviour is the point: a client that reads its own request
+        // back has a bug, and decode is what clients use.
+        let session = [0x21u8; 32];
+        let pkt = encode_encrypted(&session, 1, &[9; 8], 0, PacketType::EncryptedRequest).unwrap();
+        assert!(decode_encrypted(&pkt, &session).is_ok());
+        assert_eq!(
+            decode(&pkt, Some(&session)),
+            Err(LanError::UnexpectedType(PacketType::EncryptedRequest as u8))
         );
     }
 

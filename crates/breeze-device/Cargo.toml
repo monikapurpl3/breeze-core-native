@@ -1,0 +1,18 @@
+[package]
+name = "breeze-device"
+version = "0.1.0"
+description = "Connection lifecycle and state for Midea air conditioners over the LAN"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+breeze-proto = { path = "../breeze-proto" }
+
+[dev-dependencies]
+# The fake unit implements the device side of the handshake, so it needs the same
+# digest the real protocol uses.
+sha2 = "0.10"
+# The probe example reads config.json. Not a dependency of the library itself --
+# parsing configuration belongs to the server crate, not the device layer.
+serde_json = "1"
