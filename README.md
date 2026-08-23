@@ -4,9 +4,7 @@ A native rewrite of [Breeze Core](https://github.com/monikapurpl3/breeze-core) â
 the LAN-first REST API and web panel for Midea air conditioners â€” in Rust, with
 Zig as the cross-linker.
 
-**Status: early. Phase 1 of 5.** This repository currently contains
-`breeze-proto`, the protocol layer. There is no server here yet; the Python
-implementation remains the one in production.
+Status: well it's one of the phases innit except it won't say, last time I updated this it was at phase 3 I think?
 
 ## Why
 
