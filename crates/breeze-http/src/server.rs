@@ -15,14 +15,27 @@ use crate::units;
 /// when `sleep_timer` is absent, for instance. So it must describe reality, not
 /// ambition: advertising `live_stream` before SSE exists would make every client
 /// open a stream that never arrives. Entries get added as routes land.
+/// Every entry here must be a feature a client can actually *use*, not one this
+/// build has some of.
+///
+/// `config_api` was listed here while only its read half existed — `GET
+/// /api/config` worked, and the `POST /api/units` and `PATCH /api/units/{id}`
+/// that the flag also promises did not. The panel calls all three from its
+/// manage screen, so advertising it produced buttons that failed. Removed until
+/// the write half lands. The lesson generalises: when the reference groups
+/// several endpoints under one flag, the flag means all of them.
 const FEATURES: &[&str] = &[
     "batch_state",
     "beep_control",
-    "config_api",
     "device_pairing",
     "live_stream",
     "programs",
     "sleep_timer",
+    // Signing genuinely works, end to end, and is the only reason to claim this.
+    // `/api/auth/upgrade` -- which the reference also files under this flag --
+    // does not exist yet, so a v1 device cannot migrate in place. Kept anyway:
+    // dropping it would make v2-capable clients pair as v1, which is worse than
+    // a missing migration path for the handful of v1 devices left.
     "ed25519_auth",
     "whoami",
 ];
@@ -916,12 +929,43 @@ mod tests {
         );
         assert!(FEATURES.contains(&"ed25519_auth"), "v2 auth does work");
         // Still not implemented, and so still not advertised.
-        for absent in ["unit_history", "metrics", "unit_scan", "compression"] {
+        for absent in [
+            "unit_history",
+            "metrics",
+            "unit_scan",
+            "compression",
+            "delete_unit",
+            "unit_capabilities",
+            "system_info",
+            // Only its read half exists. See the note on FEATURES.
+            "config_api",
+        ] {
             assert!(
                 !FEATURES.contains(&absent),
                 "{absent} is advertised but not implemented"
             );
         }
+    }
+
+    #[test]
+    fn a_flag_covering_several_endpoints_needs_all_of_them() {
+        // The trap that put `config_api` in the list wrongly: the reference files
+        // `GET /api/config`, `POST /api/units` and `PATCH /api/units/{id}` under
+        // that one flag, and only the first was built. So the flag may go back in
+        // only once every route it promises resolves.
+        let config_api_routes = [
+            ("GET", "/api/config"),
+            ("POST", "/api/units"),
+            ("PATCH", "/api/units/153931628470980"),
+        ];
+        let all_present = config_api_routes
+            .iter()
+            .all(|(m, p)| matches!(resolve(m, p), Resolved::Route(..)));
+        assert_eq!(
+            FEATURES.contains(&"config_api"),
+            all_present,
+            "config_api must be advertised exactly when all of {config_api_routes:?} route"
+        );
     }
 
     #[test]
