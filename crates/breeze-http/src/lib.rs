@@ -13,6 +13,8 @@
 //! binary and buy nothing measurable.
 
 pub mod auth_routes;
+pub mod capabilities;
+pub mod compress;
 pub mod config_routes;
 pub mod control;
 pub mod history;

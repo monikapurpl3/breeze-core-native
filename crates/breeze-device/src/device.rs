@@ -6,6 +6,7 @@
 //! still a live round-trip — there is no push in this protocol — so per-call
 //! latency of a few hundred milliseconds is inherent, not a bug to optimise away.
 
+use breeze_proto::ac::capabilities::Capabilities;
 use breeze_proto::ac::command::{self, Setpoint};
 use breeze_proto::ac::response::State;
 use breeze_proto::ac::types::TemperatureType;
@@ -48,6 +49,9 @@ impl UnitConfig {
 pub struct Device {
     config: UnitConfig,
     session: Option<Session<TcpStream>>,
+    /// Fetched on first request and kept: a unit's capabilities cannot change
+    /// while it is powered.
+    capabilities: Option<Capabilities>,
     /// Last successfully decoded state, kept so a caller can answer "what was it
     /// last doing?" without a round-trip and without inventing values.
     last_state: Option<State>,
@@ -61,6 +65,7 @@ impl Device {
         Self {
             config,
             session: None,
+            capabilities: None,
             last_state: None,
             online: false,
             settle: None,
@@ -117,6 +122,33 @@ impl Device {
         Ok(state)
     }
 
+    /// What the unit says it can do, fetched once and cached.
+    ///
+    /// Cached because it cannot change while the unit is powered: asking again
+    /// would be two more round-trips for an answer that is already known, and
+    /// `/api/system` reports this for every unit at once.
+    ///
+    /// Two queries, because the protocol splits the list: a unit that sets the
+    /// "more to come" flag answers a second query with the rest. Only the first
+    /// failing is an error -- a unit that answers the first and not the second
+    /// has told us most of what it can do, and half a capability list beats none.
+    pub fn capabilities(&mut self) -> Result<Capabilities, DeviceError> {
+        if let Some(cached) = &self.capabilities {
+            return Ok(cached.clone());
+        }
+        let frame = command::get_capabilities(self.next_message_id());
+        let mut caps = Capabilities::parse(&self.exchange_raw(&frame)?);
+
+        if caps.additional {
+            let frame = command::get_more_capabilities(self.next_message_id());
+            if let Ok(payload) = self.exchange_raw(&frame) {
+                caps.merge(&Capabilities::parse(&payload));
+            }
+        }
+        self.capabilities = Some(caps.clone());
+        Ok(caps)
+    }
+
     /// Apply a complete setpoint and return the state the unit reports back.
     ///
     /// The unit echoes its resulting state, which is what makes an optimistic UI
@@ -133,6 +165,41 @@ impl Device {
         let mut setpoint = Setpoint::from_state(&current);
         change(&mut setpoint);
         self.apply(&setpoint)
+    }
+
+    /// Send a framed command and return its raw appliance payload.
+    ///
+    /// Separate from [`Device::exchange`] because a capability reply is not a
+    /// state report: decoding it as one would fail, and retrying that failure
+    /// three times would just take longer to be wrong.
+    fn exchange_raw(&mut self, command_frame: &[u8]) -> Result<Vec<u8>, DeviceError> {
+        let mut last: Option<DeviceError> = None;
+        for attempt in 1..=ATTEMPTS {
+            match self.try_exchange_raw(command_frame) {
+                Ok(payload) => {
+                    self.online = true;
+                    return Ok(payload);
+                }
+                Err(e) if e.is_retryable() && attempt < ATTEMPTS => {
+                    self.session = None;
+                    last = Some(e);
+                }
+                Err(e) => {
+                    self.online = false;
+                    return Err(e);
+                }
+            }
+        }
+        self.online = false;
+        Err(last.unwrap_or(DeviceError::Unreachable { attempts: ATTEMPTS }))
+    }
+
+    fn try_exchange_raw(&mut self, command_frame: &[u8]) -> Result<Vec<u8>, DeviceError> {
+        self.ensure_session()?;
+        let session = self.session.as_mut().expect("ensure_session succeeded");
+        let reply = session.request(&packet::encode(self.config.id, command_frame))?;
+        let inner = packet::decode(&reply)?;
+        Ok(frame::parse(&inner, frame::DeviceType::AirConditioner)?.to_vec())
     }
 
     /// Send a framed command and decode the state report it produces, retrying

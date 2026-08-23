@@ -4,17 +4,20 @@ A native rewrite of [Breeze Core](https://github.com/monikapurpl3/breeze-core) �
 the LAN-first REST API and web panel for Midea air conditioners — in Rust, with
 Zig as the cross-linker.
 
-**Status: phase 3 in progress — 21 of 30 endpoints.** The protocol, device layer,
-stores and authentication are done; so are units, control, programs, timers, the
-SSE stream and the web panel compiled into the binary. Everything implemented is
-verified against Breeze Core 3.2.0 running side by side: responses byte-identical
-bar one documented difference, and `breeze-core diag --auto` passing against real
-hardware.
+**Status: phase 3 complete.** Every endpoint the Python server has is implemented
+— all 30 — and verified against Breeze Core 3.2.0 running side by side: 23 of 24
+compared responses byte-identical (the one exception is documented), unit
+capabilities agreeing on all three real air conditioners, and
+`breeze-core diag --auto` passing with no failures. 396 tests.
 
-Still missing, and tracked in `CLAUDE.md`: the config write API, unit scan,
-capabilities, history, `/api/system`, `/metrics`, `/api/auth/upgrade` and response
-compression. `FEATURES` advertises only what exists, so a client feature-detects
-its way around the gaps rather than hitting them.
+It also fixes the thing that never worked here: **automatic pairing**. Broadcast
+discovery found nothing because a reply to a broadcast matches no conntrack entry
+and gets dropped, so this sweeps the local subnet by unicast as well — a scan now
+finds every unit. Obtaining a *new* V3 unit's credentials still needs the Midea
+account the unit is registered to; see the wiki. `POST /api/units` accepts a
+`token` and `key` directly, so restoring a backup or moving to a new machine
+needs no cloud at all.
+
 
 ## Why
 
@@ -90,8 +93,8 @@ request after a handshake, so you must wait ~1 s or every command times out with
 no error at all.
 
 ```bash
-cargo test        # 62 tests, no hardware needed
-cargo clippy --all-targets
+cargo test --workspace   # 396 tests, no hardware needed
+cargo clippy --all-targets --workspace -- -D warnings
 ```
 
 ## What is deliberately not here
@@ -105,7 +108,13 @@ cargo clippy --all-targets
   only `frame::DeviceType` and the `ac` module know what an appliance is, so
   adding it is one enum variant and a module, not a refactor.
 - **V1 devices.** They answer discovery with XML and need a separate TCP query.
-- **Cloud pairing.** Coming, in this same binary; it needs TLS.
+- **Fetching a new V3 unit's credentials from Midea's cloud.** Next, and it needs
+  TLS. Until then `POST /api/units` takes a `token` and `key` directly, which
+  covers restoring a backup or moving to another machine without any cloud at
+  all. Worth knowing before you rely on the cloud either way: msmart's built-in
+  shared accounts can no longer fetch tokens -- NetHome Plus logs them in and
+  then answers `9999` for every request -- so this needs the account the unit is
+  actually registered to.
 
 Reimplementing the protocol means owning the device quirks that msmart-ng
 collects upstream for hardware we do not have. That is a deliberate trade, taken

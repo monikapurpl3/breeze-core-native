@@ -115,7 +115,17 @@ from the same reading as the code:
   `whoami` reported a device as never seen while answering its own request —
   caught by diffing whoami against the reference;
 - the unknown-unit 404 said `unknown unit` where the reference says
-  `Unknown unit '999'`, quoting the id a person then sees — caught the same way.
+  `Unknown unit '999'`, quoting the id a person then sees — caught the same way;
+- `fan_speeds` in a capability response is a list of enum **names**
+  (`["LOW","MEDIUM",…]`), not the numbers `POST /control` takes — caught by
+  diffing the endpoint against the reference on all three real units;
+- broadcast discovery finds nothing on the maintainer's server while unicast
+  finds everything, because a reply to a broadcast matches no conntrack entry —
+  caught by priming one entry and watching exactly one unit appear;
+- msmart's `discover_single` asks **Midea's cloud** for a V3 token as part of
+  probing a LAN address, and that call now fails outright, so the reference
+  cannot add a unit by address at all — caught by sending the same request to
+  both servers and reading the traceback.
 
 So: msmart's test vectors for the protocol, pydantic-generated fixtures for the
 stores, Python-generated signatures for auth, and `diag` for the HTTP surface.
@@ -235,11 +245,17 @@ pydantic models.
   the door open: outside tests only `frame::DeviceType` and the `ac` module know
   what an appliance is.
 - **V1 devices** (XML discovery, separate TCP query).
-- Features the reference advertises and this build does not yet: `unit_history`,
-  `metrics`, `unit_scan`, `compression`, `delete_unit`, `unit_capabilities`,
-  `system_info`. `FEATURES` lists only what exists, and a test asserts the
-  unimplemented ones stay out of it — a client that feature-detects `metrics`
-  and gets a 404 is worse off than one that never saw it offered.
+- **Anything that needs Midea's cloud.** Discovery here is LAN-only: a unit
+  supplies its id, address, port and type, and that is enough to add it. The V3
+  `token`/`key` come from pairing and are never fetched. That is a real
+  limitation — a brand-new V3 unit added by address is recorded with
+  `has_v3_credentials: false` and cannot be driven until credentials are supplied
+  — and it is also why this server can add a unit at all right now, while the
+  reference cannot: its probe asks the cloud for a token and that call is
+  currently failing.
+
+Everything the reference advertises is otherwise implemented; `FEATURES` is
+compared against its list, member for member, by a test.
 
 ## Known deliberate divergences
 

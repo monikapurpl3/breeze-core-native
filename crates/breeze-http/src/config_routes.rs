@@ -35,6 +35,30 @@ pub struct AddUnitRequest {
     pub ip: String,
     #[serde(default)]
     pub name: Option<String>,
+    /// V3 credentials, if the caller already has them.
+    ///
+    /// A V3 unit cannot be driven without a `token` and `key`, and those come
+    /// from Midea's cloud -- which only answers for the account the unit is
+    /// registered to. Accepting them here is what makes this server usable
+    /// without a cloud round-trip of its own: restoring from a backup, moving to
+    /// a new machine, or pasting what another tool fetched.
+    ///
+    /// Hex, and validated before anything is written: a malformed credential
+    /// stored now is a unit that fails to authenticate later, with nothing to
+    /// say why.
+    #[serde(default)]
+    pub token: Option<String>,
+    #[serde(default)]
+    pub key: Option<String>,
+}
+
+/// A V3 token is 64 bytes and a key is 32, both as hex.
+const TOKEN_HEX_LEN: usize = 128;
+const KEY_HEX_LEN: usize = 64;
+
+/// Check a credential is hex of the right length.
+fn valid_hex(value: &str, expected_len: usize) -> bool {
+    value.len() == expected_len && value.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 /// A unit as a client may see it: identity and address, never a credential.
@@ -130,6 +154,25 @@ pub fn add_unit(state: &AppState, body: &[u8]) -> Reply {
         }
     }
 
+    // Validated before the LAN is touched, and before anything is written: a
+    // malformed credential stored now is a unit that fails to authenticate
+    // later with nothing to explain why.
+    if let Some(token) = &request.token {
+        if !valid_hex(token, TOKEN_HEX_LEN) {
+            return Reply::detail(422, format!("token must be {TOKEN_HEX_LEN} hex characters"));
+        }
+    }
+    if let Some(key) = &request.key {
+        if !valid_hex(key, KEY_HEX_LEN) {
+            return Reply::detail(422, format!("key must be {KEY_HEX_LEN} hex characters"));
+        }
+    }
+    // Both or neither: half a credential authenticates nothing, and storing one
+    // would look like progress.
+    if request.token.is_some() != request.key.is_some() {
+        return Reply::detail(422, "token and key must be given together");
+    }
+
     // A single-address sweep: the same probe a full scan sends, aimed at one
     // host. No broadcast, so the answer can only have come from the address
     // that was asked about.
@@ -165,10 +208,11 @@ pub fn add_unit(state: &AppState, body: &[u8]) -> Reply {
         ip: found.ip.to_string(),
         port: found.port,
         id,
-        // Discovery does not produce credentials. `add_or_update_unit` keeps
-        // any the unit already had rather than clearing them.
-        token: None,
-        key: None,
+        // Whatever the caller supplied, if anything. Discovery itself produces
+        // no credentials, and `add_or_update_unit` keeps any the unit already
+        // had rather than clearing them.
+        token: request.token,
+        key: request.key,
     });
     if let Err(e) = persist(state, &config) {
         config.units = previous;
@@ -437,5 +481,54 @@ mod tests {
         assert_eq!(percent_decode("%zz"), "%zz");
         assert_eq!(percent_decode("a%2Fb"), "a/b");
         assert_eq!(percent_decode("plain"), "plain");
+    }
+
+    #[test]
+    fn credentials_must_be_hex_of_the_right_length() {
+        // A V3 token is 64 bytes and a key is 32, both hex. Storing a malformed
+        // one produces a unit that cannot authenticate, with nothing to say why.
+        assert!(valid_hex(&"a".repeat(TOKEN_HEX_LEN), TOKEN_HEX_LEN));
+        assert!(valid_hex(&"AB".repeat(KEY_HEX_LEN / 2), KEY_HEX_LEN));
+        assert!(!valid_hex(&"a".repeat(TOKEN_HEX_LEN - 1), TOKEN_HEX_LEN));
+        assert!(!valid_hex(&"a".repeat(TOKEN_HEX_LEN + 1), TOKEN_HEX_LEN));
+        assert!(!valid_hex(&"z".repeat(TOKEN_HEX_LEN), TOKEN_HEX_LEN));
+        assert!(!valid_hex("", TOKEN_HEX_LEN));
+        // A real pair, for shape.
+        assert!(valid_hex(&"aa".repeat(64), TOKEN_HEX_LEN));
+        assert!(valid_hex(&"bb".repeat(32), KEY_HEX_LEN));
+    }
+
+    #[test]
+    fn an_add_request_may_carry_credentials_or_not() {
+        let bare: AddUnitRequest = serde_json::from_str(r#"{"ip":"192.168.1.73"}"#).unwrap();
+        assert!(bare.token.is_none() && bare.key.is_none());
+
+        let full: AddUnitRequest = serde_json::from_str(
+            r#"{"ip":"192.168.1.73","name":"Kuhinja","token":"aa","key":"bb"}"#,
+        )
+        .unwrap();
+        assert_eq!(full.name.as_deref(), Some("Kuhinja"));
+        assert_eq!(full.token.as_deref(), Some("aa"));
+        assert_eq!(full.key.as_deref(), Some("bb"));
+    }
+
+    #[test]
+    fn a_supplied_credential_is_stored_and_never_echoed() {
+        // The credential goes in; what comes back out says only that it exists.
+        let mut config = breeze_store::AppConfig::default();
+        config.add_or_update_unit(UnitConfig {
+            name: "Kuhinja".into(),
+            ip: "192.168.1.74".into(),
+            port: 6444,
+            id: 7,
+            token: Some("aa".repeat(64)),
+            key: Some("bb".repeat(32)),
+        });
+        let stored = config.find_unit("7").unwrap();
+        assert!(stored.token.is_some(), "it was stored");
+
+        let rendered = serde_json::to_string(&unit_view(stored)).unwrap();
+        assert!(!rendered.contains("aa"), "the token came back: {rendered}");
+        assert_eq!(unit_view(stored)["has_v3_credentials"], true);
     }
 }

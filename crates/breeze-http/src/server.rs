@@ -25,16 +25,18 @@ use crate::units;
 const FEATURES: &[&str] = &[
     "batch_state",
     "beep_control",
+    "compression",
     "config_api",
     "delete_unit",
     "device_pairing",
     "ed25519_auth",
     "live_stream",
+    "metrics",
     "programs",
     "sleep_timer",
     "system_info",
+    "unit_capabilities",
     "unit_history",
-    "metrics",
     "unit_scan",
     "whoami",
 ];
@@ -71,6 +73,8 @@ struct Incoming {
     /// `behind_proxy`; see `breeze_auth::net`.
     peer: Option<std::net::IpAddr>,
     forwarded_for: Option<String>,
+    /// Whether this client can decode a compressed body.
+    accept_encoding: Option<String>,
     /// Set by `authorise` once a device has been identified, so a route never
     /// re-verifies. Re-verifying would spend the v2 nonce twice and reject the
     /// caller as a replay -- which is exactly what `whoami` used to do.
@@ -114,6 +118,7 @@ impl Incoming {
         let signature = header("x-breeze-signature");
         let forwarded_for = header("x-forwarded-for");
         let if_none_match = header("if-none-match");
+        let accept_encoding = header("accept-encoding");
         let peer = request.remote_addr().map(|a| a.ip());
 
         // Now the mutable borrow. A v2 signature covers the body's digest, so
@@ -139,6 +144,7 @@ impl Incoming {
             peer,
             forwarded_for,
             if_none_match,
+            accept_encoding,
             device_token_id: None,
         }
     }
@@ -223,6 +229,15 @@ pub fn serve(state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Compress a reply if the client can decode it and it is large enough.
+///
+/// Applied here rather than inside each route so no route can forget, and after
+/// the route so it acts on the finished body.
+fn compressed(mut reply: Reply, incoming: &Incoming) -> Reply {
+    crate::compress::maybe_compress(&mut reply, incoming.accept_encoding.as_deref());
+    reply
+}
+
 /// What the worker should do with a request once it has been routed.
 enum Outcome {
     Reply(Reply),
@@ -250,18 +265,21 @@ fn handle(state: &AppState, request: &mut tiny_http::Request) -> Outcome {
                     if incoming.method == "HEAD" {
                         reply.body.clear();
                     }
-                    return Outcome::Reply(reply);
+                    // The panel is the one thing here big enough for this to
+                    // matter: 133 KB of JS and CSS over a phone's WiFi.
+                    return Outcome::Reply(compressed(reply, &incoming));
                 }
             }
             Outcome::Reply(Reply::detail(404, "Not Found"))
         }
         Resolved::Route(guard, route) => match authorise(state, &incoming, &guard) {
-            Err(reply) => Outcome::Reply(reply),
+            Err(reply) => Outcome::Reply(compressed(reply, &incoming)),
             Ok(who) => {
                 // Handed to the route rather than left for it to work out again:
                 // a second verification would spend the v2 nonce twice.
                 incoming.device_token_id = who;
-                Outcome::Reply(route(state, &incoming))
+                let reply = route(state, &incoming);
+                Outcome::Reply(compressed(reply, &incoming))
             }
         },
         // Authenticated exactly like any other route -- a stream reads live
@@ -450,6 +468,8 @@ fn resolve(method: &str, path: &str) -> Resolved {
     };
     match tail {
         "state" if method == "GET" => Resolved::Route(Guard::Full, route_unit_state),
+        "capabilities" if method == "GET" => Resolved::Route(Guard::Full, route_unit_capabilities),
+        "capabilities" => Resolved::MethodNotAllowed("GET"),
         "history" if method == "GET" => Resolved::Route(Guard::Full, route_unit_history),
         "history" => Resolved::MethodNotAllowed("GET"),
         "state" => Resolved::MethodNotAllowed("GET"),
@@ -813,6 +833,17 @@ fn route_unit_state(state: &AppState, incoming: &Incoming) -> Reply {
     }
 }
 
+/// `GET /api/units/{id}/capabilities`
+fn route_unit_capabilities(state: &AppState, incoming: &Incoming) -> Reply {
+    let Some(id) = unit_id_from(&incoming.path) else {
+        return unknown_unit(&incoming.path);
+    };
+    if !state.manager.contains(id) {
+        return unknown_unit(&incoming.path);
+    }
+    crate::capabilities::get(state, id)
+}
+
 /// `GET /api/units/{id}/history`
 fn route_unit_history(state: &AppState, incoming: &Incoming) -> Reply {
     let Some(id) = unit_id_from(&incoming.path) else {
@@ -1034,12 +1065,35 @@ mod tests {
         );
         assert!(FEATURES.contains(&"ed25519_auth"), "v2 auth does work");
         // Still not implemented, and so still not advertised.
-        for absent in ["compression", "unit_capabilities"] {
-            assert!(
-                !FEATURES.contains(&absent),
-                "{absent} is advertised but not implemented"
-            );
-        }
+        // Nothing the reference offers is missing any more, so this compares
+        // the whole set against it rather than listing absences. Taken from
+        // `meow_ac/api/meta.py`; a client feature-detects on exactly these.
+        let mut mine = FEATURES.to_vec();
+        mine.sort_unstable();
+        let mut reference = [
+            "device_pairing",
+            "programs",
+            "config_api",
+            "batch_state",
+            "delete_unit",
+            "compression",
+            "ed25519_auth",
+            "unit_scan",
+            "beep_control",
+            "unit_capabilities",
+            "unit_history",
+            "whoami",
+            "metrics",
+            "live_stream",
+            "system_info",
+            "sleep_timer",
+        ];
+        reference.sort_unstable();
+        assert_eq!(
+            mine,
+            reference.to_vec(),
+            "the advertised set must match the reference exactly"
+        );
     }
 
     #[test]

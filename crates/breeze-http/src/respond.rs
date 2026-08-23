@@ -44,7 +44,7 @@ pub const SECURITY_HEADERS: &[(&str, &str)] = &[
 /// rather than a choice an operator makes. `/api/system` reports it so somebody
 /// comparing two servers can see why one sends `Content-Encoding` and the other
 /// does not.
-pub const COMPRESSION_ENABLED: bool = false;
+pub const COMPRESSION_ENABLED: bool = true;
 
 impl Reply {
     pub fn json(status: u16, value: &serde_json::Value) -> Self {
