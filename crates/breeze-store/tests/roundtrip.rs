@@ -120,6 +120,62 @@ fn float_formatting_matches_python() {
     assert!(text.contains("1790000000.5"), "half value changed: {text}");
 }
 
+/// Timestamps taken from a real `devices.json`, which exposed a bug my own
+/// fixtures did not.
+///
+/// serde_json's default float parser is fast but may be off by one ULP. Reading
+/// `2102237115.0631797` gave a double one bit away from the one Python read,
+/// which then rendered as `2102237115.0631795` — so the file changed on every
+/// save, quietly, for a real installation. Rust's own `str::parse` and Python's
+/// `float()` agree exactly; only serde_json's fast path did not.
+///
+/// The fix is the `float_roundtrip` feature. These are the exact values that
+/// caught it, kept as a regression test because nothing else in the suite would
+/// notice if the feature were dropped from Cargo.toml.
+#[test]
+fn real_world_timestamps_survive_to_the_last_bit() {
+    for literal in [
+        "2102237115.0631797",
+        "1787160402.5505733",
+        "1787228970.6895123",
+    ] {
+        let parsed: f64 = serde_json::from_str(literal).unwrap();
+        let native: f64 = literal.parse().unwrap();
+        assert_eq!(
+            parsed.to_bits(),
+            native.to_bits(),
+            "{literal} parsed to a different double than Rust's own parser              -- is the float_roundtrip feature still enabled?"
+        );
+        assert_eq!(
+            serde_json::to_string(&parsed).unwrap(),
+            literal,
+            "{literal} did not render back to itself"
+        );
+    }
+}
+
+/// The same values inside a real document shape, so the check covers the actual
+/// struct path and not just bare floats.
+#[test]
+fn a_devices_document_with_awkward_timestamps_round_trips() {
+    let doc = r#"{
+  "devices": [
+    {
+      "token_id": "synthetic",
+      "label": "regression",
+      "auth_version": 2,
+      "token_hash": null,
+      "public_key": "cHVibGljLWtleS1wbGFjZWhvbGRlcg",
+      "created_at": 1787160402.5505733,
+      "expires_at": 2102237115.0631797,
+      "last_used": 1787228970.6895123
+    }
+  ]
+}"#;
+    let parsed: DevicesDoc = serde_json::from_str(doc).unwrap();
+    assert_eq!(to_json(&parsed).unwrap(), doc);
+}
+
 /// An unknown key must not be silently dropped on load and then lost on save —
 /// or rather, if it is dropped, we need to know, because a newer Breeze Core
 /// could add a field this build does not understand.

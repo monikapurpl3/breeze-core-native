@@ -8,4 +8,10 @@ repository.workspace = true
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# float_roundtrip is REQUIRED, not an optimisation. serde_json's default float
+# parser is fast but may be off by one ULP, and devices.json stores every
+# timestamp as a float: without this, reading 2102237115.0631797 yields a double
+# one bit away from the one Python read, which then renders as
+# 2102237115.0631795 and rewrites the file on every save. Rust's own str::parse
+# and Python's float() agree exactly; only serde_json's fast path does not.
+serde_json = { version = "1", features = ["float_roundtrip"] }
