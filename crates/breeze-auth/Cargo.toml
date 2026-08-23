@@ -1,0 +1,25 @@
+[package]
+name = "breeze-auth"
+version = "0.1.0"
+description = "Breeze Core's two-credential authentication: API key, v1 bearer, v2 Ed25519"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+breeze-store = { path = "../breeze-store" }
+# Pure-Rust throughout: no assembly backends, so this builds on every target in
+# the matrix including s390x and riscv64.
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+sha2 = "0.10"
+sha3 = "0.10"
+base64 = "0.22"
+# Constant-time comparison for the API key and stored token hashes.
+subtle = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[dev-dependencies]
+# The interop vectors are signed by Breeze Core itself; verifying them needs a
+# signer here only to prove the negative cases.
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "rand_core"] }
