@@ -1,0 +1,19 @@
+[package]
+name = "breeze-http"
+version = "0.1.0"
+description = "The REST surface Breeze Core's clients already speak"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+breeze-auth = { path = "../breeze-auth" }
+breeze-device = { path = "../breeze-device" }
+breeze-proto = { path = "../breeze-proto" }
+breeze-store = { path = "../breeze-store" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+# A small blocking HTTP/1.1 server. Blocking suits this workload: a handful of
+# clients, and every request spends ~1.8s waiting on an air conditioner anyway,
+# so an async runtime would add a megabyte and buy nothing.
+tiny_http = "0.12"
