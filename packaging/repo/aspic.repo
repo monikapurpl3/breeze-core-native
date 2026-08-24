@@ -1,0 +1,14 @@
+[aspic]
+name=Aspic
+baseurl=https://aspic.salataputarica.hr.eu.org/rpm/$basearch/
+enabled=1
+gpgcheck=1
+# The metadata is verified too, not just the packages: without this a
+# man-in-the-middle cannot forge a package but can still hide one from you.
+repo_gpgcheck=1
+gpgkey=https://aspic.salataputarica.hr.eu.org/aspic.asc
+# dnf's default is 48 hours: once it has refreshed it will not look here again
+# for two days, so a release published inside that window stays invisible to
+# `dnf upgrade` and the only apparent cure is `dnf clean all`. An hourly check is
+# a conditional request for a few KB that answers 304 almost every time.
+metadata_expire=1h

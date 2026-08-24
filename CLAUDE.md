@@ -337,6 +337,73 @@ the reference has it, and only the stale copies of the Python don't (see above).
 Alphabetised JSON keys: that one was real, and `preserve_order` fixed it for
 −1 KB of binary.
 
+## Packaging (phase 4)
+
+`packaging/README.md` has the flow and the reasoning; this is the list of things
+that cost real time to find out, so they are not found out twice.
+
+**The CLI's verb list is a contract, not a design space.** The reference's
+packaged binary answers `serve pair diag approve devices revoke version`, its
+postinstall tells people to run `breeze-core pair`, its unit passes
+`serve --host … --port … $BREEZE_OPTS`, and aliases in the wild pass
+`--config /etc/breeze-core/config.json`. `pair` used to be an alias for `login`
+here — a new user following the documentation was asked for a server URL by the
+command meant to find their air conditioners. Two more were missing outright
+(`devices`, `revoke`), `--config`/`--base-url` were rejected, and `--behind-proxy`
+was *silently ignored*, which would have made every proxied request look like it
+came from the LAN and quietly defeated the LAN-only admin check.
+
+**Build and packaging traps:**
+
+- **Static musl means no libc dependency at all** — one binary per architecture
+  serves every distro and every packager. The inverse is the trap: *glibc*-static
+  breaks `getaddrinfo`, so s390x (no musl std upstream) stays dynamic against a
+  Zig-pinned glibc 2.17 floor.
+- **The binary goes in `/usr/bin`,** not `/usr/lib`: `lib_t` is not an SELinux
+  domain-transition entrypoint, which is why the Python package needed a
+  `semanage` call in its postinstall. The old path stays as a symlink.
+- **rpm 4.14 (RHEL/Alma/Rocky 8) cannot import an ed25519 GPG key at all** —
+  `rpm --import` fails and every signature reads NOKEY. The repository key is
+  **RSA-4096** for that reason, and `verify-repo.sh` runs against both Alma 9 and
+  Alma 8 so it stays that way. rpm stores an RSA signature in `RSAHEADER` and an
+  ed25519 one in `DSAHEADER`, so query with `rpm -K` rather than a tag.
+- **nfpm's archlinux packager drops declared file ownership**: `/etc/breeze-core`
+  arrives `root:root` and the service cannot write `devices.json` — pairing 500s
+  with nothing to explain it. `postinstall.sh` chowns it for every packager.
+- **nfpm accepts unknown config keys in silence,** so `build-packages.sh` asks
+  each finished package what compression it actually used. zstd for deb and rpm;
+  apk and ipk stay gzip because those formats have no zstd their clients can
+  read.
+- **An apk repository URL must not contain the architecture** — apk appends it,
+  and `…/alpine/x86_64` becomes `…/alpine/x86_64/x86_64/APKINDEX.tar.gz`.
+
+**Docker Desktop on this machine, three separate ways:**
+
+- A writable bind mount does not reliably see a directory the host created
+  moments earlier: it failed once as a phantom `mkdir: No such file or directory`
+  and once as `input/output error` on a file nfpm was writing. Every stage now
+  writes into the container and **streams a tar back out**.
+- A container that inherits the loop's stdin **eats the here-string driving the
+  loop**: `build-packages.sh` built amd64 and stopped without a word. Hence
+  `< /dev/null` and no `-i` where none is needed.
+- `-w /work` gets rewritten by git-bash into `C:/Program Files/Git/work`. Every
+  script here exports `MSYS_NO_PATHCONV=1`.
+
+**Test harnesses lie in a specific way here.** A `'…'`-quoted shell string with
+single quotes nested inside it silently loses the inner double quotes: the
+verification container wrote `{api_key:x}` and the server rejected it, which read
+as five broken packages. The shared checks live in `packaging/nfpm/checks.sh`, a
+real file, for that reason — and every case is wrapped in `timeout`, because a
+check that waits for a refusal that never comes hung two containers for half an
+hour.
+
+**NetBSD builds natively and fully** — `ring` compiles, so it is the same ~2.5 MB
+binary with TLS, and the package declares no dependencies where the Python one
+needed `python312`. `~/.cargo` on that machine is root-owned, so builds set
+`CARGO_HOME` inside the work directory; `pkg_create`/`pkg_add`/`pkg_info` are not
+on a login PATH. FreeBSD and OpenBSD are not done: no cross-build exists (Zig
+bundles no BSD libc) and those VMs were not running.
+
 ## Where this publishes: aspic, and the sunset
 
 **`aspic.salataputarica.hr.eu.org` is this project's host**, live since

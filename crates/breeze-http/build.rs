@@ -24,6 +24,12 @@ fn main() {
     let static_dir = root.join("static");
 
     println!("cargo:rerun-if-changed={}", static_dir.display());
+    // `build_commit()` reads BREEZE_COMMIT through option_env!, which bakes the
+    // value in at compile time but does *not* make cargo notice when it
+    // changes. Without this line a release build that reuses a cached artifact
+    // ships the previous build's commit — a wrong answer from /api/version and
+    // /metrics that looks exactly like a right one.
+    println!("cargo:rerun-if-env-changed=BREEZE_COMMIT");
 
     let mut files = Vec::new();
     collect(&static_dir, &static_dir, &mut files);

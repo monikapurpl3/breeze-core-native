@@ -121,6 +121,17 @@ pub fn enrol(base_url: Option<String>) -> Result<Profile, String> {
         }
     };
 
+    enrol_with(base_url, api_key)
+}
+
+/// The handshake itself, with the URL and key already known.
+///
+/// Split out so a scripted run can enrol without asking anybody anything: on
+/// the server the key is readable from `config.json` and approval is allowed
+/// from the LAN, so nothing is left to prompt for — and prompting there would
+/// hang whatever called it.
+pub fn enrol_with(base_url: String, api_key: String) -> Result<Profile, String> {
+    let base_url = base_url.trim_end_matches('/').to_string();
     let label = format!(
         "breeze-core CLI on {}",
         hostname().unwrap_or_else(|| "this machine".into())

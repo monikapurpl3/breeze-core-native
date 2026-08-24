@@ -120,3 +120,49 @@ footer b{color:#dde5ee;font-weight:650}
 .s-app{--c:var(--app)}
 .s-legacy{--c:var(--legacy)}
 .s-host{--c:var(--host)}
+
+/* --- package-manager families -------------------------------------------
+ *
+ * One colour per family, used by its section rule, heading and code tint. The
+ * index is a page of install snippets, and colour is what makes "find my
+ * distro" a glance rather than a read. */
+:root{
+  --deb:#e0507c; --rpm:#4d97ea; --suse:#5fc768; --arch:#48bdf2;
+  --alpine:#7b8cf0; --owrt:#f2982f; --src:#b189f2;
+}
+.s-deb{--c:var(--deb)}
+.s-rpm{--c:var(--rpm)}
+.s-suse{--c:var(--suse)}
+.s-arch{--c:var(--arch)}
+.s-alpine{--c:var(--alpine)}
+.s-owrt{--c:var(--owrt)}
+.s-src{--c:var(--src)}
+.t-deb{background:var(--deb);color:#26060f!important}
+.t-rpm{background:var(--rpm);color:#04121f!important}
+.t-suse{background:var(--suse);color:#04140a!important}
+.t-arch{background:var(--arch);color:#04121f!important}
+.t-alpine{background:var(--alpine);color:#0a0c26!important}
+.t-owrt{background:var(--owrt);color:#1a0d00!important}
+
+/* Project cards on the index: the roster of what this repository carries. Each
+ * links to that project's own page, which is where its documentation lives —
+ * the index only ever explains how to add the repository. */
+.projects{display:grid;gap:12px;margin:18px 0;
+          grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.project{display:block;text-decoration:none;color:inherit;
+         background:var(--panel);border:1px solid var(--line);
+         border-left:3px solid var(--c,#3d4a5c);border-radius:0 12px 12px 0;
+         padding:14px 16px}
+.project:hover{background:var(--panel2);text-decoration:none}
+.project h3{font-family:var(--display);margin:0 0 4px;font-size:16.5px;
+            font-weight:650;letter-spacing:-.01em;color:var(--c,#fff)}
+.project p{margin:0;font-size:13.5px;color:var(--dim)}
+.project .pkg{font-family:var(--mono);font-size:12.5px;color:#d3e7f5;
+              background:#1a2230;padding:1px 6px;border-radius:5px}
+
+/* The one-line "you are on a project page" breadcrumb back to the index. */
+.crumb{font-size:13.5px;color:var(--dim);margin:0 0 18px}
+.crumb a{font-weight:650}
+:root{ --nbsd:#f0ad45; }
+.s-nbsd{--c:var(--nbsd)}
+.t-nbsd{background:var(--nbsd);color:#1a1000!important}

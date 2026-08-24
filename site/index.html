@@ -3,128 +3,194 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aspic — project downloads</title>
+<title>Aspic — a package repository</title>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/aspic.css">
 </head>
 <body>
 <main>
   <h1>Aspic</h1>
-  <p class="sub">Downloads and signed package repositories for the Breeze projects —
-     self-hosted, LAN-first control for Midea air conditioners — and for whatever
-     else lands here later. One host, one project per section.</p>
+  <p class="sub">A signed package repository. Add it once with the snippet for
+     your system, then install and update everything on it through your normal
+     package manager.</p>
 
   <div class="intro">
-    <b>What this host is:</b> static files and nothing else. No database, no upload path,
-    nothing executable, and <b>no signing key</b> — packages are built and signed on a
-    workstation and pushed here as a timestamped release, so a compromise of this box can
-    serve you a stale file but cannot forge a package your package manager will accept.<br>
-    <b>What is on it today:</b> this page. The first package repository arrives with
-    <b>Breeze Core Native 4.0.0</b>; until then each section below points at where that
-    project actually lives.
+    <b>One repository, not one per project.</b> Adding aspic gives you every
+    project published here, and a new one needs no second sources entry — just
+    <code>install</code> its name. Each project has its own page explaining what
+    it is and how to run it; this page is only about getting the repository in
+    place.<br>
+    <b>Nothing is signed on this host.</b> Packages and indexes are signed on a
+    workstation and pushed here as static files, so a compromise of this box can
+    serve you something stale or missing but cannot forge a package your package
+    manager will accept. That is what the key in every snippet below is for.
   </div>
 
-  <div class="note warn"><b>Aspic is where new work goes; bolero keeps what it has.</b>
-    The Python <a href="https://github.com/monikapurpl3/breeze-core">Breeze Core</a> line
-    is being <b>sunset</b> — 3.2.0 is where it stops. Its repositories on
-    <a href="https://bolero.salataputarica.hr.eu.org/">bolero</a> stay up and anything
-    installed from them keeps working; nothing needs to be moved today. The native rewrite
-    that replaces it will be published here instead.</div>
+  <div class="projects">
+    <a class="project s-native" href="/breeze-core/">
+      <h3>Breeze Core</h3>
+      <p><span class="pkg">breeze-core</span> — self-hosted, LAN-first control
+        for Midea air conditioners: REST API, web panel, schedules and
+        temperature curves.</p>
+    </a>
+  </div>
 
   <nav class="toc">
-    <a class="t-native" href="#native">Breeze Core Native</a>
-    <a class="t-app" href="#app">Breeze for Android</a>
-    <a class="t-legacy" href="#legacy">Breeze Core 3.x</a>
+    <a class="t-deb" href="#debian">Debian / Ubuntu</a>
+    <a class="t-rpm" href="#rhel">Fedora / RHEL</a>
+    <a class="t-suse" href="#suse">openSUSE</a>
+    <a class="t-arch" href="#arch">Arch</a>
+    <a class="t-alpine" href="#alpine">Alpine</a>
+    <a class="t-owrt" href="#openwrt">OpenWrt</a>
+    <a class="t-nbsd" href="#netbsd">NetBSD</a>
     <a class="t-host" href="#host">About this host</a>
   </nav>
 
-  <section id="native" class="s-native">
-    <h2>Breeze Core Native <span class="pill p-soon">4.0.0 · not published yet</span></h2>
-    <span class="who">The same server, rewritten in <code>Rust</code> and cross-linked with
-      <code>Zig</code> — a drop-in replacement for the Python line above it</span>
-
-    <p>Same REST API, same web panel, same <code>config.json</code>: it is meant to be
-      installed <i>over</i> a 3.x deployment rather than migrated to. Every endpoint the
-      Python server has — all thirty — was checked against 3.2.0 running side by side, and
-      23 of the 24 comparable responses came back byte-identical.</p>
-
-    <p>It also fixes something that never worked in the Python line: <b>automatic pairing
-      finds units</b>. Broadcast discovery came back empty because a unicast reply to a
-      broadcast query matches no connection-tracking entry and gets dropped on the way in,
-      so this sweeps the local subnet directly as well.</p>
-
-    <table class="facts">
-      <tr><td>package</td><td>527 KB as an rpm, 488 KB as a deb — against 25.1 MB for the
-        same thing in Python</td></tr>
-      <tr><td>binary</td><td>2.5 MB with TLS and cloud pairing, 1.3 MB without</td></tr>
-      <tr><td>runtime</td><td>none: no interpreter to ship, no garbage collector to wait for</td></tr>
-      <tr><td>reach</td><td>the architectures the Python bundle could only reach through
-        hours of emulation, including routers with 8 MB of flash</td></tr>
-    </table>
-
-    <div class="note"><b>There is nothing to download here yet</b> — this section grows an
-      install snippet when 4.0.0 ships. Run 3.x from
-      <a href="https://bolero.salataputarica.hr.eu.org/">bolero</a> until it does.</div>
+  <section id="debian" class="s-deb">
+    <h2>Debian family</h2>
+    <span class="who">Debian · Ubuntu · Mint · Pop!_OS · Raspberry Pi OS ·
+      Devuan — <code>apt</code></span>
+<pre><span class="c"># the key gets its own keyring, named by the sources entry that uses it</span>
+curl -fsSL https://aspic.salataputarica.hr.eu.org/aspic.asc \
+  | sudo gpg --dearmor -o /usr/share/keyrings/aspic.gpg
+echo "deb [signed-by=/usr/share/keyrings/aspic.gpg] https://aspic.salataputarica.hr.eu.org/deb stable main" \
+  | sudo tee /etc/apt/sources.list.d/aspic.list
+sudo apt update</pre>
+    <p class="dim">amd64 · arm64 · armhf · riscv64 · ppc64el · s390x.</p>
   </section>
 
-  <section id="app" class="s-app">
-    <h2>Breeze for Android <span class="pill p-live">on bolero</span></h2>
-    <span class="who">Native Android client (Flutter) for a Breeze Core server, with
-      Material You theming — <code>.apk</code></span>
-    <p>Talks to either server: the API contract it depends on is the same one the native
-      rewrite reproduces. Available from
-      <a href="https://github.com/monikapurpl3/breeze/releases">GitHub releases</a> or
-      <a href="https://bolero.salataputarica.hr.eu.org/android/">bolero/android</a>, and it
-      moves here when the server it pairs with does.</p>
-    <p class="dim">Not on any app store: it is sideloaded, and it asks for nothing but the
-      network.</p>
+  <section id="rhel" class="s-rpm">
+    <h2>Fedora / RHEL family</h2>
+    <span class="who">Fedora · RHEL · AlmaLinux · Rocky · CentOS Stream —
+      <code>dnf</code></span>
+<pre><span class="c"># import the key first: dnf 5 will not fetch it from gpgkey= on its own</span>
+sudo rpm --import https://aspic.salataputarica.hr.eu.org/aspic.asc
+sudo curl -fsSL -o /etc/yum.repos.d/aspic.repo \
+  https://aspic.salataputarica.hr.eu.org/rpm/aspic.repo
+sudo dnf makecache</pre>
+    <div class="note"><b>Why the repo file is downloaded rather than typed.</b>
+      It carries <code>repo_gpgcheck=1</code>, so the metadata is verified and
+      not only the packages, and <code>metadata_expire=1h</code>. dnf's default
+      is <b>48 hours</b>: once it has refreshed it will not look here again for
+      two days, so a release published inside that window stays invisible and the
+      only apparent cure is <code>dnf clean all</code>.</div>
+    <p class="dim">x86_64 · aarch64 · armv7hl · riscv64 · ppc64le · s390x.</p>
   </section>
 
-  <section id="legacy" class="s-legacy">
-    <h2>Breeze Core 3.x <span class="pill p-sunset">sunset</span></h2>
-    <span class="who">The Python server — <code>apt</code> · <code>dnf</code> ·
-      <code>zypper</code> · <code>pacman</code> · <code>apk</code> · <code>opkg</code> ·
-      <code>pkg</code> · <code>pkgin</code>, all on bolero</span>
-    <p>Everything published for the Python line stays exactly where it is:
-      <a href="https://bolero.salataputarica.hr.eu.org/">the repositories</a>,
-      <a href="https://bolero.salataputarica.hr.eu.org/src/">the source tarballs</a>,
-      <a href="https://bolero.salataputarica.hr.eu.org/windows/">the Windows installer</a>,
-      the BSD and OpenWrt feeds, and the
-      <a href="https://bolero.salataputarica.hr.eu.org/poc/">frozen proof-of-concept
-      builds</a>. Installing and updating from bolero works today and is not being switched
-      off underneath anyone.</p>
-    <p>What sunset means here is narrower than it sounds: <b>3.2.0 is the last feature
-      release</b>, and new work happens in the native rewrite instead. The
-      <a href="https://github.com/monikapurpl3/breeze-core">repository</a> and its
-      <a href="https://github.com/monikapurpl3/breeze-core/wiki">wiki</a> — installing,
-      pairing, the REST API, exposing it safely — stay up, and remain the documentation for
-      the API that both servers speak.</p>
+  <section id="suse" class="s-suse">
+    <h2>openSUSE / SLE</h2>
+    <span class="who">Leap · Tumbleweed · SLES — <code>zypper</code></span>
+<pre>sudo rpm --import https://aspic.salataputarica.hr.eu.org/aspic.asc
+<span class="c"># swap x86_64 for your architecture</span>
+sudo zypper addrepo --refresh --gpgcheck \
+  https://aspic.salataputarica.hr.eu.org/rpm/x86_64/ aspic
+sudo zypper --gpg-auto-import-keys refresh</pre>
+    <p class="dim">The same rpms as the section above — zypper just adds and
+      refreshes repositories its own way.</p>
+  </section>
+
+  <section id="arch" class="s-arch">
+    <h2>Arch family</h2>
+    <span class="who">Arch · Manjaro · Artix · EndeavourOS —
+      <code>pacman</code></span>
+<pre><span class="c"># fetch once, then add and locally sign the key by its fingerprint</span>
+curl -fsSL -o /tmp/aspic.asc https://aspic.salataputarica.hr.eu.org/aspic.asc
+sudo pacman-key --add /tmp/aspic.asc
+sudo pacman-key --lsign-key "$(gpg --show-keys --with-colons /tmp/aspic.asc \
+  | awk -F: '/^fpr/{print $10; exit}')"
+sudo tee -a /etc/pacman.conf &lt;&lt;'EOF'
+
+[aspic]
+SigLevel = Required
+Server = https://aspic.salataputarica.hr.eu.org/arch/$arch
+EOF
+sudo pacman -Sy</pre>
+    <p class="dim">x86_64 · aarch64 · armv7h. <code>SigLevel = Required</code>
+      makes pacman refuse both an unsigned database and an unsigned package,
+      which is the point of adding the key at all.</p>
+  </section>
+
+  <section id="alpine" class="s-alpine">
+    <h2>Alpine</h2>
+    <span class="who">Alpine Linux, and anything else using
+      <code>apk</code></span>
+<pre><span class="c"># apk needs RSA — it has no ed25519 option, so this key is its own</span>
+sudo curl -fsSL -o /etc/apk/keys/aspic-alpine.rsa.pub \
+  https://aspic.salataputarica.hr.eu.org/aspic-alpine.rsa.pub
+<span class="c"># no architecture in the URL: apk appends it itself</span>
+echo "https://aspic.salataputarica.hr.eu.org/alpine" \
+  | sudo tee -a /etc/apk/repositories
+sudo apk update</pre>
+    <p class="dim">x86_64 · aarch64 · armv7 · riscv64 · ppc64le · s390x. Without
+      that key in <code>/etc/apk/keys</code>, apk refuses the index rather than
+      asking you about it.</p>
+  </section>
+
+  <section id="openwrt" class="s-owrt">
+    <h2>OpenWrt</h2>
+    <span class="who">opkg, verified with <code>usign</code> — OpenWrt's own
+      signer, which is why this is a third key</span>
+<pre><span class="c"># check your architecture first; it has to match exactly</span>
+. /etc/openwrt_release &amp;&amp; echo "$DISTRIB_ARCH"
+
+wget -qO /tmp/aspic-usign.pub https://aspic.salataputarica.hr.eu.org/aspic-usign.pub
+cp /tmp/aspic-usign.pub /etc/opkg/keys/$(usign -F -p /tmp/aspic-usign.pub)
+echo "src/gz aspic https://aspic.salataputarica.hr.eu.org/openwrt/$DISTRIB_ARCH" \
+  &gt;&gt; /etc/opkg/customfeeds.conf
+opkg update</pre>
+    <p class="dim">x86_64 · aarch64_generic · aarch64_cortex-a53 ·
+      aarch64_cortex-a72 · arm_cortex-a7_neon-vfpv4 · riscv64_riscv64. The key
+      file has to be <i>named</i> after its own fingerprint — opkg looks it up by
+      that name, so a sensible filename silently fails to verify.</p>
+  </section>
+
+  <section id="netbsd" class="s-nbsd">
+    <h2>NetBSD</h2>
+    <span class="who">A <code>pkgin</code> feed — amd64, built on a real NetBSD
+      machine because nothing cross-builds for it</span>
+<pre>echo "https://aspic.salataputarica.hr.eu.org/netbsd/All" \
+  &gt; /usr/pkg/etc/pkgin/repositories.conf
+pkgin -y update &amp;&amp; pkgin -y install breeze-core
+
+<span class="c"># or, without pkgin:</span>
+pkg_add https://aspic.salataputarica.hr.eu.org/netbsd/All/breeze-core-4.0.0.tgz</pre>
+    <div class="note warn"><b>This is the one feed here that is not signed.</b>
+      pkgin has no signature verification to offer, and <code>pkg_add</code>'s
+      GPG support wants a signed-package format this does not use — so what you
+      get is HTTPS and nothing more. Every other section on this page verifies a
+      signature made off this host; this one does not, and it would be dishonest
+      to imply otherwise.</div>
+    <p class="dim">The package declares <b>no dependencies at all</b> — where the
+      Python line needed <code>python312</code> — and installs over it in place
+      with <code>pkg_add -U</code>, keeping
+      <code>/usr/pkg/etc/breeze-core</code>.</p>
   </section>
 
   <section id="host" class="s-host">
     <h2>About this host</h2>
-    <span class="who">aspic.salataputarica.hr.eu.org — a small server on a domestic
-      connection, so be kind to it</span>
+    <span class="who">aspic.salataputarica.hr.eu.org — a small server on a
+      domestic connection, so be kind to it</span>
     <table class="facts">
-      <tr><td>serves</td><td>static files over HTTPS, <code>GET</code> and <code>HEAD</code>
-        only; every other method is refused</td></tr>
-      <tr><td>holds</td><td>no key, no account, no database — verification happens on your
-        machine, against keys published alongside whatever they sign</td></tr>
-      <tr><td>deploys</td><td>as a timestamped release with an atomically swapped
-        <code>current</code> symlink, so a push is never half-visible and rolling back is
-        one symlink</td></tr>
-      <tr><td>logs</td><td>request lines, for rate limiting and for spotting scanners.
-        Nothing else is collected, and there is nothing here to collect it with</td></tr>
-      <tr><td>indexing</td><td>asked off, site-wide. Links are how anyone gets here</td></tr>
+      <tr><td>serves</td><td>static files over HTTPS, <code>GET</code> and
+        <code>HEAD</code> only; every other method is refused</td></tr>
+      <tr><td>holds</td><td>no key, no account, no database — verification
+        happens on your machine, against the keys above</td></tr>
+      <tr><td>deploys</td><td>as a timestamped release with an atomically
+        swapped <code>current</code> symlink, so a push is never half-visible
+        and rolling back is one symlink</td></tr>
+      <tr><td>logs</td><td>request lines, for rate limiting and for spotting
+        scanners. Nothing else is collected, and there is nothing here to
+        collect it with</td></tr>
+      <tr><td>indexing</td><td>asked off, site-wide. Links are how anyone gets
+        here</td></tr>
     </table>
   </section>
 
   <footer>
     <b>Aspic</b> — named after the dish: a thing set in jelly, and kept.<br>
-    Both projects are <b>AGPL-3.0</b>. Sources:
-    <a href="https://github.com/monikapurpl3/breeze-core">breeze-core</a> ·
-    <a href="https://github.com/monikapurpl3/breeze">breeze</a>.
-    The older package host is <a href="https://bolero.salataputarica.hr.eu.org/">bolero</a>.
+    Everything published here is <b>AGPL-3.0</b>. The older package host, which
+    still serves the Python line of Breeze Core, is
+    <a href="https://bolero.salataputarica.hr.eu.org/">bolero</a>.
   </footer>
 </main>
 </body>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Breeze Core — on aspic</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/aspic.css">
+</head>
+<body>
+<main>
+  <p class="crumb"><a href="/">aspic</a> / breeze-core</p>
+  <h1>Breeze Core</h1>
+  <p class="sub">Self-hosted, LAN-first control for Midea air conditioners: a
+     REST API, a web panel, device-pairing authentication, server-side schedules
+     and temperature curves. No cloud account, no vendor app, nothing phoning
+     home.</p>
+
+  <div class="intro">
+    <b>Add <a href="/">the aspic repository</a> first</b> — one snippet for your
+    system, once — and then this is a single command. There is no separate
+    repository for this project.
+<pre>sudo apt install breeze-core        <span class="c"># Debian family</span>
+sudo dnf install breeze-core        <span class="c"># Fedora / RHEL family</span>
+sudo zypper install breeze-core     <span class="c"># openSUSE</span>
+sudo pacman -S breeze-core          <span class="c"># Arch family</span>
+sudo apk add breeze-core            <span class="c"># Alpine</span>
+opkg install breeze-core            <span class="c"># OpenWrt</span></pre>
+  </div>
+
+  <section id="after" class="s-native">
+    <h2>After installing</h2>
+    <span class="who">Three steps, and the first one is the only one that needs
+      your air conditioners switched on</span>
+<pre><span class="c"># 1. find the units on your network and write the config</span>
+sudo breeze-core pair
+
+<span class="c"># 2. bind somewhere useful: your LAN address for direct use, or leave it on
+#    127.0.0.1 with a reverse proxy in front</span>
+sudoedit /etc/breeze-core/breeze-core.env
+
+<span class="c"># 3. start it</span>
+sudo systemctl enable --now breeze-core</pre>
+    <p>Then open <code>http://&lt;that address&gt;:8420</code>. The panel asks for
+      the API key once per device — it is in
+      <code>/etc/breeze-core/config.json</code>, which <code>pair</code> wrote —
+      and then asks an admin on the local network to approve the pairing:</p>
+<pre>sudo breeze-core approve --config /etc/breeze-core/config.json &lt;CODE&gt;
+sudo breeze-core devices     <span class="c"># what is enrolled</span>
+sudo breeze-core diag        <span class="c"># is anything wrong</span></pre>
+    <div class="note"><b>A V3 unit needs a token and key.</b> Nearly every unit
+      sold now is V3, and Midea will only issue those credentials to the account
+      the unit is registered to — its cloud stopped handing them out to anyone
+      else. <code>pair</code> takes a token and key if you already have them, and
+      there is a last-resort path that asks for your Midea account once and
+      forgets it. <b>Keep a copy of <code>config.json</code> somewhere else:</b>
+      those credentials are not re-issuable.</div>
+  </section>
+
+  <section id="control" class="s-arch">
+    <h2>From the command line</h2>
+    <span class="who">The whole server is one binary, and it is also the
+      client</span>
+<pre>breeze-core control 'kuhinja' cool 25.5 both auto turbo 15m
+breeze-core control 'lijeva soba' heat 22 horizontal low eco
+breeze-core control 'dnevna soba' none none none none none 30m</pre>
+    <p class="dim">Name, mode, temperature, flap, fan, extra, timer — in that
+      order, with <code>none</code> valid anywhere and names matched case
+      insensitively (or by any unambiguous prefix). It enrols itself the first
+      time you use it, like any other client.</p>
+  </section>
+
+  <section id="what" class="s-rpm">
+    <h2>What you get</h2>
+    <table class="facts">
+      <tr><td>one binary</td><td>~2.5 MB, no interpreter, no runtime, nothing
+        installed alongside it. The web panel is compiled into it</td></tr>
+      <tr><td>the API</td><td>30 endpoints, key + per-device-token auth, an SSE
+        stream for live state, Prometheus metrics</td></tr>
+      <tr><td>schedules</td><td>favourites, weekly schedules and interpolated
+        temperature curves, run server-side — nothing has to stay open</td></tr>
+      <tr><td>an Android app</td><td><a
+        href="https://github.com/monikapurpl3/breeze/releases">Breeze</a>, which
+        talks to the same API</td></tr>
+      <tr><td>architectures</td><td>x86-64, arm64, armv7, riscv64, ppc64le,
+        s390x — and routers, which the previous line could not fit on</td></tr>
+    </table>
+  </section>
+
+  <section id="python" class="s-legacy">
+    <h2>Coming from 3.x</h2>
+    <span class="who">The Python implementation, still published on
+      <a href="https://bolero.salataputarica.hr.eu.org/">bolero</a></span>
+    <p>4.0.0 is the same project reimplemented — same REST API, same
+      <code>config.json</code>, <code>devices.json</code>,
+      <code>programs.json</code> and <code>timers.json</code>, same
+      <code>AC_*</code> environment variables, same service name, same web panel
+      and the same Android app. It is meant to be installed <i>over</i> a 3.x
+      deployment rather than migrated to, and the existing paths it does not need
+      any more are kept as symlinks so nothing that names them breaks.</p>
+    <p>Everything published for 3.x stays exactly where it is on bolero and keeps
+      installing; nothing is being switched off underneath anyone.</p>
+    <div class="note warn"><b>Back up <code>/etc/breeze-core</code> before any
+      upgrade.</b> Not because this one is risky — an upgrade keeps the directory
+      — but because a paired V3 unit's credentials cannot be obtained again, and
+      that is true whatever you are upgrading.</div>
+  </section>
+
+  <footer>
+    <b>Breeze Core</b> — <b>AGPL-3.0</b>. Source and documentation:
+    <a href="https://github.com/monikapurpl3/breeze-core">github</a> ·
+    <a href="https://github.com/monikapurpl3/breeze-core/wiki">wiki</a>.<br>
+    Back to <a href="/">the repository</a>.
+  </footer>
+</main>
+</body>
+</html>

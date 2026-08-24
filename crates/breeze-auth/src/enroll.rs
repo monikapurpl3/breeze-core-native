@@ -120,6 +120,19 @@ pub fn new_pairing_code() -> Result<String, EnrollError> {
     Ok(format!("{}-{}", &text[..4], &text[4..]))
 }
 
+/// A fresh API key: 24 random bytes, base64url, 32 characters.
+///
+/// The same shape the reference mints (`secrets.token_urlsafe(24)`), so a
+/// config written by `breeze-core pair` is indistinguishable from one written by
+/// the Python tool — which matters because people paste this key into a phone
+/// and would notice it changing character.
+///
+/// Lives here rather than in the CLI so that every credential this project mints
+/// comes from one place, with one entropy failure path.
+pub fn random_api_key() -> Result<String, EnrollError> {
+    Ok(b64url(&random_bytes(24)?))
+}
+
 /// Canonicalise a human-entered code: uppercase, no spaces or hyphens.
 ///
 /// So `k7q2 9mrx` and `K7Q2-9MRX` are the same code, because someone is typing

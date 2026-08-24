@@ -39,6 +39,15 @@ impl Client {
         &self.base_url
     }
 
+    /// The device token this client presents, if it has one.
+    ///
+    /// Exposed for the diagnostic's negative test, which builds a second client
+    /// with a deliberately wrong key and the *right* token — otherwise a refusal
+    /// proves only that the token was missing.
+    pub fn device_token(&self) -> Option<&str> {
+        self.device_token.as_deref()
+    }
+
     pub fn get(&self, path: &str) -> Result<serde_json::Value, String> {
         self.send("GET", path, None)
     }
@@ -49,6 +58,11 @@ impl Client {
         body: &serde_json::Value,
     ) -> Result<serde_json::Value, String> {
         self.send("POST", path, Some(body))
+    }
+
+    /// `DELETE`, which is how a device token is revoked.
+    pub fn delete(&self, path: &str) -> Result<serde_json::Value, String> {
+        self.send("DELETE", path, None)
     }
 
     fn send(

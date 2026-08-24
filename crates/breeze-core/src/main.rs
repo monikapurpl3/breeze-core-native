@@ -21,19 +21,30 @@ fn main() {
     };
 
     let result = match command {
-        cli::Command::Serve { host, port } => {
-            serve(host, port);
+        cli::Command::Serve {
+            host,
+            port,
+            behind_proxy,
+        } => {
+            serve(host, port, behind_proxy);
             Ok(())
         }
         cli::Command::Control(args) => cli::control::run(&args),
-        cli::Command::Diag { base_url } => match cli::diag::run(base_url) {
+        // The only subcommand that is not an API client: there is no key to
+        // authenticate with until this has run once.
+        cli::Command::Pair { ip, out, prompt } => {
+            cli::pair::run(cli::pair::Options { ip, out, prompt })
+        }
+        cli::Command::Diag { client } => match cli::diag::run(&client) {
             // The exit code is the point of a diagnostic in a script.
             Ok(code) => std::process::exit(code),
             Err(e) => Err(e),
         },
         cli::Command::Login { base_url } => cli::profile::enrol(base_url).map(|_| ()),
-        cli::Command::Approve(code) => cli::approve(&code),
-        cli::Command::Units => cli::units(),
+        cli::Command::Approve { code, client } => cli::approve(code, &client),
+        cli::Command::Devices { client } => cli::admin::devices(&client),
+        cli::Command::Revoke { token_id, client } => cli::admin::revoke(&token_id, &client),
+        cli::Command::Units { client } => cli::units(&client),
         cli::Command::Version => {
             println!("breeze-core {}", env!("CARGO_PKG_VERSION"));
             println!("commit {}", breeze_http::build_commit());
@@ -56,8 +67,15 @@ fn main() {
 /// Flags win over the environment, because a flag is the more specific
 /// instruction — and because the reference's systemd unit passes them, which
 /// this binary used to ignore entirely.
-fn serve(host: Option<String>, port: Option<u16>) {
+fn serve(host: Option<String>, port: Option<u16>, behind_proxy: bool) {
     let mut settings = breeze_http::Settings::from_env();
+    // One-way: the flag can turn proxy-header trust on, never off. AC_BEHIND_PROXY
+    // is set by the packaged unit and the flag by BREEZE_OPTS, and a flag that
+    // could silently *disable* it would turn the LAN-only admin check into a
+    // check that every proxied request passes.
+    if behind_proxy {
+        settings.behind_proxy = true;
+    }
     if host.is_some() || port.is_some() {
         let (current_host, current_port) = settings
             .bind

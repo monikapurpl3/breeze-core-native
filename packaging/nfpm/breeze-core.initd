@@ -1,0 +1,28 @@
+#!/sbin/openrc-run
+# Breeze Core — OpenRC service installed by the Alpine (apk) package.
+# Configuration: /etc/breeze-core/breeze-core.env (BREEZE_HOST/PORT/OPTS).
+
+name="breeze-core"
+description="Breeze Core - self-hosted Midea AC control"
+
+BREEZE_HOST=127.0.0.1
+BREEZE_PORT=8420
+BREEZE_OPTS=""
+[ -r /etc/breeze-core/breeze-core.env ] && . /etc/breeze-core/breeze-core.env
+
+command="/usr/bin/breeze-core"
+command_args="serve --host ${BREEZE_HOST} --port ${BREEZE_PORT} ${BREEZE_OPTS}"
+command_user="breeze:breeze"
+command_background=false
+supervisor="supervise-daemon"
+respawn_delay=5
+
+export AC_CONFIG=/etc/breeze-core/config.json
+export AC_DEVICES=/etc/breeze-core/devices.json
+export AC_PROGRAMS=/etc/breeze-core/programs.json
+export AC_TIMERS=/etc/breeze-core/timers.json
+
+depend() {
+	need net
+	after firewall
+}

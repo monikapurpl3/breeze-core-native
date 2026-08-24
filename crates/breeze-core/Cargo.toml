@@ -1,6 +1,6 @@
 [package]
 name = "breeze-core"
-version = "4.0.0-dev"
+version = "4.0.0"
 description = "LAN-first REST API and control panel for Midea air conditioners"
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,13 @@ repository.workspace = true
 
 [dependencies]
 breeze-http = { path = "../breeze-http", default-features = false }
+# `pair` writes config.json before any server exists, so the binary needs the
+# store and the discovery it would otherwise reach through the API. No size
+# cost: breeze-http already links both.
+breeze-auth = { path = "../breeze-auth" }
+breeze-device = { path = "../breeze-device" }
+breeze-proto = { path = "../breeze-proto" }
+breeze-store = { path = "../breeze-store" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # The CLI subcommands are API clients. No TLS of its own: when the `cloud`

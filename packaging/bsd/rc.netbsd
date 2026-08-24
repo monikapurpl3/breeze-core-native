@@ -1,0 +1,80 @@
+#!/bin/sh
+# Breeze Core — NetBSD rc.d service (installed to /etc/rc.d/breeze_core).
+# Enable with `breeze_core=YES` in /etc/rc.conf, then `service breeze_core start`.
+#
+# NetBSD has no daemon(8), so this backgrounds the server itself under su(1).
+# Simpler than the Python line's version of this file: there is no interpreter,
+# no PYTHONPATH and no virtualenv to point at — one static binary.
+#
+# PROVIDE: breeze_core
+# REQUIRE: NETWORKING
+
+$_rc_subr_loaded . /etc/rc.subr
+
+name=breeze_core
+rcvar=$name
+pidfile=/var/run/${name}.pid
+logfile=/var/log/${name}.log
+start_cmd=breeze_start
+stop_cmd=breeze_stop
+status_cmd=breeze_status
+extra_commands="status"
+
+_bin=/usr/pkg/bin/breeze-core
+_etcdir=/usr/pkg/etc/breeze-core
+
+breeze_running()
+{
+	[ -r "${pidfile}" ] && kill -0 "$(cat "${pidfile}")" 2>/dev/null
+}
+
+breeze_start()
+{
+	BREEZE_HOST=127.0.0.1
+	BREEZE_PORT=8420
+	BREEZE_OPTS=""
+	[ -r "${_etcdir}/breeze-core.env" ] && . "${_etcdir}/breeze-core.env"
+	if breeze_running; then
+		echo "${name} already running (pid $(cat "${pidfile}"))."
+		return 0
+	fi
+	echo "Starting ${name}."
+	# The pidfile and log live in root-owned directories, but the server runs as
+	# the unprivileged 'breeze' user — so root (this script) creates both and
+	# hands them over. Doing those writes inside the su(1) fails with EACCES.
+	rm -f "${pidfile}"
+	touch "${pidfile}" "${logfile}"
+	chown breeze "${pidfile}" "${logfile}"
+	su -m breeze -c "env \
+	  AC_CONFIG=${_etcdir}/config.json \
+	  AC_DEVICES=${_etcdir}/devices.json \
+	  AC_PROGRAMS=${_etcdir}/programs.json \
+	  AC_TIMERS=${_etcdir}/timers.json \
+	  ${_bin} serve --host ${BREEZE_HOST} --port ${BREEZE_PORT} ${BREEZE_OPTS} \
+	  >> ${logfile} 2>&1 & echo \$! > ${pidfile}"
+}
+
+breeze_stop()
+{
+	if breeze_running; then
+		echo "Stopping ${name}."
+		kill "$(cat "${pidfile}")" 2>/dev/null || true
+		rm -f "${pidfile}"
+	else
+		echo "${name} not running."
+		rm -f "${pidfile}"
+	fi
+}
+
+breeze_status()
+{
+	if breeze_running; then
+		echo "${name} is running as pid $(cat "${pidfile}")."
+	else
+		echo "${name} is not running."
+		return 1
+	fi
+}
+
+load_rc_config $name
+run_rc_command "$1"

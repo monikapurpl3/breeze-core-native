@@ -4,23 +4,32 @@ A native rewrite of [Breeze Core](https://github.com/monikapurpl3/breeze-core) �
 the LAN-first REST API and web panel for Midea air conditioners — in Rust, with
 Zig as the cross-linker.
 
-**Status: phase 3 complete — and this is the line that continues.** Breeze Core
-3.2.0 is the last release of the Python one, which is being sunset; its packages
-stay published and installable, and everything after it happens here.
+**Status: 4.0.0 is built and packaged.** Breeze Core 3.2.0 is the last release of
+the Python line, which is being sunset; its packages stay published and
+installable, and everything after it happens here.
 
 Every endpoint the Python server has — all 30 — verified against 3.2.0 running
 side by side: 23 of 24 compared responses byte-identical (the exception is
 documented), unit capabilities agreeing on all three real air conditioners, and
-`breeze-core diag --auto` passing with no failures. Since then: a native CLI —
-`control`, `diag` and a profile of its own — in place of the shell scripts the
-Python project accumulated, and a panel that draws indoor, outdoor and target by
-the same rule the Android app uses. 465 tests.
+`breeze-core diag --auto` passing with no failures. The CLI answers every verb
+the packaged Python binary answers, including `pair`, `devices` and `revoke`, and
+takes the same flags the shell aliases in the wild pass. 473 tests.
 
-Packages will be published to
-**[aspic](https://aspic.salataputarica.hr.eu.org/)** at 4.0.0 — a host that
-carries this project and whatever follows it, while `bolero` keeps the 3.x
-repositories exactly as they are. That site and its deployment live in
-[`site/`](site/). Phase 4, the packaging itself, is next.
+**31 packages** — six Linux architectures × deb/rpm/pacman/apk/ipk, plus a
+NetBSD one built on a NetBSD machine — installed in clean containers and checked
+to run, to keep `/etc/breeze-core` on removal, and to install *over* the Python
+package of the same name without losing a paired unit's credentials.
+They come from **one static musl binary per architecture** — no libc dependency
+is declared, because there is none to satisfy — and are served from
+[aspic](https://aspic.salataputarica.hr.eu.org/) as five signed repositories
+(apt, dnf/zypper, pacman, apk, opkg) plus an unsigned pkgin feed for NetBSD.
+`packaging/` has the details, `site/` has the host.
+
+| | size |
+|---|---|
+| the binary | 2.0–2.6 MB depending on architecture |
+| an rpm / deb | ~1.4 MB (zstd) |
+| the same thing in Python | 25.1 MB, 61.7 MB installed |
 
 It also fixes what never worked here: **automatic pairing**. Broadcast discovery
 found nothing because a reply to a broadcast matches no conntrack entry and gets
@@ -79,7 +88,8 @@ crates/breeze-cloud     one cloud round-trip for a V3 token (optional; pulls in 
 crates/breeze-core      the binary
 static/                 the web panel, compiled into that binary by build.rs
 tools/                  scripts that diff this server against the Python one
-site/                   the aspic project host: its page, vhost and deployment
+site/                   the aspic host: its pages, vhost and deployment
+packaging/              binaries, packages, the signed repository tree
 ```
 
 The protocol is four layers, wrapped one inside the next:
@@ -113,7 +123,7 @@ request after a handshake, so you must wait ~1 s or every command times out with
 no error at all.
 
 ```bash
-cargo test --workspace   # 465 tests, no hardware needed
+cargo test --workspace   # 473 tests, no hardware needed
 cargo clippy --all-targets --workspace -- -D warnings
 ```
 

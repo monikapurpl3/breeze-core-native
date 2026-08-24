@@ -89,9 +89,13 @@ dependencies = [
 
 [[package]]
 name = "breeze-core"
-version = "4.0.0-dev"
+version = "4.0.0"
 dependencies = [
+ "breeze-auth",
+ "breeze-device",
  "breeze-http",
+ "breeze-proto",
+ "breeze-store",
  "serde",
  "serde_json",
  "ureq",

@@ -1,0 +1,57 @@
+# Breeze Core — systemd unit installed by the deb/rpm/pacman packages.
+#
+# Bind address and port come from /etc/breeze-core/breeze-core.env
+# (BREEZE_HOST / BREEZE_PORT / BREEZE_OPTS). The default is loopback-only: set
+# BREEZE_HOST to this machine's LAN address for direct LAN use, or leave it at
+# 127.0.0.1 with a reverse proxy in front.
+
+[Unit]
+Description=Breeze Core - self-hosted Midea AC control
+Documentation=https://github.com/monikapurpl3/breeze-core
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=breeze
+Group=breeze
+Environment=BREEZE_HOST=127.0.0.1
+Environment=BREEZE_PORT=8420
+Environment=BREEZE_OPTS=
+Environment=AC_CONFIG=/etc/breeze-core/config.json
+Environment=AC_DEVICES=/etc/breeze-core/devices.json
+Environment=AC_PROGRAMS=/etc/breeze-core/programs.json
+Environment=AC_TIMERS=/etc/breeze-core/timers.json
+EnvironmentFile=-/etc/breeze-core/breeze-core.env
+# /usr/bin, not /usr/lib: a single executable belongs on the path, and on an
+# SELinux system /usr/lib is lib_t — not a domain-transition entrypoint, so the
+# service would stay in init_t and get silently denied writes to
+# /etc/breeze-core. The Python package needed a directory (interpreter plus
+# every dependency) and paid for it with a semanage rule in its postinstall.
+ExecStart=/usr/bin/breeze-core serve --host ${BREEZE_HOST} --port ${BREEZE_PORT} $BREEZE_OPTS
+Restart=on-failure
+RestartSec=5
+
+# --- sandbox ---------------------------------------------------------------
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/etc/breeze-core
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RemoveIPC=true
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+LockPersonality=true
+# Optional egress lockdown — uncomment and adjust to your LAN:
+#IPAddressAllow=127.0.0.0/8 ::1/128 192.168.0.0/16
+#IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target

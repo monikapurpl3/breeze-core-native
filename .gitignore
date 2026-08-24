@@ -1,3 +1,12 @@
 /target
 **/target
 Cargo.lock.bak
+
+# Build products. packaging/out is binaries, packages and the assembled
+# repository tree -- hundreds of megabytes, all reproducible from a tag.
+/packaging/out/
+
+# Signing keys. These are the one thing here that cannot be regenerated without
+# every user re-trusting a new key, so they are kept out of the repository and
+# backed up out of band. See packaging/repo/README.md.
+/packaging/repo/keys/

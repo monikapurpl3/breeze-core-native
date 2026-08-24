@@ -96,12 +96,11 @@ const SANE_MAX: f64 = 80.0;
 /// about 700 ms, and a second and a half means a weak signal.
 const SLOW_MS: u128 = 1_500;
 
-pub fn run(base_url: Option<String>) -> Result<i32, String> {
-    let mut profile = crate::cli::profile::ensure()?;
-    if let Some(url) = base_url {
-        profile.base_url = url.trim_end_matches('/').to_string();
-    }
-    let client = Client::from_profile(&profile);
+pub fn run(options: &crate::cli::admin::ClientOpts) -> Result<i32, String> {
+    // `--config` is how the reference's own alias invokes this: the key comes
+    // from the server's config rather than from a profile, which is also what
+    // lets a first run on the server enrol itself without stopping to ask.
+    let client = options.client_enrolling()?;
     let mut report = Report::new();
 
     println!("breeze-core diag -> {}", client.base_url());
@@ -163,7 +162,7 @@ pub fn run(base_url: Option<String>) -> Result<i32, String> {
     let wrong = Client::new(
         client.base_url().to_string(),
         "obviously-not-the-key".into(),
-        Some(profile.device_token.clone()),
+        client.device_token().map(str::to_string),
     );
     match wrong.get("/api/units") {
         Err(_) => report.add(Verdict::Ok, "a wrong API key is refused"),

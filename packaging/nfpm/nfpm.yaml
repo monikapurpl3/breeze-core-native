@@ -1,0 +1,113 @@
+# nfpm config — one file produces the .deb, .rpm, .pkg.tar.zst, .apk and .ipk
+# from a single staged binary. build-packages.sh sets the environment and stages
+# the file; nothing here is architecture-specific except $BC_ARCH.
+#
+#   BC_VERSION  package version (4.0.0)
+#   BC_ARCH     amd64 | arm64 | arm7 | riscv64 | ppc64le | s390x, or an OpenWrt
+#               label (x86_64, aarch64_generic, …) when building an .ipk
+#
+# The binary is always staged at /stage/breeze-core: nfpm does not expand
+# environment variables inside `contents.src`, so that path is a contract
+# between this file and the build script rather than a value.
+#
+# **No libc dependency is declared, on purpose.** The Linux builds are static
+# musl — no dynamic loader, no libc.so, nothing for a glibc distro to satisfy —
+# which is what lets one file serve Debian, Fedora, Alma, Arch, Alpine and
+# OpenWrt. Declaring one would be a lie that also broke Alpine.
+
+name: breeze-core
+arch: ${BC_ARCH}
+platform: linux
+version: ${BC_VERSION}
+# Verbatim, not parsed: a pre-release like "4.0.0-rc1" is valid semver but
+# nfpm's default schema has rejected shapes this project has used before, and a
+# packaging run is a poor place to discover a version-string opinion.
+version_schema: none
+section: utils
+priority: optional
+maintainer: monikapurpl3 <monikapurpl3@users.noreply.github.com>
+vendor: Breeze Core
+homepage: https://github.com/monikapurpl3/breeze-core
+license: AGPL-3.0-or-later
+description: |
+  Self-hosted, LAN-first control for Midea air conditioners.
+  REST API and web control panel with device-pairing authentication,
+  server-side schedules and temperature curves. One static binary - no
+  interpreter, no runtime, nothing to install alongside it.
+
+contents:
+  - src: /stage/breeze-core
+    dst: /usr/bin/breeze-core
+    file_info:
+      mode: 0755
+
+  # Where the Python package put its executable. Kept as a symlink because the
+  # reference's unit file, its OpenRC script and a year of people's own scripts
+  # name this path, and a drop-in replacement should not break a path it can
+  # keep for the cost of one link.
+  - src: /usr/bin/breeze-core
+    dst: /usr/lib/breeze-core/breeze-core
+    type: symlink
+
+  # Service definitions: systemd for deb/rpm/pacman, OpenRC for Alpine, procd
+  # for OpenWrt.
+  - src: packaging/nfpm/breeze-core.service
+    dst: /usr/lib/systemd/system/breeze-core.service
+    packager: deb
+  - src: packaging/nfpm/breeze-core.service
+    dst: /usr/lib/systemd/system/breeze-core.service
+    packager: rpm
+  - src: packaging/nfpm/breeze-core.service
+    dst: /usr/lib/systemd/system/breeze-core.service
+    packager: archlinux
+  - src: packaging/nfpm/breeze-core.initd
+    dst: /etc/init.d/breeze-core
+    packager: apk
+    file_info:
+      mode: 0755
+  - src: packaging/nfpm/breeze-core.init
+    dst: /etc/init.d/breeze-core
+    packager: ipk
+    file_info:
+      mode: 0755
+
+  # State directory and the editable service config, both kept on upgrade and
+  # on removal: a V3 unit's token cannot be re-issued by Midea, so deleting
+  # config.json is not a recoverable action.
+  - dst: /etc/breeze-core
+    type: dir
+    file_info:
+      mode: 0750
+      owner: breeze
+      group: breeze
+  - src: packaging/nfpm/breeze-core.env
+    dst: /etc/breeze-core/breeze-core.env
+    type: config|noreplace
+    file_info:
+      mode: 0640
+      owner: root
+      group: breeze
+
+  - src: README.md
+    dst: /usr/share/doc/breeze-core/README.md
+  - src: LICENSE
+    dst: /usr/share/doc/breeze-core/LICENSE
+
+scripts:
+  preinstall: packaging/nfpm/scripts/preinstall.sh
+  postinstall: packaging/nfpm/scripts/postinstall.sh
+  preremove: packaging/nfpm/scripts/preremove.sh
+  postremove: packaging/nfpm/scripts/postremove.sh
+
+# zstd where the client can read it.
+#
+# dpkg has understood zstd since 1.21.18 (Debian 12, Ubuntu 22.04) and rpm since
+# 4.14 (RHEL 8), which covers everything this project supports; the .pkg.tar.zst
+# name says what Arch has always used. **apk and ipk stay gzip** — apk-tools 2.x
+# has no zstd at all, and opkg's support depends on the OpenWrt build, so
+# choosing it there would produce a package the target cannot open. Compression
+# is worth ~15% here: the payload is one already-tightly-optimised binary.
+deb:
+  compression: zstd
+rpm:
+  compression: zstd
