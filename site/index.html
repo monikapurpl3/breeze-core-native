@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aspic — project downloads</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/aspic.css">
+</head>
+<body>
+<main>
+  <h1>Aspic</h1>
+  <p class="sub">Downloads and signed package repositories for the Breeze projects —
+     self-hosted, LAN-first control for Midea air conditioners — and for whatever
+     else lands here later. One host, one project per section.</p>
+
+  <div class="intro">
+    <b>What this host is:</b> static files and nothing else. No database, no upload path,
+    nothing executable, and <b>no signing key</b> — packages are built and signed on a
+    workstation and pushed here as a timestamped release, so a compromise of this box can
+    serve you a stale file but cannot forge a package your package manager will accept.<br>
+    <b>What is on it today:</b> this page. The first package repository arrives with
+    <b>Breeze Core Native 4.0.0</b>; until then each section below points at where that
+    project actually lives.
+  </div>
+
+  <div class="note warn"><b>Aspic is where new work goes; bolero keeps what it has.</b>
+    The Python <a href="https://github.com/monikapurpl3/breeze-core">Breeze Core</a> line
+    is being <b>sunset</b> — 3.2.0 is where it stops. Its repositories on
+    <a href="https://bolero.salataputarica.hr.eu.org/">bolero</a> stay up and anything
+    installed from them keeps working; nothing needs to be moved today. The native rewrite
+    that replaces it will be published here instead.</div>
+
+  <nav class="toc">
+    <a class="t-native" href="#native">Breeze Core Native</a>
+    <a class="t-app" href="#app">Breeze for Android</a>
+    <a class="t-legacy" href="#legacy">Breeze Core 3.x</a>
+    <a class="t-host" href="#host">About this host</a>
+  </nav>
+
+  <section id="native" class="s-native">
+    <h2>Breeze Core Native <span class="pill p-soon">4.0.0 · not published yet</span></h2>
+    <span class="who">The same server, rewritten in <code>Rust</code> and cross-linked with
+      <code>Zig</code> — a drop-in replacement for the Python line above it</span>
+
+    <p>Same REST API, same web panel, same <code>config.json</code>: it is meant to be
+      installed <i>over</i> a 3.x deployment rather than migrated to. Every endpoint the
+      Python server has — all thirty — was checked against 3.2.0 running side by side, and
+      23 of the 24 comparable responses came back byte-identical.</p>
+
+    <p>It also fixes something that never worked in the Python line: <b>automatic pairing
+      finds units</b>. Broadcast discovery came back empty because a unicast reply to a
+      broadcast query matches no connection-tracking entry and gets dropped on the way in,
+      so this sweeps the local subnet directly as well.</p>
+
+    <table class="facts">
+      <tr><td>package</td><td>527 KB as an rpm, 488 KB as a deb — against 25.1 MB for the
+        same thing in Python</td></tr>
+      <tr><td>binary</td><td>2.5 MB with TLS and cloud pairing, 1.3 MB without</td></tr>
+      <tr><td>runtime</td><td>none: no interpreter to ship, no garbage collector to wait for</td></tr>
+      <tr><td>reach</td><td>the architectures the Python bundle could only reach through
+        hours of emulation, including routers with 8 MB of flash</td></tr>
+    </table>
+
+    <div class="note"><b>There is nothing to download here yet</b> — this section grows an
+      install snippet when 4.0.0 ships. Run 3.x from
+      <a href="https://bolero.salataputarica.hr.eu.org/">bolero</a> until it does.</div>
+  </section>
+
+  <section id="app" class="s-app">
+    <h2>Breeze for Android <span class="pill p-live">on bolero</span></h2>
+    <span class="who">Native Android client (Flutter) for a Breeze Core server, with
+      Material You theming — <code>.apk</code></span>
+    <p>Talks to either server: the API contract it depends on is the same one the native
+      rewrite reproduces. Available from
+      <a href="https://github.com/monikapurpl3/breeze/releases">GitHub releases</a> or
+      <a href="https://bolero.salataputarica.hr.eu.org/android/">bolero/android</a>, and it
+      moves here when the server it pairs with does.</p>
+    <p class="dim">Not on any app store: it is sideloaded, and it asks for nothing but the
+      network.</p>
+  </section>
+
+  <section id="legacy" class="s-legacy">
+    <h2>Breeze Core 3.x <span class="pill p-sunset">sunset</span></h2>
+    <span class="who">The Python server — <code>apt</code> · <code>dnf</code> ·
+      <code>zypper</code> · <code>pacman</code> · <code>apk</code> · <code>opkg</code> ·
+      <code>pkg</code> · <code>pkgin</code>, all on bolero</span>
+    <p>Everything published for the Python line stays exactly where it is:
+      <a href="https://bolero.salataputarica.hr.eu.org/">the repositories</a>,
+      <a href="https://bolero.salataputarica.hr.eu.org/src/">the source tarballs</a>,
+      <a href="https://bolero.salataputarica.hr.eu.org/windows/">the Windows installer</a>,
+      the BSD and OpenWrt feeds, and the
+      <a href="https://bolero.salataputarica.hr.eu.org/poc/">frozen proof-of-concept
+      builds</a>. Installing and updating from bolero works today and is not being switched
+      off underneath anyone.</p>
+    <p>What sunset means here is narrower than it sounds: <b>3.2.0 is the last feature
+      release</b>, and new work happens in the native rewrite instead. The
+      <a href="https://github.com/monikapurpl3/breeze-core">repository</a> and its
+      <a href="https://github.com/monikapurpl3/breeze-core/wiki">wiki</a> — installing,
+      pairing, the REST API, exposing it safely — stay up, and remain the documentation for
+      the API that both servers speak.</p>
+  </section>
+
+  <section id="host" class="s-host">
+    <h2>About this host</h2>
+    <span class="who">aspic.salataputarica.hr.eu.org — a small server on a domestic
+      connection, so be kind to it</span>
+    <table class="facts">
+      <tr><td>serves</td><td>static files over HTTPS, <code>GET</code> and <code>HEAD</code>
+        only; every other method is refused</td></tr>
+      <tr><td>holds</td><td>no key, no account, no database — verification happens on your
+        machine, against keys published alongside whatever they sign</td></tr>
+      <tr><td>deploys</td><td>as a timestamped release with an atomically swapped
+        <code>current</code> symlink, so a push is never half-visible and rolling back is
+        one symlink</td></tr>
+      <tr><td>logs</td><td>request lines, for rate limiting and for spotting scanners.
+        Nothing else is collected, and there is nothing here to collect it with</td></tr>
+      <tr><td>indexing</td><td>asked off, site-wide. Links are how anyone gets here</td></tr>
+    </table>
+  </section>
+
+  <footer>
+    <b>Aspic</b> — named after the dish: a thing set in jelly, and kept.<br>
+    Both projects are <b>AGPL-3.0</b>. Sources:
+    <a href="https://github.com/monikapurpl3/breeze-core">breeze-core</a> ·
+    <a href="https://github.com/monikapurpl3/breeze">breeze</a>.
+    The older package host is <a href="https://bolero.salataputarica.hr.eu.org/">bolero</a>.
+  </footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# Line endings.
+#
+# This repository is developed on Windows with core.autocrlf=true, so a checkout
+# rewrites text files to CRLF. That is invisible until one of them is copied to
+# a server and run: a shell script with CRLF line endings fails on the first
+# line with "\r: command not found", which reads as a corrupt file rather than a
+# checkout artefact. The two kinds of file here that are executed or parsed on a
+# Linux host are pinned to LF.
+#
+# Deliberately NOT "* text=auto": that would renormalise every existing file in
+# the repository on the next commit and bury a real change in the diff.
+*.sh   text eol=lf
+*.conf text eol=lf

@@ -1,0 +1,122 @@
+/* aspic.css — the whole look of the hub, in one external file.
+ *
+ * External rather than an inline <style> for one specific reason: it lets the
+ * vhost send `style-src 'self'` instead of `'unsafe-inline'`. The sibling host
+ * (bolero) inlines its CSS and pays for it in a looser policy. There is no
+ * script anywhere on this site, so `default-src 'none'` covers the rest.
+ *
+ * No webfont: nothing to fetch, nothing to leak, and the system stack below
+ * lands on Segoe UI Variable / SF / Inter where those exist rather than
+ * falling back to plain Arial.
+ */
+
+:root{
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI Variable Text","Segoe UI",
+         Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --display:ui-sans-serif,system-ui,-apple-system,"Segoe UI Variable Display","Segoe UI",
+            Inter,Roboto,sans-serif;
+  --mono:ui-monospace,"Cascadia Mono","JetBrains Mono","SF Mono",SFMono-Regular,
+         Menlo,Consolas,"Liberation Mono",monospace;
+
+  --bg:#080a0e; --panel:#10141a; --panel2:#141922; --line:#212834;
+  --fg:#e9eef4; --dim:#8d99a8; --codebg:#0b0f14;
+
+  /* one colour per project, driving its rule, heading and code tint */
+  --native:#f0ad45; --app:#7fd66b; --legacy:#e0507c; --host:#4fd1c5;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:
+      radial-gradient(1200px 520px at 8% -10%, #3a2a12 0%, transparent 62%),
+      radial-gradient(950px 430px at 102% -2%, #12313a 0%, transparent 58%),
+      var(--bg);
+     color:var(--fg);font-family:var(--sans);font-size:15.5px;line-height:1.7;
+     font-feature-settings:"kern" 1,"liga" 1;-webkit-font-smoothing:antialiased;
+     padding:44px 20px 80px}
+main{max-width:920px;margin:0 auto}
+
+h1{font-family:var(--display);font-size:34px;line-height:1.15;font-weight:700;
+   letter-spacing:-.024em;margin:0 0 8px;
+   background:linear-gradient(94deg,#f7c66b,#f0ad45 34%,#7fd6c8 76%,#5aa9f5);
+   -webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--dim);font-size:14.5px;margin:0 0 22px;max-width:66ch}
+
+.intro{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+       padding:17px 20px;margin:20px 0;font-size:14.5px}
+.intro b{color:#fff;font-weight:650}
+
+.note{background:#0f1922;border:1px solid #1c2836;border-left:3px solid var(--host);
+      border-radius:0 10px 10px 0;padding:11px 16px;margin:13px 0;
+      font-size:13.5px;color:#c4d0dc}
+.note b{color:#fff;font-weight:650}
+.note.warn{background:#1c1409;border-color:#2c2010;border-left-color:var(--native)}
+
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:24px 0 4px}
+.toc a{padding:6px 14px;border-radius:999px;font-size:13.5px;font-weight:650;
+       letter-spacing:.005em;text-decoration:none;background:#3d4a5c;color:#eaf2fa}
+.toc a:hover{filter:brightness(1.15)}
+.t-native{background:var(--native);color:#1e1200!important}
+.t-app{background:var(--app);color:#06210a!important}
+.t-legacy{background:var(--legacy);color:#26060f!important}
+.t-host{background:var(--host);color:#04201d!important}
+
+section{margin-top:38px;border-left:3px solid var(--c,#3d4a5c);padding-left:18px}
+section>h2{font-family:var(--display);font-size:21px;font-weight:650;
+           letter-spacing:-.015em;margin:0 0 2px;color:var(--c,#fff)}
+.who{display:block;font-size:13px;font-weight:400;color:var(--dim);margin:3px 0 12px}
+.who code{color:#d3e7f5;background:#1a2230;padding:1px 6px;border-radius:5px}
+
+/* Status pill. The word in it is the whole point of this page being honest
+   about what exists, so it sits next to the project name, not in a footnote. */
+.pill{display:inline-block;border-radius:999px;padding:2px 11px;font-weight:650;
+      font-size:12.5px;letter-spacing:.01em;vertical-align:.12em;margin-left:9px;
+      font-variant-numeric:tabular-nums}
+.p-soon{background:#3a2a12;color:#f7c66b;border:1px solid #5c431c}
+.p-live{background:#0f3b36;color:#7fe0d3;border:1px solid #1b5c54}
+.p-sunset{background:#3a1220;color:#f5a3bd;border:1px solid #5c1f33}
+
+code,pre{font-family:var(--mono);font-size:13px;font-variant-ligatures:none}
+pre{background:var(--codebg);
+    background:color-mix(in srgb, var(--c,#3d4a5c) 7%, var(--codebg));
+    border:1px solid #1c2431;
+    border-color:color-mix(in srgb, var(--c,#3d4a5c) 20%, #1c2431);
+    border-left:3px solid var(--c,#3d4a5c);
+    border-radius:10px;padding:14px 16px;overflow-x:auto;margin:11px 0;
+    line-height:1.6;tab-size:2}
+pre .c{color:#74838f;font-style:italic}
+a{color:#6fdfd5;text-decoration:none}
+a:hover{text-decoration:underline}
+.dim{color:var(--dim);font-size:13.5px}
+
+table.facts{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+table.facts td{padding:6px 12px 6px 0;border-bottom:1px solid var(--line);
+               color:var(--dim);vertical-align:top}
+table.facts td:first-child{color:#dde5ee;white-space:nowrap}
+table.facts tr:last-child td{border-bottom:0}
+
+footer{margin-top:50px;padding-top:20px;border-top:1px solid var(--line);
+       color:var(--dim);font-size:13.5px;line-height:1.85}
+footer b{color:#dde5ee;font-weight:650}
+
+/* Narrow screens: the phone is where a "which package do I need" page actually
+   gets read, so the accent rules stay and only the padding gives way. */
+@media (max-width:620px){
+  body{padding:28px 14px 60px;font-size:15px}
+  h1{font-size:27px}
+  section{padding-left:14px}
+  .pill{margin-left:0;display:block;width:max-content;margin-top:6px}
+}
+
+/* Per-section accent.
+ *
+ * A class, not a style="--c:…" attribute on the section. The vhost sends
+ * style-src 'self', which blocks inline style attributes as well as <style>
+ * blocks — the sibling host gets away with the attribute form only because it
+ * inlines its CSS and had to allow 'unsafe-inline' anyway. Blocked, the page
+ * still reads perfectly; it just loses every accent, which is a strange way to
+ * find out. */
+.s-native{--c:var(--native)}
+.s-app{--c:var(--app)}
+.s-legacy{--c:var(--legacy)}
+.s-host{--c:var(--host)}

@@ -337,6 +337,31 @@ the reference has it, and only the stale copies of the Python don't (see above).
 Alphabetised JSON keys: that one was real, and `preserve_order` fixed it for
 −1 KB of binary.
 
+## Where this publishes: aspic, and the sunset
+
+**`aspic.salataputarica.hr.eu.org` is this project's host**, live since
+2026-08-24. `site/` holds its page, its nginx vhost and the two scripts that
+deploy it; `site/README.md` carries the reasoning and the host traps.
+
+The Python project's host, `bolero`, keeps the 3.x repositories exactly as they
+are — **3.2.0 is the last Python release** and this is its replacement. Aspic is
+meant to carry more than one project, so the layout is per-project subtrees
+(`/<project>/deb/…`) rather than one shared repository tree.
+
+- `site/aspic.conf` is the source of truth for the vhost; the live file is a
+  copy. Re-run `install-host.sh` to reinstall, test and reload it.
+- Publish with `./site/publish.sh` — it stages an **allow-list**, because the
+  vhost and these scripts sit in the same directory and an exclude-list would
+  publish the next file added to it.
+- **The page must not advertise a repository that is not there.** Today there are
+  none, and it says so. Same rule as the feature flags.
+- **No inline style, `style="…"` attributes included** — the vhost sends
+  `style-src 'self'`, so the section-accent attributes copied from bolero's page
+  were blocked and the page quietly lost every accent colour. Accents are classes
+  now. That is the panel's CSP rule turning up in a second place.
+- An nginx `map` regex key containing `{n}` **must be quoted**, or the config
+  fails to parse with a bare `unexpected "{"`.
+
 ## The README is not the shape to ship
 
 The current README is a working document written while the repo was private. Before
