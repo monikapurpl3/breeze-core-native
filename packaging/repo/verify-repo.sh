@@ -26,11 +26,21 @@ NET=aspic-verify
 HOST=aspicrepo
 BASE="http://$HOST"
 
-[ -d "$TREE/deb" ] || { echo "no tree — run packaging/repo/build-repo.sh first"; exit 1; }
-
 MOUNT="$REPO"
 case "$MOUNT" in /[a-z]/*) MOUNT="$(echo "$MOUNT" | sed -E 's#^/([a-z])/#\U\1:/#')" ;; esac
 export MSYS_NO_PATHCONV=1
+
+# --live tests what is actually published rather than what is about to be: same
+# clients, same checks, against the public URL. Worth running once after a
+# publish, because it is the only thing that exercises DNS, TLS, the vhost's
+# headers and the tree all at once.
+LIVE=0
+if [ "${1:-}" = "--live" ]; then LIVE=1; shift; fi
+if [ "$LIVE" = 1 ]; then
+  BASE="${ASPIC_URL:-https://aspic.salataputarica.hr.eu.org}"
+else
+  [ -d "$TREE/deb" ] || { echo "no tree — run packaging/repo/build-repo.sh first"; exit 1; }
+fi
 
 pass=0; fail=0
 report() {
@@ -44,11 +54,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-docker network create "$NET" >/dev/null 2>&1 || true
-docker rm -f "$HOST" >/dev/null 2>&1 || true
-docker run -d --name "$HOST" --network "$NET" \
-  -v "$MOUNT/$TREE:/usr/share/nginx/html:ro" nginx:alpine >/dev/null
-echo "serving $TREE as $BASE"
+if [ "$LIVE" = 1 ]; then
+  # No private network: the containers need real DNS and the internet.
+  NETARG=""
+  echo "testing the PUBLISHED tree at $BASE"
+else
+  NETARG="--network $NET"
+  docker network create "$NET" >/dev/null 2>&1 || true
+  docker rm -f "$HOST" >/dev/null 2>&1 || true
+  docker run -d --name "$HOST" --network "$NET" \
+    -v "$MOUNT/$TREE:/usr/share/nginx/html:ro" nginx:alpine >/dev/null
+  echo "serving $TREE as $BASE"
+fi
 
 want=("$@")
 selected() {
@@ -63,7 +80,7 @@ run_case() {
   echo
   echo "=== $name ($image)"
   if printf '%s' "$script" \
-     | timeout 900 docker run --rm -i --network "$NET" -e BASE="$BASE" -e VER="$VER" \
+     | timeout 900 docker run --rm -i ${NETARG} -e BASE="$BASE" -e VER="$VER" \
          "$image" sh -eu -s 2>&1 | sed 's/^/    /'; then
     report 0 "$name"
   else
