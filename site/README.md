@@ -1,20 +1,22 @@
 # site/ — the aspic project host
 
-`aspic.salataputarica.hr.eu.org` is where **this** project publishes: the index
-page in this directory today, and the signed package repositories that follow at
-4.0.0. It is a plain static host — nginx serving files, nothing else.
+`aspic.salataputarica.hr.eu.org` is where this project publishes: five signed
+package repositories, an index page explaining how to add them, and a page per
+project. It is a plain static host — nginx serving files, nothing else, and no
+key ever lives on it.
 
-It exists because the Python project's host, `bolero`, now holds a **sunset**
-line. Breeze Core 3.2.0 is where the Python server stops; everything published
-for it stays exactly where it is and keeps installing, and new work goes here
-instead. Aspic is also meant to carry more than one project, which is why the
-layout below is per-project rather than one shared repository tree.
+It exists because the Python project's host, `bolero`, now holds a line that has
+stopped: Breeze Core 3.2.0 is the last of it. Everything published there stays
+exactly where it is and keeps installing, and new work goes here instead. Aspic
+is meant to carry more than one project, and the layout below is what that
+implies — see "Adding a project".
 
 ## What is where
 
 | | |
 |---|---|
-| `index.html`, `aspic.css`, `favicon.svg` | the site. Published; see `WEB_FILES` in `publish.sh` |
+| `index.html`, `aspic.css`, `favicon.svg` | the index: how to add the repository. See `WEB_FILES` in `publish.sh` |
+| `breeze-core/index.html` | one page per project, at `/breeze-core/` |
 | `aspic.conf` | the nginx vhost. **This copy is the source of truth**; the live file is a copy |
 | `install-host.sh` | one-time (idempotent) host setup: web root, SELinux label, certificate, vhost, renewal, scanner jail |
 | `publish.sh` | push the site as a timestamped release and swap `current` |
@@ -22,7 +24,7 @@ layout below is per-project rather than one shared repository tree.
 ## Publishing
 
 ```bash
-./site/publish.sh          # ~10 KB, a couple of seconds
+./site/publish.sh          # the pages only, a couple of seconds
 ```
 
 It stages an **allow-list** of files (not everything in this directory — the
@@ -85,19 +87,40 @@ Two of its details are worth knowing before editing:
   the site itself keeps `default-src 'none'; style-src 'self'`. That is also why
   the stylesheet here is an external file rather than inline: it buys the
   strict policy.
-- **The `Cache-Control` map already has rules for repository paths.** They match
-  nothing yet. They are written now because a cached index is how a published
+- **The `Cache-Control` map has rules for repository paths** — no-cache for every
+  index, immutable for the packages themselves. A cached index is how a published
   release becomes invisible to `apt update`, and that failure reads as a broken
   publish rather than as a caching bug.
 
 ## Adding a project
 
-One section in `index.html`, one pill in the nav, one colour in `aspic.css`, and
-a subtree under the web root named after the project (`/<project>/deb/…`).
+**One page, one card, and a package.** The repositories are shared, so a new
+project needs no new repository: build its package with the same name it will be
+installed by, put it through `packaging/repo/build-repo.sh`, and it appears in
+the existing `/deb`, `/rpm/<arch>`, `/arch/<arch>`, `/alpine/<arch>` and
+`/openwrt/<arch>` indexes.
 
-Per-project subtrees rather than one shared `/deb/`: a single tree would be
-kinder to somebody installing two of these projects — one repository entry
-instead of two — but it forces every project onto one signing key, one metadata
-rebuild and one release cadence, and it means a broken publish of one project
-breaks `apt update` for all of them. Independent trees cost the second-project
-user one extra `sources.list` line.
+Then give it a page: `site/<project>/index.html`, a card in the roster on
+`site/index.html`, a colour in `aspic.css`, and its file in `WEB_FILES` in
+`publish.sh`.
+
+One repository per package-manager family rather than one per project, because
+somebody who has added aspic should get everything on it — a second project
+costing a second `sources.list` entry is a worse deal than sharing one signing
+key and one metadata rebuild. It also means the index page stays the same size
+as the project list grows: it explains how to add the repository, and each
+project explains itself.
+
+## Publishing the repositories
+
+`./site/publish.sh` on its own publishes only the pages, and **refuses** if that
+would make anything live disappear — a page-only push would otherwise delete
+every repository under it, and `apt update` would stop working for everyone. The
+whole tree goes up with:
+
+```bash
+./packaging/repo/build-repo.sh                  # assemble + sign, pages included
+./packaging/repo/verify-repo.sh                 # install from it, in containers
+./site/publish.sh --tree packaging/out/aspic
+./packaging/repo/verify-repo.sh --live           # ...and again, from the real URL
+```
