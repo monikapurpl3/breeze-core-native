@@ -8,6 +8,12 @@ repository.workspace = true
 
 [dependencies]
 breeze-http = { path = "../breeze-http", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# The CLI subcommands are API clients. No TLS of its own: when the `cloud`
+# feature is on, the shared ureq has it and an https base URL works; without it
+# the CLI is http-only, which is what a LAN deployment is anyway.
+ureq = { version = "2", default-features = false, features = ["json"] }
 
 [features]
 default = ["cloud"]

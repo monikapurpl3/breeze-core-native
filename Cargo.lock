@@ -92,6 +92,9 @@ name = "breeze-core"
 version = "4.0.0-dev"
 dependencies = [
  "breeze-http",
+ "serde",
+ "serde_json",
+ "ureq",
 ]
 
 [[package]]
