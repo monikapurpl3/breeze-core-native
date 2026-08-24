@@ -533,3 +533,76 @@ body{
 .prog-actions .ghost-btn{ font-size: 0.78rem; padding: 3px 8px; }
 .prog-pick{ display:flex; flex-direction:column; gap:6px; margin: 8px 0; }
 .prog-pick .ghost-btn{ text-align:left; }
+
+/* --- the indoor / outdoor / target bar ------------------------------------ *
+ *
+ * Two overlapping fills in one track. The warmer of the pair is drawn first and
+ * paler; the cooler goes over it, darker. Both are the unit's accent colour, so
+ * the bar recolours with the mode and with the chosen theme rather than
+ * introducing colours of its own.
+ */
+.climate{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+.climate-labels{
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted, #8b95a6);
+  font-variant-numeric: tabular-nums;   /* so the digits stop jittering */
+  min-height: 14px;                     /* no reflow when there is no probe */
+}
+.climate-outdoor{ text-align: right; }
+.climate-track{
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--seed) 12%, var(--surface-2));
+  overflow: hidden;
+}
+.climate-fill{
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+  /* Width is set from JS, which is where the geometry lives. */
+  transition: width 420ms cubic-bezier(0.2, 0, 0, 1);
+}
+.climate-fill.lighter{ background: color-mix(in srgb, var(--accent) 38%, transparent); }
+.climate-fill.darker{ background: var(--accent); }
+
+/* Fewer than two readings: there is no relationship to draw, so the track sits
+ * empty rather than showing a fill that means nothing. */
+.climate.unusable .climate-track{ opacity: 0.35; }
+
+@media (prefers-reduced-motion: reduce){
+  .climate-fill{ transition: none; }
+}
+
+/* --- the custom colour swatch --------------------------------------------- *
+ *
+ * A native <input type="color"> filling the swatch it lives in: the browser's
+ * own picker, which people already know, with none of its chrome.
+ */
+.swatch.custom{
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  /* A hint that this one is different from the six fixed seeds. */
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, #fff 55%, transparent);
+}
+.swatch.custom input[type="color"]{
+  position: absolute;
+  inset: -25%;
+  width: 150%;
+  height: 150%;
+  border: none;
+  padding: 0;
+  background: none;
+  opacity: 0;                 /* the swatch itself shows the colour */
+  cursor: pointer;
+}

@@ -9,6 +9,7 @@
 
 import { nextSwingMode } from "./swing.js";
 import { fmtTemp } from "./display.js";
+import { buildClimateBar } from "./climate-bar.js";
 
 const DIAL_CIRC = 2 * Math.PI * 78;
 
@@ -28,7 +29,13 @@ export function buildPanel(unit, control, actions = {}){
 
   refs.name.textContent = unit.name;
 
-  const p = { root: node, refs, id: unit.id, state: null, pending: false };
+  // The indoor / outdoor / target bar, built rather than templated because it
+  // owns its own geometry and there is nothing for the HTML to say about it.
+  const climate = buildClimateBar();
+  refs.dialWrap = node.querySelector(".dial-wrap");
+  refs.dialWrap.after(climate.el);
+
+  const p = { root: node, refs, id: unit.id, state: null, pending: false, climate };
 
   refs.powerSwitch.addEventListener("click", () => {
     if(!p.state) return;
@@ -121,6 +128,9 @@ export function render(p, s){
 
   r.modePills.forEach(pill => pill.classList.toggle("active", pill.dataset.mode === s.operational_mode));
   r.fanPills.forEach(pill => pill.classList.toggle("active", Number(pill.dataset.fan) === s.fan_speed));
+
+  // Indoor, outdoor and target in one picture, by the same rule the app uses.
+  p.climate.update(s);
 
   r.footer.textContent = "updated " + new Date().toLocaleTimeString();
 }
