@@ -10,17 +10,18 @@ a LAN-first REST API and web panel for Midea air conditioners — in **Rust**, w
 replacement**: an existing installation is pointed at it and must keep working,
 with the same store files, the same environment variables, and no re-pairing.
 
-The Python implementation stays in production until this reaches parity. It is
+The Python implementation stays in production until this is deployed. It is
 also the reference: when in doubt about behaviour, read `../breeze-core` rather
 than inventing an answer.
 
 **Why:** Python packages are 25 MB and 65 MB resident, which is what makes
 riscv64/s390x/ppc64le frozen proof-of-concept tiers and an 8–16 MB OpenWrt router
-impossible. The native server binary is currently **815 KB**.
+impossible. The native binary is **1,325 KB**, or **2,519 KB** with the cloud
+pairing feature (which is 1.2 MB of TLS -- see below).
 
 ## Architecture
 
-Six crates, each depending only on those above it. The layering is the point: the
+Seven crates, each depending only on those above it. The layering is the point: the
 protocol knows nothing about sockets, and the transport knows nothing about
 appliances.
 
@@ -30,7 +31,8 @@ appliances.
 | `breeze-device` | connections, retries, per-unit locking | sockets, `breeze-proto` |
 | `breeze-store` | the four JSON store files | serde only |
 | `breeze-auth` | API key, v1 bearer, v2 Ed25519 | `breeze-store` — **no HTTP** |
-| `breeze-http` | routes, guards, response shapes | all of the above |
+| `breeze-http` | routes, guards, response shapes, the SSE stream, the panel | all of the above |
+| `breeze-cloud` | one cloud round-trip for a V3 token | HTTPS -- **optional**, off in a no-TLS build |
 | `breeze-core` | the binary | `breeze-http` |
 
 The protocol itself is four layers wrapped one inside the next:
@@ -256,6 +258,57 @@ pydantic models.
 
 Everything the reference advertises is otherwise implemented; `FEATURES` is
 compared against its list, member for member, by a test.
+
+## Getting a V3 unit's credentials, and why it is like this
+
+A V3 unit answers nothing without a `token` and `key`. They cannot be derived,
+and the unit will not reveal them — a bare `0x5A5A` packet to a real unit here
+drew no reply at all, and the V3 handshake proves knowledge of the key without
+transmitting it. Only Midea issues them, and Midea has been shutting that down.
+All of this is measured, not assumed:
+
+| what was tried | result |
+|---|---|
+| broadcast discovery | finds nothing here; the reply is unicast and gets dropped (see `breeze-device::scan`) |
+| bare V2 packet to a V3 unit | no reply. There is no downgrade path |
+| MSmartHome cloud (`mp-prod.appsmb.com`, app 1010), shared account | `3004 value is illegal`; adding msmart PR #288's `applianceCodes` field turns it into `3201 You have no permissions` |
+| NetHome Plus (`mapp.appsmb.com`, app 1017), shared account | logs in, then `9999 system error` for every udpid, both byte orders, with and without `applianceCodes` |
+| the same, with a udpid of `""` or `"hello"` | *identical* error, which is how we know the account is being refused rather than the format |
+
+So token fetching is already withdrawn on Meiju and SmartHome, NetHome Plus is
+the last one answering, and it only answers for **the account the unit is
+registered to**. That is what `breeze-cloud` implements, and it is a last resort
+rather than the happy path.
+
+**The durable path is holding the credentials.** `POST /api/units` takes a
+`token` and `key` directly, and `config.json` is the backup. When Midea finishes
+turning the API off, that keeps working and the cloud path stops. Say so in the
+docs before somebody discovers it the hard way.
+
+### The `cloud` feature
+
+TLS is **1.2 MB** — more than the rest of the server put together (1,325 KB
+without it, 2,519 KB with). So it is a default-on cargo feature:
+
+```bash
+cargo build --release                        # 2.5 MB, cloud pairing included
+cargo build --release --no-default-features  # 1.3 MB, for a router
+```
+
+A build without it answers `501` to a request carrying cloud credentials rather
+than storing a unit it cannot drive. `ring` cross-compiles fine under zig for
+x86_64-musl and riscv64, so the feature is not a portability problem — only a
+size one.
+
+### Rules for anything touching those credentials
+
+- A password is **borrowed, never kept**: used for one exchange, and
+  `Credentials` scrubs itself on drop and refuses to print. Verified by a test,
+  and by grepping the server log after a real request.
+- A `token`/`key` never comes back out of the API. `has_v3_credentials` is a
+  boolean, and that is the whole of what a client is told.
+- The cloud is asked *after* discovery, keyed by the id the **unit** reported —
+  never the address a caller guessed.
 
 ## Known deliberate divergences
 

@@ -7,4 +7,10 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-breeze-http = { path = "../breeze-http" }
+breeze-http = { path = "../breeze-http", default-features = false }
+
+[features]
+default = ["cloud"]
+# Passed through to breeze-http. `--no-default-features` drops the TLS stack,
+# which is 1.2 MB -- the difference between fitting on a router and not.
+cloud = ["breeze-http/cloud"]

@@ -10,6 +10,11 @@ repository.workspace = true
 breeze-auth = { path = "../breeze-auth" }
 breeze-device = { path = "../breeze-device" }
 breeze-proto = { path = "../breeze-proto" }
+# Optional: it drags in a TLS stack, which is 1.2 MB of the binary -- more than
+# the rest of the server put together. Default on, because that is where almost
+# everybody runs; `--no-default-features` gets a 1.3 MB build for a router with
+# 8 MB of flash, at the cost of the one-time cloud pairing path.
+breeze-cloud = { path = "../breeze-cloud", optional = true }
 breeze-store = { path = "../breeze-store" }
 serde = { version = "1", features = ["derive"] }
 # Both features are required, not optimisations.
@@ -35,3 +40,8 @@ getrandom = "0.2"
 # Naive local time, matching the scheduler.
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
+
+[features]
+default = ["cloud"]
+# Fetching a new V3 unit's credentials from Midea's cloud. Needs TLS.
+cloud = ["dep:breeze-cloud"]

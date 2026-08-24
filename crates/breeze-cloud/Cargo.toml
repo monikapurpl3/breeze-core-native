@@ -1,0 +1,16 @@
+[package]
+name = "breeze-cloud"
+version = "0.1.0"
+description = "Fetching a unit's V3 credentials from the vendor cloud, once"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+getrandom = "0.2"
+sha2 = "0.10"
+serde_json = "1"
+# Blocking HTTPS. Only ever used interactively, during pairing, so there is
+# nothing to gain from async here.
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }

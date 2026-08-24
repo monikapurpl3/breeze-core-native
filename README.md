@@ -4,19 +4,25 @@ A native rewrite of [Breeze Core](https://github.com/monikapurpl3/breeze-core) �
 the LAN-first REST API and web panel for Midea air conditioners — in Rust, with
 Zig as the cross-linker.
 
-**Status: phase 3 complete.** Every endpoint the Python server has is implemented
-— all 30 — and verified against Breeze Core 3.2.0 running side by side: 23 of 24
-compared responses byte-identical (the one exception is documented), unit
-capabilities agreeing on all three real air conditioners, and
-`breeze-core diag --auto` passing with no failures. 396 tests.
+**Status: phase 3 complete.** Every endpoint the Python server has — all 30 —
+verified against Breeze Core 3.2.0 running side by side: 23 of 24 compared
+responses byte-identical (the exception is documented), unit capabilities
+agreeing on all three real air conditioners, and `breeze-core diag --auto`
+passing with no failures. 413 tests.
 
-It also fixes the thing that never worked here: **automatic pairing**. Broadcast
-discovery found nothing because a reply to a broadcast matches no conntrack entry
-and gets dropped, so this sweeps the local subnet by unicast as well — a scan now
-finds every unit. Obtaining a *new* V3 unit's credentials still needs the Midea
-account the unit is registered to; see the wiki. `POST /api/units` accepts a
-`token` and `key` directly, so restoring a backup or moving to a new machine
-needs no cloud at all.
+It also fixes what never worked here: **automatic pairing**. Broadcast discovery
+found nothing because a reply to a broadcast matches no conntrack entry and gets
+dropped, so this sweeps the local subnet by unicast as well — a scan now finds
+every unit. Getting a *new* V3 unit's `token`/`key` is a harder problem that is
+not ours: Midea has withdrawn token fetching from all but one of its apps, and
+the one left only answers for the account the unit is registered to. There is a
+last-resort path for that, and `POST /api/units` takes a `token` and `key`
+directly, which is what keeps working when the API finally goes.
+
+| build | size | what you give up |
+|---|---|---|
+| `cargo build --release` | **2.5 MB** | nothing |
+| `--no-default-features` | **1.3 MB** | cloud pairing (the TLS stack is 1.2 MB of that) |
 
 
 ## Why
@@ -57,6 +63,7 @@ crates/breeze-device    connections, retries, per-unit locking
 crates/breeze-store     the four JSON store files, written byte-compatibly
 crates/breeze-auth      API key, v1 bearer tokens, v2 Ed25519 signatures
 crates/breeze-http      routes, guards, the SSE stream, the embedded panel
+crates/breeze-cloud     one cloud round-trip for a V3 token (optional; pulls in TLS)
 crates/breeze-core      the binary
 static/                 the web panel, compiled into that binary by build.rs
 tools/                  scripts that diff this server against the Python one
@@ -93,7 +100,7 @@ request after a handshake, so you must wait ~1 s or every command times out with
 no error at all.
 
 ```bash
-cargo test --workspace   # 396 tests, no hardware needed
+cargo test --workspace   # 413 tests, no hardware needed
 cargo clippy --all-targets --workspace -- -D warnings
 ```
 
@@ -108,13 +115,14 @@ cargo clippy --all-targets --workspace -- -D warnings
   only `frame::DeviceType` and the `ac` module know what an appliance is, so
   adding it is one enum variant and a module, not a refactor.
 - **V1 devices.** They answer discovery with XML and need a separate TCP query.
-- **Fetching a new V3 unit's credentials from Midea's cloud.** Next, and it needs
-  TLS. Until then `POST /api/units` takes a `token` and `key` directly, which
-  covers restoring a backup or moving to another machine without any cloud at
-  all. Worth knowing before you rely on the cloud either way: msmart's built-in
-  shared accounts can no longer fetch tokens -- NetHome Plus logs them in and
-  then answers `9999` for every request -- so this needs the account the unit is
-  actually registered to.
+- **A way to get a new V3 unit's credentials that does not involve Midea.**
+  Not for want of trying. A bare V2 packet to a V3 unit gets no reply, so there
+  is no downgrade path; the unit never reveals its own key; msmart's shared
+  accounts are refused by every cloud that still answers; and the one API left
+  standing only issues a token to the account the unit is registered to. So
+  `breeze-cloud` asks for that account, uses it once, and forgets it -- and
+  `POST /api/units` takes a `token` and `key` directly, which is the path that
+  survives Midea finishing the job. Back up your `config.json`.
 
 Reimplementing the protocol means owning the device quirks that msmart-ng
 collects upstream for hardware we do not have. That is a deliberate trade, taken

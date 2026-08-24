@@ -50,6 +50,21 @@ pub struct AddUnitRequest {
     pub token: Option<String>,
     #[serde(default)]
     pub key: Option<String>,
+
+    /// A Midea account, used **once** to fetch the credentials above and then
+    /// dropped.
+    ///
+    /// The last resort, and only the account the unit is registered to will
+    /// work: Midea has withdrawn token fetching from its other apps, and the one
+    /// still answering refuses any account that does not own the appliance.
+    /// Nothing here is stored, logged, or echoed back -- see `breeze-cloud`.
+    #[serde(default)]
+    pub midea_account: Option<String>,
+    #[serde(default)]
+    pub midea_password: Option<String>,
+    /// `DE`, `KR` or `US`. Only the account's own region will accept it.
+    #[serde(default)]
+    pub midea_region: Option<String>,
 }
 
 /// A V3 token is 64 bytes and a key is 32, both as hex.
@@ -131,6 +146,68 @@ pub fn rename_unit(state: &AppState, unit_id: &str, body: &[u8]) -> Reply {
     Reply::json(200, &view)
 }
 
+/// The credentials to store for a unit being added.
+///
+/// Either what the caller supplied, or — as a last resort — one cloud round-trip
+/// with an account they typed once. The account is used here and dropped here:
+/// nothing stores it, nothing logs it, and `Credentials` refuses to print and
+/// scrubs itself on the way out.
+///
+/// Takes `device_id` from *discovery* rather than the request, because the cloud
+/// keys tokens by the id the unit reported, not the address the caller guessed.
+#[cfg(feature = "cloud")]
+fn resolve_credentials(
+    request: &mut AddUnitRequest,
+    device_id: u64,
+) -> Result<(Option<String>, Option<String>), Reply> {
+    if request.token.is_some() {
+        return Ok((request.token.take(), request.key.take()));
+    }
+    let (Some(account), Some(password)) =
+        (request.midea_account.take(), request.midea_password.take())
+    else {
+        return Ok((None, None));
+    };
+
+    let region = request
+        .midea_region
+        .take()
+        .unwrap_or_else(|| "DE".to_string());
+    let credentials = breeze_cloud::Credentials::new(account, password, region);
+    match breeze_cloud::nethome::fetch_token(&credentials, device_id) {
+        Ok(token) => Ok((Some(token.token.clone()), Some(token.key.clone()))),
+        // The advice matters more than the error: "9999" means nothing to
+        // anybody, and the way out is usually a token they already hold.
+        Err(e) => Err(Reply::json(
+            502,
+            &serde_json::json!({
+                "detail": e.to_string(),
+                "advice": e.advice(),
+            }),
+        )),
+    }
+}
+
+/// The same, for a build with no TLS in it.
+///
+/// Says so rather than quietly ignoring the credentials and storing a unit that
+/// cannot be driven — which would look like success and behave like a fault.
+#[cfg(not(feature = "cloud"))]
+fn resolve_credentials(
+    request: &mut AddUnitRequest,
+    _device_id: u64,
+) -> Result<(Option<String>, Option<String>), Reply> {
+    if request.token.is_none()
+        && request.midea_account.is_some()
+        && request.midea_password.is_some()
+    {
+        return Err(Reply::detail(
+            501,
+            "this build has no cloud support; add the unit with a token and key instead",
+        ));
+    }
+    Ok((request.token.take(), request.key.take()))
+}
 /// `POST /api/units` — discover the unit at an address and store it.
 ///
 /// Discovery rather than trust: the client supplies an address, and the unit
@@ -138,7 +215,9 @@ pub fn rename_unit(state: &AppState, unit_id: &str, body: &[u8]) -> Reply {
 /// not there, which is what keeps a typo from becoming a permanently broken
 /// entry in someone's config.
 pub fn add_unit(state: &AppState, body: &[u8]) -> Reply {
-    let request: AddUnitRequest = match serde_json::from_slice(body) {
+    // `resolve_credentials` takes the credential fields out of the request.
+    #[allow(unused_mut)]
+    let mut request: AddUnitRequest = match serde_json::from_slice(body) {
         Ok(r) => r,
         Err(e) => return Reply::detail(422, format!("invalid add request: {e}")),
     };
@@ -189,6 +268,18 @@ pub fn add_unit(state: &AppState, body: &[u8]) -> Reply {
         Err(_) => return Reply::detail(503, "that unit reported an unusable id"),
     };
 
+    // Credentials, in order of preference: what the caller supplied, or -- as a
+    // last resort -- one cloud round-trip with an account they typed once.
+    //
+    // The account is used here and dropped here. It is not stored, not logged,
+    // and not echoed: `Credentials` scrubs itself and refuses to print. The
+    // fetch happens *after* discovery because it needs the id the unit reported,
+    // not the address the caller guessed.
+    let supplied = match resolve_credentials(&mut request, found.id) {
+        Ok(pair) => pair,
+        Err(reply) => return reply,
+    };
+
     let mut config = match state.config.write() {
         Ok(c) => c,
         Err(_) => return Reply::detail(500, "config unavailable"),
@@ -208,11 +299,11 @@ pub fn add_unit(state: &AppState, body: &[u8]) -> Reply {
         ip: found.ip.to_string(),
         port: found.port,
         id,
-        // Whatever the caller supplied, if anything. Discovery itself produces
-        // no credentials, and `add_or_update_unit` keeps any the unit already
-        // had rather than clearing them.
-        token: request.token,
-        key: request.key,
+        // Supplied, fetched, or neither. Discovery itself produces no
+        // credentials, and `add_or_update_unit` keeps any the unit already had
+        // rather than clearing them.
+        token: supplied.0,
+        key: supplied.1,
     });
     if let Err(e) = persist(state, &config) {
         config.units = previous;
