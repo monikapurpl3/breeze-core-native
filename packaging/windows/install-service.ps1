@@ -74,10 +74,34 @@ function Resolve-Nssm {
     Die "nssm.exe not found. Pass -Nssm <path>, or run fetch-vendor.ps1 to download it."
 }
 
+# The address that actually routes off this machine.
+#
+# NOT "the first non-loopback IPv4", which is what this used to be. On any
+# workstation with VMware, Hyper-V or WSL installed that picks a host-only
+# address: the machine this was first tested on offered 192.168.11.1,
+# 192.168.122.1 and 172.31.160.1 ahead of its real 192.168.1.67, and the
+# installer duly bound the service to a virtual adapter nothing on the LAN can
+# reach. Nothing errors; the panel is simply unreachable from every device you
+# own.
+#
+# A default gateway is what tells a real network from a virtual one.
 function Get-LanIPv4 {
     try {
+        $cfg = Get-NetIPConfiguration -ErrorAction Stop |
+            Where-Object { $_.IPv4Address -and $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } |
+            Select-Object -First 1
+        if ($cfg) { return @($cfg.IPv4Address)[0].IPAddress }
+    } catch { }
+    # No gateway anywhere is legitimate (an isolated LAN), so fall back to a
+    # configured private address on an adapter that is up, skipping the obvious
+    # virtuals by name.
+    try {
         $ip = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
-            Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' -and $_.PrefixOrigin -in 'Dhcp','Manual' } |
+            Where-Object {
+                $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' -and
+                $_.PrefixOrigin -in 'Dhcp','Manual' -and
+                $_.InterfaceAlias -notmatch 'VMware|vEthernet|VirtualBox|Hyper-V|WSL|Loopback'
+            } |
             Sort-Object -Property SkipAsSource |
             Select-Object -First 1 -ExpandProperty IPAddress
         if ($ip) { return $ip }

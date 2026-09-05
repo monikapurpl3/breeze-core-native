@@ -149,6 +149,25 @@ SectionEnd
 Function .onInit
   StrCpy $RunWizard 0
   StrCpy $PS "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe"
+
+  ; makensis produces a 32-bit installer, so HKLM\Software writes are redirected
+  ; into WOW6432Node unless told otherwise - the first install of this put both
+  ; its keys there while installing a 64-bit binary into $PROGRAMFILES64.
+  SetRegView 64
+
+  ; And NSIS defaults the shell folders to the CURRENT USER, so a machine-wide
+  ; install put its Start-menu shortcuts in the profile of whoever happened to
+  ; run the installer. This is a service in Program Files; the shortcuts belong
+  ; to all users.
+  SetShellVarContext all
+FunctionEnd
+
+; Same two settings for the uninstaller, which is a separate process: without
+; them it would look for its keys in the 64-bit view it never wrote to, and
+; delete shortcuts from the wrong Start menu.
+Function un.onInit
+  SetRegView 64
+  SetShellVarContext all
 FunctionEnd
 
 ; Pre-check the "set up Caddy" finish checkbox iff the component was selected.
