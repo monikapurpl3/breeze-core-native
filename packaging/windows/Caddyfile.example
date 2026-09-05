@@ -1,0 +1,74 @@
+# Reference copy of the Caddyfile that caddy-wizard.ps1 renders.
+#
+# This file is documentation, not configuration: the wizard writes the real one
+# to %ProgramData%\breeze-core\Caddyfile with your domain, email and LAN ranges
+# substituted. Keep the two in step - if you edit one, edit the other, or the
+# thing people read stops describing the thing that runs.
+#
+# Every block here is load-bearing:
+#
+#   * NO trusted_proxies anywhere. That is what makes Caddy overwrite
+#     X-Forwarded-For with the real peer address, so an outsider cannot forge a
+#     private "LAN" client. The server's LAN-only admin check is only as good as
+#     that overwrite - adding a public range to trusted_proxies quietly turns the
+#     check off.
+#   * The admin matcher returns 403 to anything off the LAN. The server enforces
+#     this itself too; the proxy's 403 is what breeze-tripwire.ps1 watches for.
+#   * flush_interval -1 on the stream route. Server-sent events are one response
+#     that never ends; a proxy that buffers gives you a panel with no live state
+#     and no error anywhere to explain it.
+#   * Only transport-security headers. The app already sends a strict CSP, and a
+#     second policy from here would fight it.
+
+{
+	email you@example.com
+	storage file_system {
+		root "C:\ProgramData\breeze-core\caddy"
+	}
+}
+
+breeze.example.com {
+	encode zstd gzip
+
+	log {
+		output file "C:\ProgramData\breeze-core\logs\caddy-access.json" {
+			roll_size 10MiB
+			roll_keep 10
+		}
+		format json
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Cross-Origin-Opener-Policy "same-origin"
+		-Server
+	}
+
+	# Admin endpoints: LAN-only.
+	@admin path /api/auth/enroll/approve* /api/auth/devices*
+	handle @admin {
+		route {
+			@notlan not remote_ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 127.0.0.1/8
+			respond @notlan 403
+			reverse_proxy 127.0.0.1:8420 {
+				header_up X-Real-IP {remote_host}
+			}
+		}
+	}
+
+	# Live state: no buffering.
+	@stream path /api/units/stream
+	handle @stream {
+		reverse_proxy 127.0.0.1:8420 {
+			header_up X-Real-IP {remote_host}
+			flush_interval -1
+		}
+	}
+
+	reverse_proxy 127.0.0.1:8420 {
+		header_up X-Real-IP {remote_host}
+	}
+}

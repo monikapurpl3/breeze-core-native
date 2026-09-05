@@ -10,3 +10,10 @@ Cargo.lock.bak
 # every user re-trusting a new key, so they are kept out of the repository and
 # backed up out of band. See packaging/repo/README.md.
 /packaging/repo/keys/
+
+# Third-party binaries the Windows installer bundles, and the installer itself.
+# NSSM is public domain but not ours to redistribute from a git tree, and the
+# .exe is a build product -- packaging/windows/fetch-vendor.ps1 gets one and
+# build-installer.ps1 makes the other.
+/packaging/windows/vendor/
+/packaging/windows/Breeze-Core-Setup.exe

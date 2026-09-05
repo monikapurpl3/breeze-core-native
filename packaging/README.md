@@ -69,9 +69,27 @@ is not necessarily a repository that verifies: every one of these clients will
 install from an unsigned source if asked the wrong way, and only the pair of
 results means anything.
 
-## The BSDs, and Windows
+## Windows
+
+`build-binaries.sh` produces the `.exe` natively — no Zig, because the MSVC
+linker is what makes a binary Windows runs without a shipped libc. The installer
+around it is a separate step, since `makensis` needs Windows and cannot be
+cross-built:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\packaging\windows\fetch-vendor.ps1
+.\packaging\windows\build-installer.ps1
+```
+
+That produces a 1.2 MB `Breeze-Core-Setup.exe` which registers a hardened NSSM
+service and offers a guided Caddy reverse proxy — with a fail2ban-style
+tripwire — as an optional component. It needs no internet at all: the whole
+server is one file, so unlike the Python installer there is no interpreter to
+find and no dependencies to download. See `packaging/windows/`.
+
+## The BSDs
 
 `build-binaries.sh` does not build them: Zig bundles no FreeBSD, NetBSD or
-OpenBSD libc, so those need a real machine, and Windows needs its own installer
-rather than a bare `.exe`. They are listed as not built rather than quietly
+OpenBSD libc, so those need a real machine. NetBSD is done and verified on one;
+FreeBSD and OpenBSD are not. They are listed as not built rather than quietly
 omitted. See `packaging/bsd/`.
