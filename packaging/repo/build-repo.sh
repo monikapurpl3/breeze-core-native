@@ -272,6 +272,25 @@ echo "  feed signed (usign fingerprint $(cat /out/aspic-usign.fingerprint))"
         tar -cf - -C /out . >&3
       ' | tar -xf - -C "$OUT"
 
+# --- Windows installer ------------------------------------------------------
+# A download, not a repository: Windows has no package manager in the sense the
+# index page is about, so the installer is linked from the project's own page
+# instead. Built by packaging/windows/build-installer.ps1, which needs Windows.
+echo "=== Windows installer ==="
+if ls packaging/out/windows/*.exe >/dev/null 2>&1; then
+  mkdir -p "$OUT/windows"
+  cp packaging/out/windows/*.exe "$OUT/windows/"
+  # A checksum file per installer, generated here so it cannot drift from the
+  # binary the way a hash pasted into a page does.
+  ( cd "$OUT/windows" && for f in *.exe; do sha256sum "$f" > "$f.sha256"; done )
+  ls -1 "$OUT/windows" | sed 's/^/  /'
+else
+  # Loud, because the project page has a Windows section and a missing
+  # installer makes it a section that 404s.
+  echo "  !! nothing in packaging/out/windows"
+  echo "     build it on Windows: .\\packaging\\windows\\build-installer.ps1"
+fi
+
 # --- NetBSD (pkgin) ---------------------------------------------------------
 # Built on a real NetBSD machine by packaging/bsd/build-netbsd.sh and carried
 # here, because there is no cross-build for it: Zig bundles no NetBSD libc.

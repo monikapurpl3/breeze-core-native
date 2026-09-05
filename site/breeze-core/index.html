@@ -70,6 +70,29 @@ breeze-core control 'dnevna soba' none none none none none 30m</pre>
       time you use it, like any other client.</p>
   </section>
 
+  <section id="windows" class="s-rpm">
+    <h2>On Windows</h2>
+    <span class="who">A guided installer, a service, and an optional reverse
+      proxy — no interpreter to install first</span>
+    <p><a href="/windows/Breeze-Core-Setup-4.0.0.exe"><b>Breeze-Core-Setup-4.0.0.exe</b></a>
+      (1.2 MB · <a href="/windows/Breeze-Core-Setup-4.0.0.exe.sha256">sha256</a>)
+      lays down one executable, registers a hardened service under
+      <code>NSSM</code> as <code>LOCAL SERVICE</code>, locks down
+      <code>%ProgramData%\breeze-core</code>, and opens one firewall rule
+      restricted to your local subnet.</p>
+    <p>It <b>needs no internet</b>: the whole server is that one file, so there
+      is nothing to download during setup. Public HTTPS is a separate, optional
+      component — a guided <b>Caddy</b> wizard that fetches Caddy, writes a
+      hardened config with automatic certificates and a LAN-only admin gate, and
+      can install a fail2ban-style watcher that bans abusive addresses through
+      Windows Firewall. Your LAN is never banned.</p>
+    <p class="dim">Then: <code>Pair AC units</code> from the Start menu (or
+      <code>breeze-core pair</code>), edit <code>breeze-core.env</code> if you
+      want it on the LAN rather than loopback, and
+      <code>nssm start BreezeCore</code>. Uninstalling keeps your configuration
+      unless you ask it not to.</p>
+  </section>
+
   <section id="what" class="s-rpm">
     <h2>What you get</h2>
     <table class="facts">
