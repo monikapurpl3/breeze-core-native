@@ -110,6 +110,56 @@ breeze-core control 'dnevna soba' none none none none none 30m</pre>
     </table>
   </section>
 
+  <section id="migrate" class="s-legacy">
+    <h2>Migrating from 3.x</h2>
+    <span class="who">One script: it works out your package manager, backs
+      everything up, swaps bolero for aspic and upgrades the package</span>
+
+    <div class="note warn"><b>Do not trust scripts you find on the internet.</b>
+      Not this one either. What you are being offered is a file that runs as root
+      on a machine you care about, from a server you have no particular reason to
+      trust, and the fact that this paragraph exists proves nothing — it was
+      written by the same people who wrote the script.<br><br>
+      So read it. It is mostly comments, and the parts that delete things are
+      marked. The <a href="/migrate.sh.sha256">checksum</a> tells you the
+      download was not corrupted; it cannot tell you the file is safe, because
+      it comes from the same place. Reading is the only real check you have.</div>
+
+<pre>curl -fsSL https://aspic.salataputarica.hr.eu.org/migrate.sh -o migrate.sh
+less migrate.sh            <span class="c"># the important step</span>
+sudo sh migrate.sh         <span class="c"># prints the plan, changes nothing</span>
+sudo sh migrate.sh --yes   <span class="c"># does it</span></pre>
+
+    <p class="dim">Or, once you have read it:
+      <code>curl -fsSL https://aspic.salataputarica.hr.eu.org/migrate.sh | sudo sh -s -- --yes</code></p>
+
+    <p>Run without <code>--yes</code> it prints what it found and what it would
+      change, and stops. That is the default on purpose.</p>
+
+    <table class="facts">
+      <tr><td>it detects</td><td>your OS, architecture and package manager — apt,
+        dnf, zypper, pacman, apk, opkg or pkgin</td></tr>
+      <tr><td>it backs up</td><td><code>/etc/breeze-core</code> and your
+        repository files and keys, into a timestamped root-only directory, with a
+        <b>generated <code>ROLLBACK.sh</code></b> holding the exact commands for
+        <i>your</i> machine — not "restore from your backup"</td></tr>
+      <tr><td>it removes</td><td>the bolero repository and its signing key</td></tr>
+      <tr><td>it adds</td><td>the aspic repository and its key</td></tr>
+      <tr><td>it upgrades</td><td><code>breeze-core</code> 3.x to 4.x. The package
+        name is unchanged, so this is an upgrade in place: your configuration,
+        device tokens, programs and timers are untouched and the service stays
+        enabled</td></tr>
+      <tr><td>it leaves alone</td><td>a service that was already stopped, and
+        anything it cannot do safely — a source install is refused rather than
+        half-converted</td></tr>
+    </table>
+
+    <p class="dim">Verified by installing the real Python 3.2.0 from bolero and
+      migrating it: Debian 12, AlmaLinux 9, Arch and Alpine 3.20 in clean
+      containers, and NetBSD 11 on a real machine. On FreeBSD and OpenBSD it
+      stops and says so, because aspic has no packages for them yet.</p>
+  </section>
+
   <section id="python" class="s-legacy">
     <h2>Coming from 3.x</h2>
     <span class="who">The Python implementation, still published on

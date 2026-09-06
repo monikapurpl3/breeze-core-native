@@ -127,6 +127,13 @@ cp site/index.html site/aspic.css site/favicon.svg "$OUT/"
 mkdir -p "$OUT/breeze-core"
 cp site/breeze-core/index.html "$OUT/breeze-core/index.html"
 
+# The migration script, with a checksum generated here rather than pasted into a
+# page. It is served from the root because the one-liner that fetches it is the
+# shortest URL somebody will ever be asked to type into a root shell.
+cp site/migrate.sh "$OUT/migrate.sh"
+chmod 644 "$OUT/migrate.sh"
+( cd "$OUT" && sha256sum migrate.sh > migrate.sh.sha256 )
+
 cp "$KEYS/gpg-public.asc" "$OUT/aspic.asc"
 cp "$KEYS/$APK_KEY.pub" "$OUT/aspic-alpine.rsa.pub"
 # Public keys come out of a directory kept tight and MUST end up world-readable,
