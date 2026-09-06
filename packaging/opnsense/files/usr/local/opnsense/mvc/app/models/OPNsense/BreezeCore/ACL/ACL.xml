@@ -1,0 +1,9 @@
+<acl>
+    <page-services-breezecore>
+        <name>Services: Breeze Core</name>
+        <patterns>
+            <pattern>ui/breezecore/*</pattern>
+            <pattern>api/breezecore/*</pattern>
+        </patterns>
+    </page-services-breezecore>
+</acl>

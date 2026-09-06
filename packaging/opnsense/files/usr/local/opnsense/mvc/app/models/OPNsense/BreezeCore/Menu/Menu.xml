@@ -1,0 +1,6 @@
+<menu>
+    <Services>
+        <BreezeCore order="80" VisibleName="Breeze Core" cssClass="fa fa-snowflake-o"
+                    url="/ui/breezecore"/>
+    </Services>
+</menu>

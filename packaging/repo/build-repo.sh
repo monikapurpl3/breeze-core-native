@@ -130,6 +130,31 @@ cp site/breeze-core/index.html "$OUT/breeze-core/index.html"
 # The migration script, with a checksum generated here rather than pasted into a
 # page. It is served from the root because the one-liner that fetches it is the
 # shortest URL somebody will ever be asked to type into a root shell.
+#
+# Two gates before it is carried, because this file runs as root on somebody
+# else's machine and both of these have already broken a migration halfway
+# through - after the backup, before the install.
+#
+#   1. bash parses it.
+#   2. Nothing inside the generated ROLLBACK here-document expands at write
+#      time except a plain $VAR or a substitution with no ")" in it.
+#
+# The reason is OpenBSD. Its sh scans a here-document for substitutions with a
+# matcher that stops at the first unbalanced ")", so "$(case $X in apt) ..."
+# ends at "apt)" and the shell reports "syntax error: 'case' unmatched" - at
+# RUNTIME, which is why `sh -n` calls the file clean and why this has to be
+# checked here instead. A backtick in a comment in that document does the same
+# thing, because the body is scanned before anything treats # as a comment.
+# bash, dash, FreeBSD sh and NetBSD sh all accept both. Compute the value into
+# a variable before the document and reference the variable.
+bash -n site/migrate.sh || { echo "site/migrate.sh does not parse" >&2; exit 1; }
+hd=$(awk '/<<ROLLBACK$/{h=1} h{print} /^ROLLBACK$/{h=0}' site/migrate.sh)
+[ -n "$hd" ] || { echo "!! could not find the ROLLBACK here-document to check" >&2; exit 1; }
+if printf '%s' "$hd" | grep -q -e '[$](case' -e "$(printf '`')"; then
+  echo "!! the ROLLBACK here-document expands a case or a backtick inline." >&2
+  echo "   It parses here and breaks on OpenBSD. Hoist it into a variable." >&2
+  exit 1
+fi
 cp site/migrate.sh "$OUT/migrate.sh"
 chmod 644 "$OUT/migrate.sh"
 ( cd "$OUT" && sha256sum migrate.sh > migrate.sh.sha256 )
@@ -298,6 +323,23 @@ else
   echo "     build it on Windows: .\\packaging\\windows\\build-installer.ps1"
 fi
 
+# --- FreeBSD (pkg) ----------------------------------------------------------
+# Built AND signed on a real FreeBSD machine by packaging/bsd/build-freebsd.sh:
+# `pkg repo` signs locally, so unlike every other repository here this one is
+# not assembled on this workstation. The key visits that machine and is shredded
+# afterwards; see that script.
+echo "=== FreeBSD repo ==="
+if [ -d packaging/out/bsd/freebsd ]; then
+  cp -R packaging/out/bsd/freebsd "$OUT/freebsd"
+  chmod 644 "$OUT/freebsd/"*
+  # data.pkg and packagesite.pkg are the catalogue, not packages, so they are
+  # excluded from the count rather than inflating it to three.
+  echo "  carried $(ls "$OUT/freebsd"/*.pkg 2>/dev/null | grep -v -e '/data\.pkg$' -e '/packagesite\.pkg$' | wc -l | tr -d ' ') package(s) and their signed catalogue"
+else
+  echo "  !! nothing staged in packaging/out/bsd/freebsd"
+  echo "     run packaging/bsd/build-freebsd.sh, or the FreeBSD section will 404"
+fi
+
 # --- NetBSD (pkgin) ---------------------------------------------------------
 # Built on a real NetBSD machine by packaging/bsd/build-netbsd.sh and carried
 # here, because there is no cross-build for it: Zig bundles no NetBSD libc.
@@ -314,6 +356,52 @@ else
   # section that 404s.
   echo "  !! nothing staged in packaging/out/bsd/netbsd"
   echo "     run packaging/bsd/build-netbsd.sh, or the NetBSD section will 404"
+fi
+
+# --- OpenBSD (pkg_add) ------------------------------------------------------
+# Built and signify-signed on a real OpenBSD machine by build-openbsd.sh, which
+# stages it as <release>/packages/<arch>/ - the layout pkg_add builds when it
+# expands %c and %a out of PKG_PATH. Release-specific on purpose: OpenBSD moves
+# its libc every six months and does not pretend a 7.9 package runs on 7.8.
+#
+# How pkg_add finds it matters here in a way it does not for any other client:
+# there is no index file at all. pkg_add GETs the directory and scrapes
+# <A HREF="....tgz"> out of the HTML, so the `autoindex on` in site/aspic.conf
+# is not a convenience for humans browsing the tree - it is the OpenBSD index.
+# Turn it off and pkg_add reports the package as nonexistent.
+echo "=== OpenBSD packages ==="
+if [ -d packaging/out/bsd/openbsd ]; then
+  cp -R packaging/out/bsd/openbsd "$OUT/openbsd"
+  find "$OUT/openbsd" -type f -exec chmod 644 {} +
+  echo "  carried $(find "$OUT/openbsd" -name '*.tgz' | wc -l | tr -d ' ') signed package(s)"
+  # The public key is the whole trust anchor: pkg_add reads the key's NAME out
+  # of the signature and opens /etc/signify/<name>.pub, so this file has to
+  # arrive under the name the signature asks for or every install refuses.
+  if [ -f "$OUT/openbsd/aspic-pkg.pub" ]; then
+    echo "  aspic-pkg.pub: $(tr -d '\n' < "$OUT/openbsd/aspic-pkg.pub" | tail -c 24)"
+  else
+    echo "  !! aspic-pkg.pub is missing - pkg_add will refuse every package"
+  fi
+else
+  echo "  !! nothing staged in packaging/out/bsd/openbsd"
+  echo "     run packaging/bsd/build-openbsd.sh, or the OpenBSD section will 404"
+fi
+
+# --- OPNsense plugin --------------------------------------------------------
+# A single .pkg installed by hand (`pkg add <url>`), not a repository: an
+# OPNsense box already has pkg pointed at its own mirrors with its own ABI and
+# its own trust, and adding a third-party repository to a firewall is a bigger
+# ask than fetching one file. Built for FreeBSD:14, which is what OPNsense is.
+echo "=== OPNsense plugin ==="
+if ls packaging/out/opnsense/os-breeze-core-*.pkg >/dev/null 2>&1; then
+  mkdir -p "$OUT/opnsense"
+  cp packaging/out/opnsense/os-breeze-core-*.pkg "$OUT/opnsense/"
+  chmod 644 "$OUT/opnsense"/*.pkg
+  ( cd "$OUT/opnsense" && for f in *.pkg; do sha256sum "$f" > "$f.sha256"; done )
+  ls -1 "$OUT/opnsense" | sed 's/^/  /'
+else
+  echo "  !! nothing in packaging/out/opnsense"
+  echo "     run packaging/opnsense/build-plugin.sh, or that section will 404"
 fi
 
 echo

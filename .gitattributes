@@ -11,3 +11,13 @@
 # the repository on the next commit and bury a real change in the diff.
 *.sh   text eol=lf
 *.conf text eol=lf
+
+# The same hazard, in files with no extension to match on. An rc script is a
+# shell script whatever it is called, and everything under the OPNsense plugin's
+# files/ tree is read on a FreeBSD firewall - the rc script, the configd
+# template targets, the PHP, the XML and the volt view. rc.netbsd was already
+# exposed to this: the index holds LF, so pinning these changes nothing in the
+# repository and only stops a Windows checkout handing a BSD a file whose first
+# line fails with ": command not found".
+packaging/bsd/rc.*         text eol=lf
+packaging/opnsense/files/** text eol=lf

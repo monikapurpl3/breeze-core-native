@@ -119,6 +119,7 @@ fetch_to() {  # fetch_to <url> <path>
 
 # ---------------------------------------------------------------- detection
 OS="$(uname -s)"
+OSREL="$(uname -r)"
 MACHINE="$(uname -m)"
 case "$MACHINE" in
     x86_64|amd64)  ARCH=amd64 ;;
@@ -206,7 +207,12 @@ case "$FAMILY" in
     apk)    INSTALLED="$(apk list -I breeze-core 2>/dev/null | head -1 | sed 's/^breeze-core-//;s/ .*//' || true)" ;;
     opkg)   INSTALLED="$(opkg list-installed breeze-core 2>/dev/null | awk '{print $3}' || true)" ;;
     pkg)    INSTALLED="$(pkg query %v breeze-core 2>/dev/null || true)" ;;
-    pkgin|pkg_add) INSTALLED="$(pkg_info -e breeze-core 2>/dev/null | sed 's/breeze-core-//' || true)" ;;
+    pkgin)  INSTALLED="$(pkg_info -e breeze-core 2>/dev/null | sed 's/breeze-core-//' || true)" ;;
+    # Two lines for one command, because the two pkg_info(1)s disagree about
+    # what -e takes. OpenBSD's wants a pkgspec and answers "Invalid spec:
+    # breeze-core" to a bare stem, so an installed package would read as absent
+    # and the whole migration would proceed as if this were a fresh machine.
+    pkg_add) INSTALLED="$(pkg_info -e 'breeze-core-*' 2>/dev/null | sed 's/^breeze-core-//' || true)" ;;
 esac
 [ -n "$INSTALLED" ] && INSTALL_KIND=package
 
@@ -230,9 +236,22 @@ elif command -v rc-service >/dev/null 2>&1; then
 elif [ -x /etc/init.d/breeze-core ] && command -v procd >/dev/null 2>&1; then
     SVC_KIND=procd
     /etc/init.d/breeze-core running >/dev/null 2>&1 && SVC_RUNNING=1
-elif [ -x /etc/rc.d/breeze_core ]; then
+elif command -v rcctl >/dev/null 2>&1 && [ -x /etc/rc.d/breeze_core ]; then
+    # OpenBSD, checked before the generic rc.d branch below: /etc/rc.d/breeze_core
+    # exists on both, but OpenBSD ships no service(8), so the generic branch
+    # would detect the service and then fail to start it with "service: not
+    # found" -- after the old one had already been removed.
+    SVC_KIND=openbsdrc
+    rcctl check breeze_core >/dev/null 2>&1 && SVC_RUNNING=1
+elif [ -x /usr/local/etc/rc.d/breeze_core ]; then
+    # FreeBSD, where a package's rc script lives under the /usr/local prefix
+    # rather than in /etc/rc.d.
     SVC_KIND=bsdrc
-    /etc/rc.d/breeze_core status >/dev/null 2>&1 && SVC_RUNNING=1
+    service breeze_core status >/dev/null 2>&1 && SVC_RUNNING=1
+elif [ -x /etc/rc.d/breeze_core ]; then
+    # NetBSD: pkgsrc copies its rc script into /etc/rc.d, and service(8) exists.
+    SVC_KIND=bsdrc
+    service breeze_core status >/dev/null 2>&1 && SVC_RUNNING=1
 fi
 
 svc() {  # svc start|stop
@@ -240,7 +259,8 @@ svc() {  # svc start|stop
         systemd) run "systemctl $1 breeze-core" ;;
         openrc)  run "rc-service breeze-core $1" ;;
         procd)   run "/etc/init.d/breeze-core $1" ;;
-        bsdrc)   run "service breeze_core $1" ;;
+        bsdrc)      run "service breeze_core $1" ;;
+        openbsdrc)  run "rcctl $1 breeze_core" ;;
         *)       warn "no service manager found - $1 it yourself" ;;
     esac
 }
@@ -259,16 +279,26 @@ else
     plan "service     ${SVC_KIND:-none}, stopped"
 fi
 
-# Platforms aspic has nothing for yet. Said plainly rather than half-migrating.
-case "$FAMILY" in
-    pkg)
-        die "aspic has no FreeBSD packages yet, so there is nothing to migrate to.
-        Your bolero setup keeps working. Watch $ASPIC/breeze-core/ or use the
-        binary tarball from the release." ;;
-    pkg_add)
-        die "aspic has no OpenBSD packages yet, so there is nothing to migrate to.
-        Your existing install keeps working. Watch $ASPIC/breeze-core/." ;;
-esac
+# Every family this script detects is now a real target. The one thing it still
+# will not do is convert a source install, and on OpenBSD that is not an edge
+# case: a source install into a private virtualenv was the *only* thing the
+# Python line ever shipped there, because a virtualenv full of absolute paths is
+# not something you can hand to pkg_add. So every OpenBSD user arrives here, and
+# the instructions have to be real ones rather than "migrate it yourself".
+if [ "$FAMILY" = pkg_add ] && [ -n "$SOURCE_HINT" ] && [ -z "$INSTALLED" ]; then
+    die "this machine has breeze-core installed from source ($SOURCE_HINT).
+        That is what bolero shipped for OpenBSD - there was never a package, so
+        pkg_add owns none of it and cannot replace it. Removing a service and a
+        virtualenv is not something this script will do behind your back, so
+        that part is yours:
+
+          doas rcctl stop breeze_core && doas rcctl disable breeze_core
+          doas cp -R $CONFDIR /root/breeze-core-config-$TS
+          doas rm -rf $SOURCE_HINT /etc/rc.d/breeze_core
+
+        Then run this script again: it will install the native package, which
+        keeps your configuration in $CONFDIR either way."
+fi
 
 if [ -n "$SOURCE_HINT" ] && [ -z "$INSTALLED" ]; then
     die "this looks like a source install ($SOURCE_HINT), not a packaged one.
@@ -343,7 +373,10 @@ case "$FAMILY" in
     pacman) BOLERO_FILES="/etc/pacman.conf" ;;
     apk)    BOLERO_FILES="/etc/apk/repositories /etc/apk/keys/breeze-core@bolero.rsa.pub" ;;
     opkg)   BOLERO_FILES="/etc/opkg/customfeeds.conf" ;;
+    pkg)    BOLERO_FILES="/usr/local/etc/pkg/repos/breeze-core.conf /usr/local/etc/pkg/keys/breeze-core.pub" ;;
     pkgin)  BOLERO_FILES="/usr/pkg/etc/pkgin/repositories.conf" ;;
+    # Nothing for pkg_add on purpose: bolero served OpenBSD a source tarball,
+    # not a repository, so there is no repository file and no key to preserve.
 esac
 for f in $BOLERO_FILES; do
     if [ -e "$f" ]; then run "cp -p '$f' '$BACKUP/repo/'"; ok "copied $f"; fi
@@ -368,6 +401,51 @@ if [ "$DO_IT" = 1 ]; then
     chmod 600 "$BACKUP/manifest.txt"
 fi
 
+# The two variable parts of the rollback script, worked out HERE rather than
+# inside the here-document below.
+#
+# They used to be $(case ...) substitutions written inline in that document, and
+# that works on bash, dash, FreeBSD sh and NetBSD sh - but not on OpenBSD, whose
+# sh scans a here-document for command substitutions with a simpler matcher that
+# stops at the first unbalanced ")". The ")" that closes a case *pattern* is that
+# first one, so `$(case "$X" in apt) ...` ended the substitution at `apt)` and
+# the shell reported "syntax error: 'case' unmatched" - at runtime, not at parse
+# time, so `sh -n` called the file clean. It stopped the migration between the
+# backup and the install.
+case "$SVC_KIND" in
+    systemd)   RB_STOP="systemctl stop breeze-core || true" ;;
+    openrc)    RB_STOP="rc-service breeze-core stop || true" ;;
+    procd)     RB_STOP="/etc/init.d/breeze-core stop || true" ;;
+    bsdrc)     RB_STOP="service breeze_core stop || true" ;;
+    openbsdrc) RB_STOP="rcctl stop breeze_core || true" ;;
+    *)         RB_STOP="# no service manager was detected" ;;
+esac
+case "$SVC_KIND" in
+    systemd)   RB_START="systemctl start breeze-core" ;;
+    openrc)    RB_START="rc-service breeze-core start" ;;
+    procd)     RB_START="/etc/init.d/breeze-core start" ;;
+    bsdrc)     RB_START="service breeze_core start" ;;
+    openbsdrc) RB_START="rcctl start breeze_core" ;;
+    *)         RB_START="start it with your init system" ;;
+esac
+
+case "$FAMILY" in
+    apt)    RB_INSTALL="apt-get update && apt-get install -y --allow-downgrades breeze-core=${INSTALLED:-3.2.0}" ;;
+    dnf)    RB_INSTALL="dnf -y downgrade breeze-core || dnf -y install breeze-core-${INSTALLED:-3.2.0}" ;;
+    zypper) RB_INSTALL="zypper --non-interactive install --oldpackage breeze-core-${INSTALLED:-3.2.0}" ;;
+    pacman) RB_INSTALL="pacman -Sy --noconfirm breeze-core" ;;
+    apk)    RB_INSTALL="apk update && apk add 'breeze-core=${INSTALLED:-3.2.0}-r0'" ;;
+    opkg)   RB_INSTALL="opkg update && opkg install breeze-core" ;;
+    pkgin)  RB_INSTALL="pkgin -y update && pkg_add -U $BOLERO/netbsd/All/breeze-core-${INSTALLED:-3.2.0}.tgz" ;;
+    # By URL rather than by name: pkg(8) will not install a version older than
+    # the one the repository catalogue advertises, so an install by name here
+    # would reinstall the version this migration just moved away from.
+    pkg)    RB_INSTALL="pkg delete -y breeze-core || true
+pkg add -f $BOLERO/freebsd/breeze-core-${INSTALLED:-3.2.0}.pkg" ;;
+    pkg_add) RB_INSTALL="# bolero shipped no OpenBSD package - see $BOLERO for the source install" ;;
+    *)      RB_INSTALL="# no package manager was detected" ;;
+esac
+
 # And a rollback script, generated with this machine's actual values. Written
 # rather than promised: "restore from your backup" is not instructions.
 if [ "$DO_IT" = 1 ]; then
@@ -379,13 +457,7 @@ set -eu
 [ "\$(id -u)" = 0 ] || { echo "needs root"; exit 1; }
 
 echo "== stopping the service"
-$(case "$SVC_KIND" in
-    systemd) echo "systemctl stop breeze-core || true" ;;
-    openrc)  echo "rc-service breeze-core stop || true" ;;
-    procd)   echo "/etc/init.d/breeze-core stop || true" ;;
-    bsdrc)   echo "service breeze_core stop || true" ;;
-    *)       echo "# no service manager was detected" ;;
-esac)
+$RB_STOP
 
 echo "== restoring the repository files and key"
 for f in "$BACKUP"/repo/*; do
@@ -399,6 +471,8 @@ for f in "$BACKUP"/repo/*; do
         breeze-core@bolero.rsa.pub) cp -p "\$f" /etc/apk/keys/ ;;
         customfeeds.conf) cp -p "\$f" /etc/opkg/ ;;
         repositories.conf) cp -p "\$f" /usr/pkg/etc/pkgin/ ;;
+        breeze-core.conf) mkdir -p /usr/local/etc/pkg/repos && cp -p "\$f" /usr/local/etc/pkg/repos/ ;;
+        breeze-core.pub)  mkdir -p /usr/local/etc/pkg/keys && cp -p "\$f" /usr/local/etc/pkg/keys/ ;;
     esac
 done
 
@@ -406,18 +480,10 @@ echo "== restoring the configuration"
 cp -R "$BACKUP/etc/$(basename "$CONFDIR")" "$(dirname "$CONFDIR")/" 2>/dev/null || true
 
 echo "== reinstalling breeze-core ${INSTALLED:-3.2.0} from bolero"
-$(case "$FAMILY" in
-    apt)    echo "apt-get update && apt-get install -y --allow-downgrades breeze-core=${INSTALLED:-3.2.0}" ;;
-    dnf)    echo "dnf -y downgrade breeze-core || dnf -y install breeze-core-${INSTALLED:-3.2.0}" ;;
-    zypper) echo "zypper --non-interactive install --oldpackage breeze-core-${INSTALLED:-3.2.0}" ;;
-    pacman) echo "pacman -Sy --noconfirm breeze-core" ;;
-    apk)    echo "apk update && apk add 'breeze-core=${INSTALLED:-3.2.0}-r0'" ;;
-    opkg)   echo "opkg update && opkg install breeze-core" ;;
-    pkgin)  echo "pkgin -y update && pkg_add -U $BOLERO/netbsd/All/breeze-core-${INSTALLED:-3.2.0}.tgz" ;;
-esac)
+$RB_INSTALL
 
 echo "== done. Start it when you are happy:"
-echo "   ${SVC_KIND:-your init system} start breeze-core"
+echo "   $RB_START"
 ROLLBACK
     chmod 700 "$BACKUP/ROLLBACK.sh"
     ok "wrote $BACKUP/ROLLBACK.sh"
@@ -496,6 +562,16 @@ case "$FAMILY" in
             run "grep -v 'bolero' /usr/pkg/etc/pkgin/repositories.conf > /tmp/pkgin.conf && mv /tmp/pkgin.conf /usr/pkg/etc/pkgin/repositories.conf"
         fi
         ;;
+    pkg)
+        # Whole files, both of them ours: bolero's FreeBSD repository was a
+        # drop-in under repos/ and a pubkey under keys/, so nothing shared is
+        # being edited and there is no stanza to pick out of a larger config.
+        run "rm -f /usr/local/etc/pkg/repos/breeze-core.conf"
+        run "rm -f /usr/local/etc/pkg/keys/breeze-core.pub"
+        ;;
+    pkg_add)
+        ok "bolero had no OpenBSD repository, so there is nothing to remove"
+        ;;
 esac
 
 # ---------------------------------------------------------------- aspic in
@@ -553,6 +629,31 @@ case "$FAMILY" in
         run "printf '%s\\n' '$ASPIC/netbsd/All' >> /usr/pkg/etc/pkgin/repositories.conf"
         run "pkgin -y update || true"
         ;;
+    pkg)
+        run "mkdir -p /usr/local/etc/pkg/keys /usr/local/etc/pkg/repos"
+        run "fetch_to '$ASPIC/freebsd/aspic-freebsd.pub' /usr/local/etc/pkg/keys/aspic.pub"
+        # Built with single-quoted echo rather than a heredoc because run()
+        # evals its argument, and single-quoted echo arguments are the one way
+        # to get literal double quotes into a UCL file through an eval without
+        # counting backslashes.
+        #
+        # signature_type pubkey, not fingerprints: `pkg repo` RSA-signs the
+        # catalogue, and this key is the only thing that makes a tampered
+        # catalogue fail instead of install.
+        run "{ echo 'aspic: {'; echo '  url: \"$ASPIC/freebsd\",'; echo '  signature_type: \"pubkey\",'; echo '  pubkey: \"/usr/local/etc/pkg/keys/aspic.pub\",'; echo '  enabled: yes'; echo '}'; } > /usr/local/etc/pkg/repos/aspic.conf"
+        # -f, because pkg keeps a cached catalogue per repository name and a
+        # bare update right after adding one can serve the cached copy.
+        run "pkg update -f"
+        ;;
+    pkg_add)
+        # The whole trust anchor is this one file, and its NAME is load-bearing:
+        # pkg_add reads the signing key's name out of the package signature and
+        # opens /etc/signify/<name>.pub, so a tidier filename means every
+        # install refuses with "signify: can't open ...".
+        run "mkdir -p /etc/signify"
+        run "fetch_to '$ASPIC/openbsd/aspic-pkg.pub' /etc/signify/aspic-pkg.pub"
+        run "chmod 644 /etc/signify/aspic-pkg.pub"
+        ;;
 esac
 
 # ---------------------------------------------------------------- upgrade
@@ -565,6 +666,15 @@ case "$FAMILY" in
     apk)    run "apk upgrade breeze-core || apk add breeze-core" ;;
     opkg)   run "opkg upgrade breeze-core || opkg install breeze-core" ;;
     pkgin)  run "pkg_add -U '$ASPIC/netbsd/All/breeze-core-$WANT_VERSION.tgz'" ;;
+    # upgrade first, install second: `pkg install` on a package that is already
+    # present reports it installed and changes nothing, which would leave 3.2.0
+    # in place and still report success.
+    pkg)    run "pkg upgrade -y breeze-core || pkg install -y breeze-core" ;;
+    # By URL, because OpenBSD has no repository index to consult: pkg_add lists
+    # a remote directory by scraping the HTML for links ending in .tgz, so
+    # naming the file is both simpler and exactly what the layout is for. -r
+    # replaces an installed copy; the plain add covers a machine with none.
+    pkg_add) run "pkg_add -r '$ASPIC/openbsd/$OSREL/packages/$ARCH/breeze-core-$WANT_VERSION.tgz' || pkg_add '$ASPIC/openbsd/$OSREL/packages/$ARCH/breeze-core-$WANT_VERSION.tgz'" ;;
 esac
 
 # ---------------------------------------------------------------- verify
@@ -574,6 +684,8 @@ if command -v breeze-core >/dev/null 2>&1; then
     NOW="$(breeze-core --version 2>/dev/null | head -1 | awk '{print $2}' || true)"
 elif [ -x /usr/pkg/bin/breeze-core ]; then
     NOW="$(/usr/pkg/bin/breeze-core --version 2>/dev/null | head -1 | awk '{print $2}' || true)"
+elif [ -x /usr/local/bin/breeze-core ]; then
+    NOW="$(/usr/local/bin/breeze-core --version 2>/dev/null | head -1 | awk '{print $2}' || true)"
 fi
 case "$NOW" in
     "$WANT_VERSION") ok "breeze-core $NOW is installed" ;;

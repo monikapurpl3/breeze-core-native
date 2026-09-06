@@ -1,0 +1,74 @@
+#!/bin/sh
+#
+# PROVIDE: breeze_core
+# REQUIRE: LOGIN NETWORKING
+# KEYWORD: shutdown
+#
+# Breeze Core -- LAN-first REST API + web panel for Midea air conditioners.
+#
+# OPNsense drives this through configd (actions_breezecore.conf), but keeping it
+# an ordinary rc.d script means it also works by hand and survives a reboot the
+# normal way.
+
+. /etc/rc.subr
+
+name="breeze_core"
+rcvar="breeze_core_enable"
+desc="Breeze Core AC control"
+
+load_rc_config $name
+
+: ${breeze_core_enable:="NO"}
+# NOT breeze_core_user. rc.subr treats ${name}_user as a magic variable and
+# wraps the command in `su -m <user>`, so privileges are dropped BEFORE
+# daemon(8) runs -- and daemon -u then calls setusercontext() as a non-root
+# user, which cannot work: "daemon: failed to set user environment". One
+# privilege drop, done by daemon, and a name rc.subr does not claim.
+: ${breeze_core_runas:="breeze"}
+: ${breeze_core_host:="127.0.0.1"}
+: ${breeze_core_port:="8420"}
+: ${breeze_core_config:="/usr/local/etc/breeze-core/config.json"}
+: ${breeze_core_logfile:="/var/log/breeze_core.log"}
+
+PREFIX_LIB=/usr/local/lib/breeze-core
+
+# In its own directory, owned by the service account: daemon(8) writes the
+# pidfile AFTER dropping privileges with -u, so /var/run itself is not writable
+# and the start dies with "ppidfile: Permission denied".
+pidfile="/var/run/${name}/${name}.pid"
+# daemon(8), not the server itself: -P writes the pid of the SUPERVISOR, and
+# rc.subr matches procname against that pid. Pointing it at the served process
+# made `status` report "not running" while the service was happily serving.
+procname="/usr/sbin/daemon"
+
+# One static binary: no interpreter, no pip, no rust and no compiler at runtime,
+# which is exactly what an OPNsense box can offer.
+command="/usr/sbin/daemon"
+# -o, not bare -f. With only -f, daemon(8) sends the child output to
+# /dev/null, so ANY startup failure -- a bind clash, a permission problem, a
+# config it will not accept -- shows up identically as "breeze_core is not
+# running" with no reason anywhere. The log is what makes it diagnosable,
+# on a firewall as much as in a test.
+#
+# The config path is passed as the third argument rather than exported: daemon
+# -u resets the environment, so serve.sh is the only place that can set it.
+command_args="-c -f -o ${breeze_core_logfile} -P ${pidfile} -u ${breeze_core_runas} -- ${PREFIX_LIB}/serve.sh ${breeze_core_host} ${breeze_core_port} ${breeze_core_config}"
+
+start_precmd="breeze_core_prestart"
+
+breeze_core_prestart()
+{
+    # Directories only. The environment is serve.sh's job (daemon -u wipes it).
+    install -d -o "${breeze_core_runas}" -g "${breeze_core_runas}" -m 750 \
+        "$(dirname "${breeze_core_config}")"
+    install -d -o "${breeze_core_runas}" -g "${breeze_core_runas}" -m 755 \
+        "/var/run/${name}"
+    # The logfile too: daemon(8) opens it AFTER dropping privileges, so an
+    # absent file in root-owned /var/log gives "daemon: open: Permission
+    # denied" and the service never starts.
+    [ -e "${breeze_core_logfile}" ] || install -o "${breeze_core_runas}" \
+        -g "${breeze_core_runas}" -m 640 /dev/null "${breeze_core_logfile}"
+    return 0
+}
+
+run_rc_command "$1"

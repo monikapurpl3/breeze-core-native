@@ -1,0 +1,37 @@
+#!/bin/ksh
+# Breeze Core - OpenBSD rc.d service, installed to /etc/rc.d/breeze_core.
+# Enable and start with:  rcctl enable breeze_core && rcctl start breeze_core
+#
+# **No environment variables here, deliberately.** The Python line's version of
+# this file carried a hard-won note: rc.subr starts a daemon through `su -l`,
+# which resets the environment, so exporting AC_CONFIG from an rc script does
+# not reach the process -- it needed a wrapper that set them itself. The native
+# server's built-in default config directory is already /etc/breeze-core, which
+# is where the package puts it, so there is nothing to export and nothing to
+# wrap.
+#
+# Host and port still come from ${_etcdir}/breeze-core.env, read by this script
+# before rc.subr is sourced, so they end up in daemon_flags rather than in the
+# environment.
+
+_etcdir=/etc/breeze-core
+
+BREEZE_HOST=127.0.0.1
+BREEZE_PORT=8420
+BREEZE_OPTS=""
+[ -r "${_etcdir}/breeze-core.env" ] && . "${_etcdir}/breeze-core.env"
+
+daemon="/usr/local/bin/breeze-core"
+daemon_flags="serve --host ${BREEZE_HOST} --port ${BREEZE_PORT} ${BREEZE_OPTS}"
+daemon_user="breeze"
+
+. /etc/rc.d/rc.subr
+
+# The default pexp (daemon plus flags) matches: the daemon IS the server, not a
+# wrapper that exec()s something else. That is what the Python line had to
+# override here.
+
+rc_bg=YES
+rc_reload=NO
+
+rc_cmd $1

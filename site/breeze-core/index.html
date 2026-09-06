@@ -25,7 +25,12 @@ sudo dnf install breeze-core        <span class="c"># Fedora / RHEL family</span
 sudo zypper install breeze-core     <span class="c"># openSUSE</span>
 sudo pacman -S breeze-core          <span class="c"># Arch family</span>
 sudo apk add breeze-core            <span class="c"># Alpine</span>
-opkg install breeze-core            <span class="c"># OpenWrt</span></pre>
+opkg install breeze-core            <span class="c"># OpenWrt</span>
+pkgin -y install breeze-core        <span class="c"># NetBSD</span>
+pkg install breeze-core             <span class="c"># FreeBSD</span></pre>
+    <p class="dim">OpenBSD and OPNsense install one named file rather than a
+      package by name — the <a href="/#openbsd">OpenBSD</a> and
+      <a href="/#opnsense">OPNsense</a> sections on the index have the command.</p>
   </div>
 
   <section id="after" class="s-native">
@@ -41,6 +46,14 @@ sudoedit /etc/breeze-core/breeze-core.env
 
 <span class="c"># 3. start it</span>
 sudo systemctl enable --now breeze-core</pre>
+    <p class="dim">On OpenWrt that step is
+      <code>/etc/init.d/breeze-core enable &amp;&amp; start</code>; on FreeBSD and
+      NetBSD <code>sysrc breeze_core_enable=YES &amp;&amp; service breeze_core
+      start</code>; on OpenBSD <code>rcctl enable breeze_core &amp;&amp; rcctl
+      start breeze_core</code>. The config lives in
+      <code>/usr/local/etc/breeze-core</code> on FreeBSD and
+      <code>/usr/pkg/etc/breeze-core</code> on NetBSD, so substitute those below
+      — or set <code>AC_CONFIG_DIR</code> and stop thinking about it.</p>
     <p>Then open <code>http://&lt;that address&gt;:8420</code>. The panel asks for
       the API key once per device — it is in
       <code>/etc/breeze-core/config.json</code>, which <code>pair</code> wrote —
@@ -138,7 +151,8 @@ sudo sh migrate.sh --yes   <span class="c"># does it</span></pre>
 
     <table class="facts">
       <tr><td>it detects</td><td>your OS, architecture and package manager — apt,
-        dnf, zypper, pacman, apk, opkg or pkgin</td></tr>
+        dnf, zypper, pacman, apk, opkg, pkgin, <code>pkg</code> (FreeBSD) or
+        <code>pkg_add</code> (OpenBSD)</td></tr>
       <tr><td>it backs up</td><td><code>/etc/breeze-core</code> and your
         repository files and keys, into a timestamped root-only directory, with a
         <b>generated <code>ROLLBACK.sh</code></b> holding the exact commands for
@@ -156,8 +170,16 @@ sudo sh migrate.sh --yes   <span class="c"># does it</span></pre>
 
     <p class="dim">Verified by installing the real Python 3.2.0 from bolero and
       migrating it: Debian 12, AlmaLinux 9, Arch and Alpine 3.20 in clean
-      containers, and NetBSD 11 on a real machine. On FreeBSD and OpenBSD it
-      stops and says so, because aspic has no packages for them yet.</p>
+      containers, and NetBSD 11 and FreeBSD 15.1 on real machines — on FreeBSD
+      that means 3.2.0 with its <code>python312</code> dependency replaced by a
+      2.4 MB executable with none, config and device tokens untouched.</p>
+    <div class="note"><b>OpenBSD is the one case it refuses.</b> The Python line
+      only ever installed from source there, so <code>pkg_add</code> owns none
+      of it and cannot replace it — and removing a service and a virtualenv is
+      not something this script will do behind your back. It stops and prints
+      the three commands to do it yourself, keeping your configuration; run it
+      again afterwards and it installs the native package. Both halves of that
+      were walked on OpenBSD&nbsp;7.9.</div>
   </section>
 
   <section id="python" class="s-legacy">

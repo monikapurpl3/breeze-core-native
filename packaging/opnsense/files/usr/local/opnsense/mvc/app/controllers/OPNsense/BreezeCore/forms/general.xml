@@ -1,0 +1,25 @@
+<form>
+    <field>
+        <id>general.enabled</id>
+        <label>Enable</label>
+        <type>checkbox</type>
+        <help>Run Breeze Core on this firewall.</help>
+    </field>
+    <field>
+        <id>general.listen</id>
+        <label>Listen address</label>
+        <type>text</type>
+        <help>
+            Bind address. Keep 127.0.0.1 and front it with the OPNsense reverse
+            proxy for TLS, or use a LAN address to reach it directly. Do not put
+            it on a WAN interface: pairing approval trusts the local network by
+            design.
+        </help>
+    </field>
+    <field>
+        <id>general.port</id>
+        <label>Port</label>
+        <type>text</type>
+        <help>Default 8420.</help>
+    </field>
+</form>

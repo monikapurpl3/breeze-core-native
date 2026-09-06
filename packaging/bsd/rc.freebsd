@@ -1,0 +1,44 @@
+#!/bin/sh
+# Breeze Core - FreeBSD rc.d service, installed to
+# /usr/local/etc/rc.d/breeze_core. Enable with breeze_core_enable=YES in
+# /etc/rc.conf, then `service breeze_core start`.
+#
+# Shorter than the Python line's version of this file: there is no interpreter,
+# no PYTHONPATH and no virtualenv to point daemon(8) at, just one executable.
+#
+# PROVIDE: breeze_core
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name=breeze_core
+rcvar=breeze_core_enable
+load_rc_config $name
+: ${breeze_core_enable:=NO}
+
+_bin=/usr/local/bin/breeze-core
+_etcdir=/usr/local/etc/breeze-core
+
+# Defaults, overridable from ${_etcdir}/breeze-core.env
+BREEZE_HOST=127.0.0.1
+BREEZE_PORT=8420
+BREEZE_OPTS=""
+[ -r "${_etcdir}/breeze-core.env" ] && . "${_etcdir}/breeze-core.env"
+
+pidfile=/var/run/${name}.pid
+command=/usr/sbin/daemon
+# -p, not -P: -P records daemon(8)'s own pid, and then `service breeze_core
+# status` compares that pid against procname and disagrees with itself. -p
+# records the child, which is the thing procname names.
+command_args="-f -u breeze -o /var/log/${name}.log -p ${pidfile} \
+  ${_bin} serve --host ${BREEZE_HOST} --port ${BREEZE_PORT} ${BREEZE_OPTS}"
+procname="${_bin}"
+
+# Four stores: this server also keeps timers.json.
+breeze_core_env="AC_CONFIG=${_etcdir}/config.json \
+  AC_DEVICES=${_etcdir}/devices.json \
+  AC_PROGRAMS=${_etcdir}/programs.json \
+  AC_TIMERS=${_etcdir}/timers.json"
+
+run_rc_command "$1"

@@ -1,0 +1,26 @@
+<model>
+    <mount>//OPNsense/BreezeCore</mount>
+    <version>1.0.0</version>
+    <description>Breeze Core -- LAN-first control for Midea air conditioners</description>
+    <items>
+        <general>
+            <enabled type="BooleanField">
+                <default>0</default>
+                <Required>Y</Required>
+            </enabled>
+            <listen type="TextField">
+                <default>127.0.0.1</default>
+                <Required>Y</Required>
+                <mask>/^([0-9]{1,3}(\.[0-9]{1,3}){3}|::|[0-9a-fA-F:]+)$/u</mask>
+                <ValidationMessage>An IP address to bind, or 0.0.0.0 for every interface.</ValidationMessage>
+            </listen>
+            <port type="IntegerField">
+                <default>8420</default>
+                <Required>Y</Required>
+                <MinimumValue>1</MinimumValue>
+                <MaximumValue>65535</MaximumValue>
+                <ValidationMessage>A port between 1 and 65535.</ValidationMessage>
+            </port>
+        </general>
+    </items>
+</model>

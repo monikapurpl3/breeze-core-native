@@ -42,7 +42,10 @@
     <a class="t-arch" href="#arch">Arch</a>
     <a class="t-alpine" href="#alpine">Alpine</a>
     <a class="t-owrt" href="#openwrt">OpenWrt</a>
+    <a class="t-fbsd" href="#freebsd">FreeBSD</a>
     <a class="t-nbsd" href="#netbsd">NetBSD</a>
+    <a class="t-obsd" href="#openbsd">OpenBSD</a>
+    <a class="t-opn" href="#opnsense">OPNsense</a>
     <a class="t-host" href="#host">About this host</a>
   </nav>
 
@@ -144,6 +147,35 @@ opkg update</pre>
       that name, so a sensible filename silently fails to verify.</p>
   </section>
 
+  <section id="freebsd" class="s-fbsd">
+    <h2>FreeBSD</h2>
+    <span class="who">A real RSA-signed <code>pkg</code> repository — amd64,
+      built and verified on FreeBSD&nbsp;15.1</span>
+<pre>sudo mkdir -p /usr/local/etc/pkg/keys /usr/local/etc/pkg/repos
+sudo fetch -o /usr/local/etc/pkg/keys/aspic.pub \
+  https://aspic.salataputarica.hr.eu.org/freebsd/aspic-freebsd.pub
+sudo tee /usr/local/etc/pkg/repos/aspic.conf &lt;&lt;'EOF'
+aspic: {
+  url: "https://aspic.salataputarica.hr.eu.org/freebsd",
+  signature_type: "pubkey",
+  pubkey: "/usr/local/etc/pkg/keys/aspic.pub",
+  enabled: yes
+}
+EOF
+sudo pkg update &amp;&amp; sudo pkg install breeze-core
+
+<span class="c"># then enable and start it</span>
+sudo sysrc breeze_core_enable=YES
+sudo service breeze_core start</pre>
+    <p class="dim">The package declares <b>no dependencies</b> — the Python line
+      needed <code>python312</code> and a wheel for every extension — and keeps
+      <code>/usr/local/etc/breeze-core</code> on deinstall, so an upgrade over
+      3.2.0 leaves your config and device tokens alone. This repository is the
+      only one here whose catalogue is signed on the machine that builds it,
+      because <code>pkg repo</code> signs locally; the key goes there, gets used,
+      and is destroyed with <code>rm -P</code>.</p>
+  </section>
+
   <section id="netbsd" class="s-nbsd">
     <h2>NetBSD</h2>
     <span class="who">A <code>pkgin</code> feed — amd64, built on a real NetBSD
@@ -164,6 +196,60 @@ pkg_add https://aspic.salataputarica.hr.eu.org/netbsd/All/breeze-core-4.0.0.tgz<
       Python line needed <code>python312</code> — and installs over it in place
       with <code>pkg_add -U</code>, keeping
       <code>/usr/pkg/etc/breeze-core</code>.</p>
+  </section>
+
+  <section id="openbsd" class="s-obsd">
+    <h2>OpenBSD</h2>
+    <span class="who">A <code>signify</code>-signed package — amd64, built and
+      verified on OpenBSD&nbsp;7.9</span>
+<pre><span class="c"># the key's filename is not cosmetic - see below</span>
+doas ftp -o /etc/signify/aspic-pkg.pub \
+  https://aspic.salataputarica.hr.eu.org/openbsd/aspic-pkg.pub
+
+doas pkg_add https://aspic.salataputarica.hr.eu.org/openbsd/7.9/packages/amd64/breeze-core-4.0.0.tgz
+doas rcctl enable breeze_core &amp;&amp; doas rcctl start breeze_core
+
+<span class="c"># optional: let `pkg_add -u` find this repository too</span>
+export PKG_PATH="https://aspic.salataputarica.hr.eu.org/openbsd/%c/packages/%a/:$(cat /etc/installurl)/%c/packages/%a/"</pre>
+    <div class="note"><b>The filename is load-bearing.</b>
+      <code>pkg_add</code> reads the signing key's <i>name</i> out of the
+      package's signature and then opens
+      <code>/etc/signify/&lt;that name&gt;.pub</code>. Save it as anything else
+      and every install fails with <code>signify: can't open
+      /etc/signify/aspic-pkg.pub</code> — which is also exactly what you get if
+      you skip the key, so the refusal is the feature.</div>
+    <p class="dim">Release-specific on purpose: OpenBSD moves its libc every six
+      months, so the path carries <code>7.9</code> rather than pretending one
+      build serves every release. The service account comes from the packing
+      list (<code>@newuser</code>), so <code>pkg_delete</code> takes it away
+      again, and <code>/etc/breeze-core</code> is a <code>@sample</code> — an
+      edited config is never overwritten and never removed. This is the first
+      OpenBSD <i>package</i> the project has had: the Python line could only
+      manage a source install here, because a virtualenv full of absolute paths
+      is not something you can hand to <code>pkg_add</code>.</p>
+  </section>
+
+  <section id="opnsense" class="s-opn">
+    <h2>OPNsense</h2>
+    <span class="who">A GUI plugin, <code>os-breeze-core</code> — one package,
+      installed by hand</span>
+<pre>pkg add https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.0.0.pkg
+<span class="c"># then: Services &gt; Breeze Core - set the listen address, then enable</span></pre>
+    <p class="dim">Not a repository, deliberately: your firewall already has
+      <code>pkg</code> pointed at its own mirrors with its own ABI and its own
+      trust, and adding a third-party repository to a firewall is a much bigger
+      ask than fetching one file. Built against <b>FreeBSD:14</b>, which is what
+      OPNsense is — the ordinary FreeBSD package above is built on 15, and
+      FreeBSD binaries run forward, not backward. No dependencies, where the
+      Python plugin vendored an entire interpreter, so nothing is ever compiled
+      on the firewall and nothing breaks when OPNsense changes its Python.</p>
+    <div class="note warn"><b>The GUI page has never run on a real firewall.</b>
+      The plugin is built in a FreeBSD&nbsp;14 root, its PHP is syntax-checked,
+      its XML parses, the configd actions and the rc script are checked, and the
+      binary is run in that root — but rendering the page, saving a setting
+      through the model and watching configd drive the service needs OPNsense
+      itself, and there is none here to test on. Treat this section as the least
+      exercised thing on this page.</div>
   </section>
 
   <section id="host" class="s-host">
