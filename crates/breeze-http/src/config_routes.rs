@@ -389,7 +389,7 @@ pub fn scan(state: &AppState, query: &str) -> Reply {
                 "port": unit.port,
                 "known": known.iter().any(|ip| ip == &unit.ip.to_string()),
                 // Beyond the reference's shape, and worth it: a client can show
-                // "Kuhinja (net_ac_F13A)" instead of a bare address, and the id
+                // "Kitchen (net_ac_F13A)" instead of a bare address, and the id
                 // is what makes a candidate identifiable at all.
                 "id": unit.id.to_string(),
                 "ssid": unit.ssid,
@@ -480,7 +480,7 @@ mod tests {
     #[test]
     fn a_unit_view_never_carries_a_credential() {
         // The whole point of this module having its own serialiser.
-        let view = unit_view(&unit(153931628470980, "Lijeva Soba", true));
+        let view = unit_view(&unit(153931628470980, "Living Room", true));
         let text = serde_json::to_string(&view).unwrap();
         assert!(!text.contains("aa"), "a token leaked: {text}");
         assert!(!text.contains("bb"), "a key leaked: {text}");
@@ -511,10 +511,10 @@ mod tests {
         // driven and no obvious reason why.
         let mut config = breeze_store::AppConfig {
             api_key: Some("k".into()),
-            units: vec![unit(7, "Kuhinja", true)],
+            units: vec![unit(7, "Kitchen", true)],
         };
         let inserted = config.add_or_update_unit(UnitConfig {
-            name: "Kuhinja".into(),
+            name: "Kitchen".into(),
             ip: "192.168.1.99".into(),
             port: 6444,
             id: 7,
@@ -540,7 +540,7 @@ mod tests {
     fn units_are_found_and_removed_by_their_string_id() {
         let mut config = breeze_store::AppConfig {
             api_key: None,
-            units: vec![unit(153931628470980, "Lijeva Soba", true)],
+            units: vec![unit(153931628470980, "Living Room", true)],
         };
         assert!(config.find_unit("153931628470980").is_some());
         assert!(config.find_unit("999").is_none());
@@ -595,10 +595,10 @@ mod tests {
         assert!(bare.token.is_none() && bare.key.is_none());
 
         let full: AddUnitRequest = serde_json::from_str(
-            r#"{"ip":"192.168.1.73","name":"Kuhinja","token":"aa","key":"bb"}"#,
+            r#"{"ip":"192.168.1.73","name":"Kitchen","token":"aa","key":"bb"}"#,
         )
         .unwrap();
-        assert_eq!(full.name.as_deref(), Some("Kuhinja"));
+        assert_eq!(full.name.as_deref(), Some("Kitchen"));
         assert_eq!(full.token.as_deref(), Some("aa"));
         assert_eq!(full.key.as_deref(), Some("bb"));
     }
@@ -608,7 +608,7 @@ mod tests {
         // The credential goes in; what comes back out says only that it exists.
         let mut config = breeze_store::AppConfig::default();
         config.add_or_update_unit(UnitConfig {
-            name: "Kuhinja".into(),
+            name: "Kitchen".into(),
             ip: "192.168.1.74".into(),
             port: 6444,
             id: 7,

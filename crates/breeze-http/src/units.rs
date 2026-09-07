@@ -223,7 +223,7 @@ mod tests {
     fn device() -> Device {
         Device::new(UnitConfig {
             id: 153_931_628_470_980,
-            name: "Lijeva Soba".into(),
+            name: "Living Room".into(),
             ip: IpAddr::V4(Ipv4Addr::new(192, 168, 1, 73)),
             port: 6444,
             token: None,

@@ -1,23 +1,23 @@
 //! `breeze-core control 'NAME' TYPE TEMPERATURE FLAP FAN EXTRA TIMER`
 //!
 //! ```text
-//! breeze-core control 'kuhinja'     cool 25.5 both       auto turbo 15m
-//! breeze-core control 'lijeva soba' heat 30   horizontal low  eco
-//! breeze-core control 'dnevna soba' dry  26   vertical   high      25m
-//! breeze-core control 'kuhinja'     off
+//! breeze-core control 'kitchen'     cool 25.5 both       auto turbo 15m
+//! breeze-core control 'living room' heat 30   horizontal low  eco
+//! breeze-core control 'back room' dry  26   vertical   high      25m
+//! breeze-core control 'kitchen'     off
 //! ```
 //!
 //! Positional, because that is what makes it worth typing: the order is the
 //! order somebody thinks in, and anything they do not care about is `none`.
 //! Every slot after the name is optional, and `none` is legal in any of them —
-//! so `control kuhinja none none none none none 30m` is a perfectly good way to
+//! so `control kitchen none none none none none 30m` is a perfectly good way to
 //! say "switch off in half an hour, change nothing else".
 //!
 //! A field left out or set to `none` is not sent at all. The API applies only
 //! the fields present, so nothing else about the unit is disturbed.
 //!
 //! The name is matched case-insensitively, and by prefix when that is
-//! unambiguous, because `'lijeva soba'` is tedious to type exactly and `lij` is
+//! unambiguous, because `'living room'` is tedious to type exactly and `lij` is
 //! not.
 
 use crate::cli::client::Client;
@@ -419,11 +419,11 @@ pub fn usage() -> String {
   after NAME may be omitted.
 
 examples:
-  breeze-core control 'kuhinja' cool 25.5 both auto turbo 15m
-  breeze-core control 'lijeva soba' heat 30 horizontal low eco
-  breeze-core control 'dnevna soba' dry 26 vertical high 25m
-  breeze-core control kuhinja off
-  breeze-core control kuhinja none none none none none 30m"
+  breeze-core control 'kitchen' cool 25.5 both auto turbo 15m
+  breeze-core control 'living room' heat 30 horizontal low eco
+  breeze-core control 'back room' dry 26 vertical high 25m
+  breeze-core control kitchen off
+  breeze-core control kitchen none none none none none 30m"
         .to_string()
 }
 
@@ -437,7 +437,7 @@ mod tests {
 
     #[test]
     fn the_first_example_from_the_specification() {
-        // control 'kuhinja' cool 25.5 both auto turbo 15m
+        // control 'kitchen' cool 25.5 both auto turbo 15m
         let command = parse(&words("cool 25.5 both auto turbo 15m")).unwrap();
         assert_eq!(command.mode, Some("COOL"));
         assert_eq!(command.power, Some(true), "a mode implies switching on");
@@ -451,7 +451,7 @@ mod tests {
 
     #[test]
     fn the_second_example_has_no_timer() {
-        // control 'lijeva soba' heat 30 horizontal low eco
+        // control 'living room' heat 30 horizontal low eco
         let command = parse(&words("heat 30 horizontal low eco")).unwrap();
         assert_eq!(command.mode, Some("HEAT"));
         assert_eq!(command.target_temperature, Some(30.0));
@@ -464,7 +464,7 @@ mod tests {
 
     #[test]
     fn the_third_example_skips_the_extra_and_keeps_the_timer() {
-        // control 'dnevna soba' dry 26 vertical high 25m
+        // control 'back room' dry 26 vertical high 25m
         let command = parse(&words("dry 26 vertical high 25m")).unwrap();
         assert_eq!(command.mode, Some("DRY"));
         assert_eq!(command.target_temperature, Some(26.0));
@@ -622,58 +622,58 @@ mod tests {
 
     fn units() -> serde_json::Value {
         serde_json::json!([
-            {"id": "1", "name": "Kuhinja"},
-            {"id": "2", "name": "Lijeva Soba"},
-            {"id": "3", "name": "Dnevna Soba"},
+            {"id": "1", "name": "Kitchen"},
+            {"id": "2", "name": "Living Room"},
+            {"id": "3", "name": "Back Room"},
         ])
     }
 
     #[test]
     fn a_name_matches_regardless_of_case() {
-        // The whole point of the request: 'kuhinja' must find "Kuhinja".
-        for spelling in ["Kuhinja", "kuhinja", "KUHINJA", "kUhInJa", "  kuhinja  "] {
+        // The whole point of the request: 'kitchen' must find "Kitchen".
+        for spelling in ["Kitchen", "kitchen", "KITCHEN", "kItChEn", "  kitchen  "] {
             let (id, name) = resolve_unit(&units(), spelling).unwrap();
             assert_eq!(id, "1", "{spelling} should have matched");
-            assert_eq!(name, "Kuhinja");
+            assert_eq!(name, "Kitchen");
         }
     }
 
     #[test]
     fn a_multi_word_name_matches_case_insensitively() {
-        let (id, _) = resolve_unit(&units(), "lijeva soba").unwrap();
+        let (id, _) = resolve_unit(&units(), "living room").unwrap();
         assert_eq!(id, "2");
     }
 
     #[test]
     fn an_unambiguous_prefix_is_enough() {
-        assert_eq!(resolve_unit(&units(), "kuh").unwrap().0, "1");
-        assert_eq!(resolve_unit(&units(), "lij").unwrap().0, "2");
+        assert_eq!(resolve_unit(&units(), "kit").unwrap().0, "1");
+        assert_eq!(resolve_unit(&units(), "liv").unwrap().0, "2");
     }
 
     #[test]
     fn an_ambiguous_prefix_lists_the_candidates_rather_than_guessing() {
-        // Both "Lijeva Soba" and "Dnevna Soba" end in Soba, but neither starts
+        // Both "Living Room" and "Back Room" end in Room, but neither starts
         // with it -- so use a prefix that really is ambiguous.
         let ambiguous = serde_json::json!([
-            {"id": "1", "name": "Soba Jedan"},
-            {"id": "2", "name": "Soba Dva"},
+            {"id": "1", "name": "Room One"},
+            {"id": "2", "name": "Room Two"},
         ]);
-        let error = resolve_unit(&ambiguous, "soba").unwrap_err();
+        let error = resolve_unit(&ambiguous, "room").unwrap_err();
         assert!(error.contains("ambiguous"), "{error}");
-        assert!(error.contains("Soba Jedan"), "{error}");
-        assert!(error.contains("Soba Dva"), "{error}");
+        assert!(error.contains("Room One"), "{error}");
+        assert!(error.contains("Room Two"), "{error}");
     }
 
     #[test]
     fn an_id_still_works_for_scripts() {
-        assert_eq!(resolve_unit(&units(), "3").unwrap().1, "Dnevna Soba");
+        assert_eq!(resolve_unit(&units(), "3").unwrap().1, "Back Room");
     }
 
     #[test]
     fn an_unknown_name_lists_what_there_is() {
         let error = resolve_unit(&units(), "garaza").unwrap_err();
-        assert!(error.contains("Kuhinja"), "{error}");
-        assert!(error.contains("Lijeva Soba"), "{error}");
+        assert!(error.contains("Kitchen"), "{error}");
+        assert!(error.contains("Living Room"), "{error}");
     }
 
     #[test]

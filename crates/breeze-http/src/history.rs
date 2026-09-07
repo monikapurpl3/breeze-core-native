@@ -135,7 +135,7 @@ mod tests {
     fn state(id: &str, indoor: Option<f64>) -> serde_json::Value {
         serde_json::json!({
             "id": id,
-            "name": "Kuhinja",
+            "name": "Kitchen",
             "online": true,
             "power_state": true,
             "operational_mode": "COOL",
@@ -159,7 +159,7 @@ mod tests {
         assert_eq!(s.outdoor_temperature, Some(28.5));
         // The name and address are not plotted and are not kept.
         let json = serde_json::to_string(s).unwrap();
-        assert!(!json.contains("Kuhinja"), "{json}");
+        assert!(!json.contains("Kitchen"), "{json}");
     }
 
     #[test]

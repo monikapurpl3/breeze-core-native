@@ -23,6 +23,21 @@ doas service breeze_core stop >/dev/null 2>&1 || true
 doas pkg delete -y breeze-core >/dev/null 2>&1 || true
 doas rm -f /usr/local/etc/pkg/repos/aspic.conf /usr/local/etc/pkg/keys/aspic-freebsd.pub
 doas rm -rf /usr/local/breeze-core
+# 'Nothing' has to include pkg's OWN state, or the negative test below proves
+# nothing at all. A previous run leaves a validly-signed catalogue in
+# /var/db/pkg/repo-aspic.sqlite and the package itself in /var/cache/pkg -- and
+# with those present, a pkg install after a REJECTED update still succeeds,
+# resolving from the old catalogue and installing from the cache. That is not a
+# hole (both were verified when they were fetched), but it means the check has
+# to run against a machine that has never seen this repository.
+# Both layouts: pkg 2.x keeps a catalogue DIRECTORY per repository under
+# /var/db/pkg/repos/, older pkg a single repo-<name>.sqlite. Removing only the
+# legacy path silently clears nothing, and then the stale-but-valid catalogue
+# makes the next update answer 'aspic repository is up to date' without
+# fetching -- so no signature is checked and the negative test reads as a pass
+# for the wrong reason.
+doas rm -rf /var/db/pkg/repos/aspic /var/db/pkg/repo-aspic.sqlite
+doas pkg clean -ay >/dev/null 2>&1 || true
 
 echo '-- a repository whose key we do not have must be refused'
 doas mkdir -p /usr/local/etc/pkg/repos /usr/local/etc/pkg/keys
@@ -50,7 +65,7 @@ doas sh -c 'openssl genrsa -out /tmp/wrong.rsa 2048 2>/dev/null; openssl rsa -in
 # with: pkg update rejects the signature, drops the repository, then prints
 # 'aspic is up to date' about the repository it just dropped and exits 0. An
 # exit-status test therefore reads that as acceptance.
-doas pkg -r / update -r aspic >/tmp/out 2>&1 || true
+doas pkg -r / update -f -r aspic >/tmp/out 2>&1 || true
 if ! grep -qi 'invalid signature' /tmp/out; then
   echo '   !! pkg did not reject the signature'; tail -5 /tmp/out; exit 1
 fi

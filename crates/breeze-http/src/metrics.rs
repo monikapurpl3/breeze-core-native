@@ -201,7 +201,7 @@ mod tests {
         // A unit name is user-supplied and lands inside a quoted label. An
         // unescaped quote would produce a line Prometheus rejects, taking the
         // whole scrape down with it.
-        assert_eq!(escape("Lijeva Soba"), "Lijeva Soba");
+        assert_eq!(escape("Living Room"), "Living Room");
         assert_eq!(escape("say \"hi\""), "say \\\"hi\\\"");
         assert_eq!(escape("back\\slash"), "back\\\\slash");
         assert_eq!(escape("two\nlines"), "two lines");
@@ -238,7 +238,7 @@ mod tests {
             "breeze_unit_online",
             "gauge",
             "1 if reachable.",
-            &["breeze_unit_online{unit=\"7\",name=\"Kuhinja\"} 1".into()],
+            &["breeze_unit_online{unit=\"7\",name=\"Kitchen\"} 1".into()],
         );
         for line in out.lines() {
             assert!(!line.is_empty(), "no blank lines");

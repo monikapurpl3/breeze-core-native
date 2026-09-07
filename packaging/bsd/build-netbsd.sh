@@ -48,7 +48,14 @@ echo "=== packaging"
 # which is in a NetBSD login PATH.
 ssh "$TARGET" "cd ~/$WORK && PATH=\$PATH:/usr/pkg/sbin:/usr/sbin doas sh packaging/bsd/mkpkg-netbsd.sh ~/$WORK/out 2>&1 | tail -2"
 # mkpkg runs as root, so the output belongs to root until told otherwise.
-ssh "$TARGET" "doas chown -R \$(id -un) ~/$WORK/out"
+#
+# /sbin/chown by absolute path, because doas resolves the command against the
+# CALLER's PATH -- and a non-login `ssh host "cmd"` gets
+# /usr/bin:/bin:/usr/pkg/bin:/usr/local/bin, with no /sbin in it. The failure is
+# `doas: chown: command not found`, which reads as a missing utility on a machine
+# that has it. (`doas sh -c ...` hides this: sh IS on that PATH, and then sets
+# its own.)
+ssh "$TARGET" "doas /sbin/chown -R \$(id -un) ~/$WORK/out"
 
 echo "=== pkgin catalogue"
 ssh "$TARGET" "set -e

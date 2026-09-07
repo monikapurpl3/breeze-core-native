@@ -537,7 +537,7 @@ mod tests {
         let _ = &stream;
         let live = serde_json::to_value(UnitState {
             id: "7".into(),
-            name: "Kuhinja".into(),
+            name: "Kitchen".into(),
             ip: "192.0.2.1".into(),
             online: true,
             power_state: true,

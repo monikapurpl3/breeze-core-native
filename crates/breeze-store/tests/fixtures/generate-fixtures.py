@@ -13,7 +13,7 @@ out = {}
 out["config.json"] = AppConfig(
     api_key="0123456789abcdef0123456789abcdef",
     units=[
-        UnitConfig(name="Lijeva Soba", ip="192.168.1.73", port=6444, id=153931628470980,
+        UnitConfig(name="Living Room", ip="192.168.1.73", port=6444, id=153931628470980,
                    token="aa" * 64, key="bb" * 32),
         # A V1/V2 unit: token and key are null, not absent.
         UnitConfig(name="No Creds", ip="192.168.1.99", id=1),

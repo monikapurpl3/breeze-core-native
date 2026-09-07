@@ -106,6 +106,25 @@ while IFS='|' read -r label target note; do
     tar --zstd -cf "$DIST/breeze-core-$VERSION-linux-$label.tar.zst" \
         -C "$OUT/$label" breeze-core -C "$REPO" LICENSE README.md
     echo "  -> $DIST/breeze-core-$VERSION-linux-$label.tar.zst"
+  else
+    # A zip for Windows, not a zstd tarball: Explorer opens one and not the
+    # other, and a Windows user should not need a second tool to unpack the
+    # first one.
+    #
+    # This step exists because it did not. The first 4.0.0 Windows zip was
+    # assembled by hand, so when every binary was rebuilt the zip silently kept
+    # the old executable -- it was the one artifact with no build step, and it
+    # was the one artifact that went stale.
+    # Absolute, because the archive is written from inside a subshell that has
+    # cd'd into the staging directory, where a relative $DIST means nothing.
+    zipfile="$REPO/$DIST/breeze-core-$VERSION-windows-x86_64.zip"
+    rm -f "$zipfile"
+    stage="$(mktemp -d)"
+    cp "$OUT/$label/breeze-core$exe" "$REPO/LICENSE" "$REPO/README.md" "$stage/"
+    # bsdtar writes zip too; -a picks the format from the suffix.
+    ( cd "$stage" && bsdtar -a -cf "$zipfile" "breeze-core$exe" LICENSE README.md )
+    rm -rf "$stage"
+    echo "  -> $zipfile"
   fi
   built=$((built + 1))
 done <<< "$TARGETS"

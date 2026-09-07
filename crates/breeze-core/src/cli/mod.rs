@@ -472,8 +472,8 @@ mod tests {
 
     #[test]
     fn control_takes_everything_after_it_verbatim() {
-        match parse(&args("control kuhinja cool 25.5")).unwrap() {
-            Command::Control(rest) => assert_eq!(rest, args("kuhinja cool 25.5")),
+        match parse(&args("control kitchen cool 25.5")).unwrap() {
+            Command::Control(rest) => assert_eq!(rest, args("kitchen cool 25.5")),
             _ => panic!("expected control"),
         }
     }
