@@ -203,15 +203,29 @@ pub fn serve(state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error>> {
             // Hold the receiver lock only long enough to take one request.
             let next = { rx.lock().ok().and_then(|r| r.recv().ok()) };
             match next {
-                Some(mut request) => match handle(&state, &mut request) {
+                Some(mut request) => {
+                    let started = std::time::Instant::now();
+                    let line = format!("{} {}", request.method(), request.url());
+                    let peer = request
+                        .remote_addr()
+                        .map(|a| a.ip().to_string())
+                        .unwrap_or_else(|| "-".into());
+                    match handle(&state, &mut request) {
                     Outcome::Reply(reply) => {
+                        // Logged before responding, so a client that hangs up
+                        // mid-write still leaves the line behind.
+                        access_log(&peer, &line, reply.status, started);
                         let _ = request.respond(reply.into_http(state.settings.security_headers));
                     }
                     // An endless response cannot be handed to `respond()`, and
                     // it must not hold a pooled worker either: eight open
                     // streams would starve the whole API. It gets its own thread.
-                    Outcome::Stream => crate::stream::hijack(Arc::clone(&state), request),
-                },
+                    Outcome::Stream => {
+                        access_log(&peer, &line, 200, started);
+                        crate::stream::hijack(Arc::clone(&state), request)
+                    }
+                    }
+                }
                 None => break,
             }
         }));
@@ -227,6 +241,34 @@ pub fn serve(state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error>> {
         let _ = h.join();
     }
     Ok(())
+}
+
+/// One line per request: who, what, the status, and how long it took.
+///
+/// On by default and on stderr, which is where a service manager collects it.
+/// The reference logged every request; this did not, and the first real bug
+/// after release was a control command that appeared to do nothing and left no
+/// trace whatsoever to look at. Silence is not a feature.
+///
+/// `BREEZE_LOG=0` turns it off for anyone who would rather have the quiet.
+fn access_log(peer: &str, line: &str, status: u16, started: std::time::Instant) {
+    if matches!(std::env::var("BREEZE_LOG").as_deref(), Ok("0") | Ok("off")) {
+        return;
+    }
+    eprintln!(
+        "{peer} {line} -> {status} ({:.1}ms)",
+        started.elapsed().as_secs_f64() * 1000.0
+    );
+}
+
+/// Whether to dump authentication internals. Off unless asked for: the canonical
+/// string names the path and the nonce, which is more than an access log should
+/// carry by default.
+pub fn debug_auth() -> bool {
+    matches!(
+        std::env::var("BREEZE_DEBUG_AUTH").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    )
 }
 
 /// Compress a reply if the client can decode it and it is large enough.
@@ -562,7 +604,40 @@ fn authorise(
             mark_used(state, &token_id, now);
             Ok(Some(token_id))
         }
-        Decision::Reject(r) => Err(Reply::json_body(r.status, &r.body())),
+        Decision::Reject(r) => {
+            if debug_auth() {
+                let p = incoming.presented();
+                eprintln!(
+                    "  auth reject: {} status={} key_id={:?} auth_version={:?}",
+                    format!("{:?}", r.reason), r.status, p.key_id, p.auth_version
+                );
+                eprintln!(
+                    "  presented: ts={:?} nonce={:?} sig={:?} body={} bytes",
+                    p.timestamp,
+                    p.nonce,
+                    p.signature.map(|s| s.chars().take(12).collect::<String>()),
+                    incoming.body.len()
+                );
+                // The exact bytes the server signed over. A v2 client that
+                // disagrees with the server disagrees HERE, and no amount of
+                // black-box probing will show you where.
+                if let (Some(ts), Some(nonce)) = (p.timestamp, p.nonce) {
+                    let canonical = breeze_auth::signing::build_canonical(
+                        &incoming.method,
+                        &incoming.signed_path,
+                        ts,
+                        nonce,
+                        &incoming.body,
+                    );
+                    eprintln!(
+                        "  server canonical: {:?}",
+                        String::from_utf8_lossy(&canonical)
+                    );
+                }
+                eprintln!("  known devices: {}", devices.devices.len());
+            }
+            Err(Reply::json_body(r.status, &r.body()))
+        }
         Decision::UpgradeRequired { min_auth_version } => Err(Reply::json(
             426,
             &breeze_auth::reject::upgrade_required_body(min_auth_version),

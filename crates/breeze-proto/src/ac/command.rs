@@ -187,6 +187,47 @@ mod tests {
     use super::*;
     use crate::frame::HEADER_LEN;
 
+    /// msmart-ng's own SetStateCommand bytes, for a pinned setpoint.
+    ///
+    /// This is the vector `set_state` never had. `get_state` was pinned to the
+    /// reference from the start; the CONTROL frame -- the one that actually
+    /// changes an air conditioner -- was only ever checked against our own
+    /// reading of the protocol, which is a test that agrees with whatever the
+    /// code happens to do.
+    ///
+    /// Generated with msmart-ng, with EVERY field pinned rather than left at
+    /// its default -- msmart defaults eco, fahrenheit and beep_on to True, and a
+    /// vector built on those encodes msmart's defaults instead of the protocol.
+    /// power_on=True, mode=2 (cool), 24.0 C, fan 60, humidity 40, everything
+    /// else false, message id 0x11.
+    #[test]
+    fn set_state_matches_the_reference_bytes() {
+        let sp = Setpoint {
+            power_on: true,
+            beep: false,
+            mode: Mode::Cool,
+            target_temperature: 24.0,
+            fan_speed: FanSpeed(60),
+            swing_mode: SwingMode::Off,
+            eco: false,
+            turbo: false,
+            sleep: false,
+            fahrenheit: false,
+            purifier: false,
+            aux_heat: false,
+            independent_aux_heat: false,
+            follow_me: false,
+            freeze_protection: false,
+            target_humidity: 40,
+        };
+        let got = set_state(0x11, &sp);
+        let hex: String = got.iter().map(|b| format!("{b:02x}")).collect();
+        let want = "aa24ac000000000000024003483c7f7f00300000000000000000000000280000000011867a";
+        assert_eq!(hex, want, "
+ got {hex}
+want {want}");
+    }
+
     /// msmart's own framing test: with message id 0x11, the GetState payload is
     /// exactly these bytes. This is the vector that pins the whole command layer.
     #[test]

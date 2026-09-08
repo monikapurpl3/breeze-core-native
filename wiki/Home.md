@@ -93,16 +93,17 @@ detail is in [Version history](Version-history) and
 |---|---|---|
 | what installs | interpreter + ~40 wheels, or a ~25 MB frozen bundle | one ~2.5 MB executable |
 | package dependencies | `python312` / `python311` and friends | **none** |
-| resident memory | ~62 MB | **~2 MB** |
+| resident memory | ~62 MB | **~2.4 MB** |
+| disk installed | ~59 MB | **~3 MB** |
 | architectures with real packages | amd64, arm64, armhf | those **plus riscv64, ppc64le, s390x** |
 | ppc64le / s390x / riscv64 | proof-of-concept, built under QEMU, frozen | tier-1, cross-built, published every release |
 | OpenBSD | source install into a virtualenv | a signed `pkg_add` package |
 | build | emulate the target, compile everything on it | cross-compile with `cargo-zigbuild`, no emulation |
 
-<sub>The memory figures are measured on the same x86-64 machine: 62 MB is the
-live 3.2.0 service with three units paired, 2 MB is a 4.0.0 server idling with
-none, so treat it as indicative rather than as a controlled comparison. The
-direction is not in doubt.</sub>
+<sub>Both figures are from the same x86-64 server, running the same three
+paired units, before and after the in-place upgrade. What `dnf` said while doing
+it: <i>Total size of inbound packages is 1 MiB… After this operation, 56 MiB
+will be freed (install 3 MiB, remove 59 MiB).</i></sub>
 
 ## What it is not
 

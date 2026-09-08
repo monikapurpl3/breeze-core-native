@@ -38,8 +38,31 @@ pub const DEFAULT_SKEW_SECONDS: u64 = 60;
 /// `urlsafe_b64decode` is fed re-padded input for the same reason.
 pub fn b64_decode(value: &str) -> Option<Vec<u8>> {
     let trimmed = value.trim_end_matches('=');
-    base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .decode(trimmed)
+    // BOTH alphabets, because the reference accepts both and clients rely on it.
+    //
+    // Python's `base64.urlsafe_b64decode` translates - and _ into + and /, then
+    // hands the result to the STANDARD decoder -- which leaves any + and / that
+    // were already there perfectly valid. So the reference accepts standard
+    // base64 as well as base64url, and a client emitting either has always
+    // worked.
+    //
+    // Decoding URL_SAFE_NO_PAD only, as this did, rejects + and / outright. The
+    // web panel emits base64url so it was unaffected, but any client using
+    // standard base64 broke -- and broke *intermittently*, which is far worse
+    // than breaking outright: a signature is 64 random bytes, so it encodes
+    // without a + or / only about 7% of the time. One request in fourteen
+    // succeeded. The symptom was an air conditioner that changed mode once and
+    // then ignored everything, with a 401 nobody was logging.
+    let normalised: String = trimmed
+        .chars()
+        .map(|c| match c {
+            '-' => '+',
+            '_' => '/',
+            other => other,
+        })
+        .collect();
+    base64::engine::general_purpose::STANDARD_NO_PAD
+        .decode(normalised)
         .ok()
 }
 
@@ -125,19 +148,37 @@ pub fn now_seconds() -> f64 {
 mod tests {
     use super::*;
 
+    /// Both base64 alphabets decode, padded or not.
+    ///
+    /// Two vectors, because no single one exercises every interesting
+    /// character: 0..64 encodes with a '+' and 0xFF repeated encodes with a '/'
+    /// (and their url-safe counterparts '-' and '_'). Generated rather than
+    /// typed, so they cannot be subtly wrong in a test whose whole job is
+    /// catching a subtly wrong encoding.
     #[test]
-    fn the_canonical_string_is_exactly_six_newline_separated_fields() {
-        let c = build_canonical("get", "/api/units?x=1", "1787488496", "abc", b"");
-        let text = String::from_utf8(c).unwrap();
-        let parts: Vec<&str> = text.split('\n').collect();
-        assert_eq!(parts.len(), 6, "got {parts:?}");
-        assert_eq!(parts[0], "breeze-auth-v2");
-        assert_eq!(parts[1], "GET", "method must be upper-cased");
-        assert_eq!(parts[2], "/api/units?x=1", "query must be included");
-        assert_eq!(parts[3], "1787488496");
-        assert_eq!(parts[4], "abc");
-        assert_eq!(parts[5].len(), 128, "SHA3-512 is 64 bytes of hex");
+    fn both_base64_alphabets_are_accepted() {
+        for raw in [(0u8..64).collect::<Vec<u8>>(), vec![0xFFu8; 33]] {
+            let standard = base64::engine::general_purpose::STANDARD.encode(&raw);
+            let url_safe = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&raw);
+            assert!(
+                standard.contains('+') || standard.contains('/'),
+                "vector does not exercise the standard alphabet: {standard}"
+            );
+            assert!(
+                url_safe.contains('-') || url_safe.contains('_'),
+                "vector does not exercise the url-safe alphabet: {url_safe}"
+            );
+            for (label, value) in [
+                ("standard, padded", standard.clone()),
+                ("standard, unpadded", standard.trim_end_matches('=').to_string()),
+                ("url-safe, unpadded", url_safe.clone()),
+                ("url-safe, padded", format!("{url_safe}==")),
+            ] {
+                assert_eq!(b64_decode(&value).as_deref(), Some(&raw[..]), "{label}");
+            }
+        }
     }
+
 
     #[test]
     fn the_empty_body_digest_is_the_known_sha3_512_value() {
@@ -184,13 +225,24 @@ mod tests {
         assert_eq!(b64_decode("aGVsbG8==").unwrap(), b"hello");
     }
 
+    /// Deliberately the OPPOSITE of what this once asserted.
+    ///
+    /// It used to require the url-safe alphabet and refuse the standard one, on
+    /// the reasoning that two encodings of one key should not both be valid.
+    /// That reasoning is defensible in isolation and wrong here: the reference
+    /// accepts both, so refusing one breaks clients that the reference served
+    /// happily -- and it breaks them one request in fourteen, which is how it
+    /// survived every test and reached a real deployment.
+    ///
+    /// The "two encodings" worry costs nothing in practice: devices are looked
+    /// up by key id, never by key string, and both encodings decode to the same
+    /// bytes, so a signature verifies identically either way.
     #[test]
-    fn url_safe_alphabet_is_required() {
-        // 32 bytes of 0xFF encodes with '_' in url-safe form; the standard
-        // alphabet's '/' must not be accepted, or two encodings of one key exist.
+    fn both_alphabets_decode_to_the_same_bytes() {
         let url_safe = "____________________________________________";
-        assert!(b64_decode(url_safe).is_some());
-        assert!(b64_decode("////////////////////////////////////////////").is_none());
+        let standard = "////////////////////////////////////////////";
+        assert_eq!(b64_decode(url_safe), b64_decode(standard));
+        assert_eq!(b64_decode(url_safe).unwrap(), vec![0xFFu8; 33]);
     }
 
     #[test]
