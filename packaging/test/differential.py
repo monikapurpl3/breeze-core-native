@@ -27,6 +27,7 @@ an integer breaks the Android app while the web panel shrugs.
 """
 import argparse
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -41,7 +42,62 @@ SET_LIKE = {"features", "operational_modes", "fan_speeds", "swing_modes"}
 # findings that are all correct and none actionable.
 IMPLEMENTATION_SPECIFIC = {"components"}
 # Length depends on process uptime, not on correctness.
-COUNT_VARIES = {"samples", "history", "devices"}
+COUNT_VARIES = {"samples", "history"}
+# Lists of records, aligned by a stable field instead of by position.
+#
+# Comparing `devices` by index reported a device on one side against a
+# DIFFERENT device on the other, because each server enrols its own client and
+# they land at different positions. That produced a confident "last_used is
+# always null in 4.x" finding which was entirely false -- verified by watching
+# a real enrolment go from null to a timestamp. Align, or do not compare.
+KEYED_BY = {"devices": "label"}
+
+# Differences that are correct, with the reason. Listed rather than silently
+# filtered, and printed in their own section: a deviation nobody can explain is
+# a bug, and one everybody keeps re-explaining is a waste of a reviewer.
+EXPECTED = {
+    "server.python": "no interpreter exists to report",
+    "os.libc": "musl (static) against the reference's glibc -- the point of the rewrite",
+    "process.rss_bytes": "a few MB against ~60 -- likewise",
+    "paths.package": "one static binary IS the install; the reference reports a package dir",
+    "server.timezone": (
+        "the reference reports an abbreviation (CEST) from the tz database; a "
+        "static binary carries no tz data, so this is the UTC offset, which is "
+        "unambiguous and needs no lookup"
+    ),
+    "detail": (
+        "the reference's 422 body is FastAPI's internal validation shape, a list "
+        "of pydantic error objects. This sends the message as a string, which is "
+        "MORE usable for the clients in play: the app does detail['detail']"
+        ".toString(), readable for a string and machine noise for a list, and it "
+        "indexes detail as a map elsewhere, which a list would break"
+    ),
+    # Additions. Extra keys are the safest kind of deviation -- a client reading
+    # by name cannot trip over one -- and each answers a real question.
+    "network.bind": "the combined host:port, alongside the split pair",
+    "os.arch": "addition: which architecture this build is for",
+    "os.family": "addition",
+    "os.platform": "addition",
+    "os.distribution": "addition: alias of pretty_name",
+    "os.distribution_id": "addition: alias of distro_id",
+    "paths.timers": "addition: timers.json, which the reference's block omits",
+    "storage.timers": "addition, likewise",
+    "stream": "addition: SSE subscriber count and tick, which the reference has no equivalent for",
+    "settings.worker_threads": "addition: 4.x has a thread pool to report",
+    "settings.timer_tick_seconds": "addition",
+    "cpu.available_parallelism": "addition: can be below the core count under a cgroup quota",
+    "units.last_seen": "addition: the newest history sample's timestamp",
+    "unrecognised_capability_ids": "addition: capability ids the firmware sent that we do not decode",
+    "connection.request_url": (
+        "the reference reports the origin only; this includes the path, which is "
+        "what the field name says and what is useful when a proxy rewrites one"
+    ),
+    # Artifacts of running the two side by side rather than differences between
+    # them: the harness puts 4.x on another port, from another binary.
+    "connection.host_header": "the harness runs 4.x on a different port",
+    "network.bind_port": "likewise",
+    "server.installed_at": "the harness runs a freshly copied binary",
+}
 
 VOLATILE = {
     "version", "commit", "uptime_seconds", "started_at", "now", "server_time",
@@ -53,6 +109,12 @@ VOLATILE = {
     # A history sample's own timestamp: two processes that started at different
     # moments have sampled at different moments, always.
     "t",
+    # Computed from the clock at the moment of the request, so the two answers
+    # differ in the microseconds. Compared for type and presence only.
+    "expires_in_seconds", "machine_uptime_seconds", "process_uptime_seconds",
+    # Tick counters. A process that started a minute ago has run its scheduler
+    # once; one that has been up for nine hours has run it a thousand times.
+    "runs",
 }
 
 
@@ -117,6 +179,13 @@ def compare(path, a, b, findings, where=""):
         return
     if isinstance(a, list) and isinstance(b, list):
         leaf_name = where.split(".")[-1].split("[")[0]
+        key = KEYED_BY.get(leaf_name)
+        if key and all(isinstance(x, dict) and key in x for x in a + b):
+            ax = {x[key]: x for x in a}
+            bx = {x[key]: x for x in b}
+            for name in sorted(set(ax) & set(bx)):
+                compare(path, ax[name], bx[name], findings, f"{where}[{name!r}]")
+            return
         # Sets, not sequences: `features` is a capability list a client tests
         # membership in, and 4.x sorts it while the reference does not. Ordering
         # there is not part of the contract, and comparing it as a sequence
@@ -139,6 +208,9 @@ def compare(path, a, b, findings, where=""):
                              f"length {len(a)}", f"length {len(b)}"))
         for i, (x, y) in enumerate(zip(a, b)):
             compare(path, x, y, findings, f"{where}[{i}]")
+        return
+    leaf_early = where.split(".")[-1].split("[")[0]
+    if leaf_early in VOLATILE:
         return
     ta, tb = jtype(a), jtype(b)
     # int vs float is THE interesting one: JSON has one number type, consumers
@@ -222,8 +294,25 @@ def main():
         compare(label, ja, jb, findings)
 
     print(f"compared {checked} requests against the reference\n")
+    expected, real = [], []
+    for fi in findings:
+        # Strip every index, so units[2].last_seen matches units.last_seen --
+        # taking the text before the FIRST bracket collapsed it to "units" and
+        # matched nothing.
+        leaf = re.sub(r"\[[^\]]*\]", "", fi[2])
+        tail = leaf.rsplit(".", 1)[-1]
+        if leaf in EXPECTED or tail in EXPECTED:
+            expected.append((EXPECTED.get(leaf) or EXPECTED[tail], fi))
+        else:
+            real.append(fi)
+    if expected:
+        print("expected differences (documented, not findings):")
+        for reason in sorted({r for r, _ in expected}):
+            print(f"  - {reason}")
+        print()
+    findings = real
     if not findings:
-        print("no differences")
+        print("no unexplained differences")
         return 0
     kinds = {}
     for f in findings:

@@ -94,23 +94,77 @@ fn os_facts() -> serde_json::Value {
     // debugging actually wants ("Fedora 41", not "linux").
     let mut pretty = None;
     let mut id = None;
+    let mut version = None;
     if let Ok(text) = std::fs::read_to_string("/etc/os-release") {
         for line in text.lines() {
             if let Some(v) = line.strip_prefix("PRETTY_NAME=") {
                 pretty = Some(v.trim_matches('"').to_string());
+            } else if let Some(v) = line.strip_prefix("VERSION_ID=") {
+                version = Some(v.trim_matches('"').to_string());
             } else if let Some(v) = line.strip_prefix("ID=") {
                 id = Some(v.trim_matches('"').to_string());
             }
         }
     }
+    // The reference's field NAMES, because the panel reads them by name: it
+    // shows blanks for `distro_id` if the server calls it `distribution_id`.
+    // `family`/`platform`/`arch` stay as additions -- they cost nothing and a
+    // cross-platform build has more of them worth reporting.
     serde_json::json!({
+        "system": if std::env::consts::OS == "linux" { "Linux" } else { std::env::consts::OS },
+        "hostname": hostname(),
+        "pretty_name": pretty.clone(),
+        "distro_id": id.clone(),
+        "distro_version": version,
+        "kernel": kernel_release(),
+        "kernel_version": kernel_version(),
+        "libc": libc_description(),
         "family": std::env::consts::FAMILY,
         "platform": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
         "distribution": pretty,
         "distribution_id": id,
-        "kernel": kernel_release(),
     })
+}
+
+/// The kernel's build string -- `uname -v`, not `uname -r`.
+///
+/// Reported separately from the release because they answer different
+/// questions: the release says which kernel, this says which build of it, and a
+/// distribution kernel's build date is often the fastest way to tell whether a
+/// box has actually rebooted into the update it downloaded.
+/// The running executable's modification time, as a unix timestamp.
+fn installed_at() -> Option<f64> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| std::fs::metadata(p).ok())
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs_f64())
+}
+
+fn kernel_version() -> Option<String> {
+    std::fs::read_to_string("/proc/sys/kernel/version")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Which libc this binary is actually using.
+///
+/// Decided at compile time, and worth reporting for the reason the whole
+/// project exists: a static musl build behaves differently from a glibc one,
+/// and "which libc" is the first question when a binary refuses to run.
+fn libc_description() -> &'static str {
+    if cfg!(target_env = "musl") {
+        "musl (static)"
+    } else if cfg!(target_env = "gnu") {
+        "glibc"
+    } else if cfg!(target_env = "msvc") {
+        "msvc"
+    } else {
+        "unknown"
+    }
 }
 
 fn kernel_release() -> Option<String> {
@@ -212,7 +266,13 @@ fn cpu_facts() -> serde_json::Value {
     }
     serde_json::json!({
         "model": model,
-        "logical_cores": if cores == 0 { serde_json::Value::Null } else { serde_json::json!(cores) },
+        // `cores`, not `logical_cores`: the reference's name, and the panel
+        // reads it by that name. `available_parallelism` stays as an addition
+        // -- it is what the scheduler actually gets, which can be lower than
+        // the core count under a cgroup CPU quota.
+        "cores": if cores == 0 { serde_json::Value::Null } else { serde_json::json!(cores) },
+        "arch": std::env::consts::ARCH,
+        "endianness": if cfg!(target_endian = "little") { "little" } else { "big" },
         "available_parallelism": std::thread::available_parallelism()
             .map(|n| n.get())
             .ok(),
@@ -246,7 +306,12 @@ fn network_facts(state: &AppState) -> serde_json::Value {
     serde_json::json!({
         "hostname": hostname(),
         "local_addresses": breeze_device::scan::local_ipv4().map(|ip| vec![ip.to_string()]),
-        "bind": state.settings.bind,
+        "bind": state.settings.bind.clone(),
+        // Split as well as combined: the reference reports the two halves, and
+        // "which address did it actually bind" is the question behind most
+        // "I cannot reach it" reports.
+        "bind_host": state.settings.bind.rsplit_once(':').map(|(h, _)| h.to_string()),
+        "bind_port": state.settings.bind.rsplit_once(':').map(|(_, p)| p.to_string()),
     })
 }
 
@@ -284,6 +349,13 @@ pub fn snapshot(state: &AppState, connection: serde_json::Value) -> serde_json::
             "version": state.version,
             "commit": crate::build_commit(),
             "started_at": started_at,
+            // When this build landed on the machine, from the executable's own
+            // mtime. The reference reports the same fact about its package
+            // directory; for one static binary the binary IS the install, and
+            // "how long has this version been here" is worth a row on a
+            // diagnostics screen -- it distinguishes "upgraded and restarted"
+            // from "restarted".
+            "installed_at": installed_at(),
             "uptime_seconds": ((now - started_at) * 10.0).round() / 10.0,
             "timezone": chrono::Local::now().format("%Z").to_string(),
             "utc_offset_seconds": offset,
@@ -304,6 +376,12 @@ pub fn snapshot(state: &AppState, connection: serde_json::Value) -> serde_json::
             "devices": state.settings.devices_path.display().to_string(),
             "programs": state.settings.programs_path.display().to_string(),
             "timers": state.settings.timers_path.display().to_string(),
+            // Where the executable itself lives. The reference reports the
+            // Python package directory here; the equivalent fact for one static
+            // binary is the binary.
+            "package": std::env::current_exe()
+                .ok()
+                .map(|p| p.display().to_string()),
         },
         "settings": {
             "security_headers": state.settings.security_headers,
@@ -314,9 +392,22 @@ pub fn snapshot(state: &AppState, connection: serde_json::Value) -> serde_json::
             "stream_tick_seconds": state.settings.stream_tick_seconds,
             "timer_tick_seconds": state.settings.timer_tick_seconds,
             "history_size": state.settings.history_size,
-            // Absent rather than false: this build has no compression, and
-            // saying "off" would imply a switch that does not exist.
             "compression": compression_setting(),
+            // Reported even though they are no longer configurable.
+            //
+            // "Not settable" is not the same as "not a fact": these are still
+            // true of the running server, the panel displays them by name, and
+            // omitting them left blank rows where the reference showed values.
+            // The numbers are the constants 4.x fixed them at.
+            "code_ttl_seconds": breeze_auth::enroll::CODE_TTL_SECONDS,
+            "token_ttl_days": breeze_auth::enroll::TOKEN_TTL_DAYS,
+            "auth_skew_seconds": breeze_auth::signing::DEFAULT_SKEW_SECONDS,
+            // Unconditional in 4.x, which is why there is no setting for it.
+            "enrollment_lan_only": true,
+            // No OpenAPI schema exists to expose, so this can only ever be false.
+            "docs_enabled": false,
+            // Host filtering belongs to the reverse proxy; the server does none.
+            "trusted_hosts": serde_json::Value::Null,
         },
         "storage": {
             "config": file_facts(&state.settings.config_path),
@@ -371,6 +462,22 @@ fn units_facts(state: &AppState) -> serde_json::Value {
                 // A boolean, never the credential itself.
                 "has_v3_credentials": unit.token.is_some() && unit.key.is_some(),
                 "connected": connected,
+                // Distinct from `connected`: a session can be open to a unit
+                // that has stopped answering, and the reference reports both.
+                "online": u64::try_from(unit.id)
+                    .ok()
+                    .map(|n| state.manager.is_online(n))
+                    .unwrap_or(false),
+                // Whatever was cached by an earlier probe, and null when
+                // nothing has probed yet -- never a fresh LAN round-trip, which
+                // would cost 700 ms per unit on a diagnostics screen.
+                "capabilities": u64::try_from(unit.id)
+                    .ok()
+                    .and_then(|n| state.manager.cached_capabilities(n))
+                    // The same renderer the dedicated endpoint uses, so the two
+                    // can never disagree about what a capability looks like.
+                    .map(|caps| crate::capabilities::view(&id, &caps))
+                    .unwrap_or(serde_json::Value::Null),
                 "samples": state.history.samples(&id).len(),
                 "last_seen": state.history.latest(&id).map(|s| s.t),
             })

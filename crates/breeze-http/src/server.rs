@@ -81,6 +81,13 @@ struct Incoming {
     device_token_id: Option<String>,
     /// For the panel: lets an unchanged file answer 304 instead of resending.
     if_none_match: Option<String>,
+    /// Reported verbatim by /api/system, which the reference does too: when a
+    /// proxy is misconfigured, the Host it forwarded and the scheme it claimed
+    /// are the two facts that explain it fastest.
+    host: Option<String>,
+    user_agent: Option<String>,
+    forwarded_proto: Option<String>,
+    http_version: String,
 }
 
 impl Incoming {
@@ -118,6 +125,13 @@ impl Incoming {
         let signature = header("x-breeze-signature");
         let forwarded_for = header("x-forwarded-for");
         let if_none_match = header("if-none-match");
+        let host = header("host");
+        let user_agent = header("user-agent");
+        let forwarded_proto = header("x-forwarded-proto");
+        // tiny_http exposes the version as a (major, minor) pair; the reference
+        // reports the "1.1" form, so match it rather than inventing a shape.
+        let version = request.http_version();
+        let http_version = format!("{}.{}", version.0, version.1);
         let accept_encoding = header("accept-encoding");
         let peer = request.remote_addr().map(|a| a.ip());
 
@@ -145,6 +159,10 @@ impl Incoming {
             forwarded_for,
             if_none_match,
             accept_encoding,
+            host,
+            user_agent,
+            forwarded_proto,
+            http_version,
             device_token_id: None,
         }
     }
@@ -798,11 +816,27 @@ fn route_system(state: &AppState, incoming: &Incoming) -> Reply {
         incoming.forwarded_for.as_deref(),
         state.settings.behind_proxy,
     );
+    // The scheme a proxy claims, since the server itself only ever speaks
+    // plain HTTP -- so "https" here means a proxy said so, which is exactly
+    // what somebody debugging a redirect loop needs to see.
+    let scheme = incoming
+        .forwarded_proto
+        .clone()
+        .unwrap_or_else(|| "http".to_string());
+    let request_url = match &incoming.host {
+        Some(host) => format!("{scheme}://{host}{}", incoming.signed_path),
+        None => incoming.signed_path.clone(),
+    };
     let connection = serde_json::json!({
         "client_ip": peer.map(|ip| ip.to_string()),
         "client_is_private": breeze_auth::is_private_ip(peer),
         "forwarded_for": incoming.forwarded_for,
         "behind_proxy_enabled": state.settings.behind_proxy,
+        "host_header": incoming.host,
+        "user_agent": incoming.user_agent,
+        "http_version": incoming.http_version,
+        "scheme": scheme,
+        "request_url": request_url,
     });
     Reply::json(200, &crate::system::snapshot(state, connection))
 }

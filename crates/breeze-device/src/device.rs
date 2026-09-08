@@ -101,6 +101,15 @@ impl Device {
         self.session.is_some()
     }
 
+    /// The capabilities already cached, if any -- never a fetch.
+    ///
+    /// Distinct from [`Device::capabilities`], which probes the unit when the
+    /// cache is cold. A diagnostics screen reports every unit at once and must
+    /// not turn that into one LAN round-trip per unit.
+    pub fn cached_capabilities(&self) -> Option<&Capabilities> {
+        self.capabilities.as_ref()
+    }
+
     pub fn online(&self) -> bool {
         self.online
     }

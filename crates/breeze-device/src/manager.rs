@@ -114,6 +114,29 @@ impl DeviceManager {
         }
     }
 
+    /// Whether the unit answered the last time anything asked.
+    ///
+    /// Not the same question as `is_connected`: a session can still be open to
+    /// a unit that has stopped replying, which is precisely the state worth
+    /// seeing on a diagnostics screen. Reads cached state only.
+    pub fn is_online(&self, id: u64) -> bool {
+        match self.get(id) {
+            Some(handle) => handle.lock().map(|d| d.online()).unwrap_or(false),
+            None => false,
+        }
+    }
+
+    /// A unit's already-probed capabilities, or `None` if nothing has probed.
+    ///
+    /// Never triggers a probe, for the same reason `is_connected` never opens a
+    /// session.
+    pub fn cached_capabilities(&self, id: u64) -> Option<breeze_proto::ac::capabilities::Capabilities> {
+        self.get(id)?
+            .lock()
+            .ok()
+            .and_then(|d| d.cached_capabilities().cloned())
+    }
+
     /// Rename a unit in place, keeping its connection.
     ///
     /// Returns whether the unit was there. Separate from `upsert` because that
