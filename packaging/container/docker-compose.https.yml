@@ -15,7 +15,7 @@
 
 services:
   breeze-core:
-    image: ghcr.io/monikapurpl3/breeze-core:4.0.1
+    image: ghcr.io/monikapurpl3/breeze-core-native:4.0.1
     container_name: breeze-core
     restart: unless-stopped
     environment:

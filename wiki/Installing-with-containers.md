@@ -4,10 +4,25 @@ Two images. One to run, one to debug.
 
 | Tag | Base | Size | For |
 |---|---|---|---|
-| `4.0.1`, `latest` | `scratch` | **5.9 MB** | everyone |
+| `4.0.1` | `scratch` | **5.9 MB** | everyone |
 | `4.0.1-debug` | `busybox:musl` | 8.4 MB | working out why something is wrong |
 
 **amd64 and arm64**, as one manifest — `docker pull` picks the right one.
+
+**Versioned tags only. There is no `latest`**, deliberately: the Python line's
+`latest` points at its Alpine image, and repointing it at a distroless one would
+change what `docker pull` gives anybody who has it in a compose file — no shell,
+a different entrypoint, `breeze-setup` gone. Ask for the version you want.
+
+> **The package is private, so pulling needs authentication:**
+>
+> ```sh
+> echo $GITHUB_TOKEN | docker login ghcr.io -u <your-github-user> --password-stdin
+> ```
+>
+> A token with `read:packages` is enough. This will change when the project is
+> published; until then the images are visible only to accounts that have been
+> granted access.
 
 The Python line shipped five images: Alpine, Alpine + nginx, and two Red Hat UBI
 variants, from 137 MB to 291 MB. Every one of them existed because **an
@@ -25,14 +40,14 @@ docker volume create breeze-config
 # Pair first. This needs the host's network -- see below.
 docker run --rm -it --network host \
   -v breeze-config:/etc/breeze-core \
-  ghcr.io/monikapurpl3/breeze-core:4.0.1 pair
+  ghcr.io/monikapurpl3/breeze-core-native:4.0.1 pair
 
 docker run -d --name breeze-core --restart unless-stopped \
   -e TZ=Europe/Zagreb \
   -p 192.168.1.10:8420:8420 \
   -v breeze-config:/etc/breeze-core \
   --read-only --cap-drop ALL --security-opt no-new-privileges:true \
-  ghcr.io/monikapurpl3/breeze-core:4.0.1
+  ghcr.io/monikapurpl3/breeze-core-native:4.0.1
 ```
 
 Or use the compose files in `packaging/container/` — `docker-compose.yml` for
@@ -95,7 +110,7 @@ subcommands run directly:
 
 ```sh
 docker run --rm -it --network host -v breeze-config:/etc/breeze-core \
-  ghcr.io/monikapurpl3/breeze-core:4.0.1 pair
+  ghcr.io/monikapurpl3/breeze-core-native:4.0.1 pair
 
 docker exec breeze-core breeze-core devices
 docker exec breeze-core breeze-core approve BONG-W3GN
@@ -210,7 +225,7 @@ docker stop breeze-core && docker rm breeze-core
 docker run -d --name breeze-core --restart unless-stopped \
   -e TZ=Europe/Zagreb -p 192.168.1.10:8420:8420 \
   -v breeze-config:/etc/breeze-core \
-  ghcr.io/monikapurpl3/breeze-core:4.0.1
+  ghcr.io/monikapurpl3/breeze-core-native:4.0.1
 ```
 
 Check, in this order:

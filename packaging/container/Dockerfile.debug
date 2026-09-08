@@ -2,7 +2,7 @@
 #
 #   docker buildx build -f packaging/container/Dockerfile.debug \
 #     --platform linux/amd64,linux/arm64 \
-#     -t ghcr.io/monikapurpl3/breeze-core:4.0.1-debug packaging/out
+#     -t ghcr.io/monikapurpl3/breeze-core-native:4.0.1-debug packaging/out
 #
 # For when something is wrong and `docker logs` is not enough. Identical binary,
 # identical paths, identical uid -- the only difference is that busybox is in

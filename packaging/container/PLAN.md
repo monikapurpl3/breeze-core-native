@@ -1,6 +1,7 @@
 # Plan: distroless containers, and moving one to another host
 
-**Status: built and tested on amd64 and arm64, published nowhere.** This began
+**Status: built, tested, and published privately to
+`ghcr.io/monikapurpl3/breeze-core-native`.** This began
 as a plan written before any Dockerfile existed; the decisions below were then
 made by the maintainer and the images built against them. Sizes and behaviour
 in here are measured on the real images, not projected.
@@ -236,7 +237,7 @@ docker run -d --name breeze-core \
   -v breeze-config:/etc/breeze-core \
   -e TZ=Europe/Zagreb \
   --network host \
-  ghcr.io/monikapurpl3/breeze-core:distroless
+  ghcr.io/monikapurpl3/breeze-core-native:distroless
 ```
 
 No conversion step, because there is nothing to convert. What to check
@@ -309,11 +310,29 @@ next to where it would go.
    all, and the absence of one is why there isn't a healthcheck above.
 2. **The tzdata startup warning.** Full zoneinfo closes the common case; a typo
    in `TZ` still silently means UTC.
-3. **Publish to ghcr.io** — decided, not done. Needs the tags settled: `4.0.1`,
-   `4.0.1-debug`, and whether `latest` moves.
-4. **`latest` is the open question that remains.** The Python line's `latest`
-   points at `alpine-edge`. Repointing it at a distroless image changes the
-   behaviour of `docker pull breeze-core` for anyone who has it in a compose
-   file — no shell, a different entrypoint, `breeze-setup` gone. Safer to leave
-   `latest` where it is and let people opt in by version, or to move it and say
-   so loudly in the release notes. Not decided.
+3. **`latest` is the open question that remains.** Nothing is tagged `latest`
+   on the native package. The Python line's `latest` points at `alpine-edge` and
+   stays there. Whether the native package ever gets one is a decision for
+   whenever this goes public — a versioned tag costs a reader nothing and a
+   moving one can surprise them.
+
+## A note on where these are published
+
+**`ghcr.io/monikapurpl3/breeze-core-native`, not `…/breeze-core`.** The first
+push went to the latter and that was a mistake worth recording: the
+`breeze-core` package already existed from the Python line and was **public**,
+attached to the public Python repository, so the push inherited that visibility
+and made the native images anonymously pullable. GHCR's private-by-default
+applies to a *new* package, not to one that already exists.
+
+The lesson is the check, not the default: **ask what visibility the package
+already has before pushing to it.** The images were removed (13 versions, none
+of them the Python line's) and re-pushed to a package of their own, which is
+also where they belong regardless of visibility.
+
+Verified private the same way anyone else would see it -- an anonymous token
+from `ghcr.io/token` and a manifest request, which returns 403 for both native
+tags while `breeze-core:alpine-edge` returns 200. Note that
+`docker manifest inspect` with an empty `DOCKER_CONFIG` is **not** an anonymous
+test: Docker Desktop's credential helper answers anyway, and it reported those
+same private tags as readable.

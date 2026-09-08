@@ -2,7 +2,7 @@
 #
 #   docker buildx build -f packaging/container/Dockerfile \
 #     --platform linux/amd64,linux/arm64 \
-#     -t ghcr.io/monikapurpl3/breeze-core:4.0.1 packaging/out
+#     -t ghcr.io/monikapurpl3/breeze-core-native:4.0.1 packaging/out
 #
 # The context is `packaging/out`, so the image ships the **same binary the
 # packages ship** rather than one compiled here. A container that is a different
