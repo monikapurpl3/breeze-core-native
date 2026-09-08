@@ -63,18 +63,40 @@ impl core::fmt::Display for ValidationError {
             Self::UnknownFanSpeed(v) => {
                 write!(f, "fan_speed {v} is not one of {ALLOWED_FAN_SPEEDS:?}")
             }
-            Self::UnknownMode(v) => write!(
-                f,
-                "operational_mode {v:?} is not one of {OPERATIONAL_MODES:?}"
-            ),
-            Self::UnknownSwingMode(v) => {
-                write!(f, "swing_mode {v:?} is not one of {SWING_MODES:?}")
-            }
+            // Verbatim from the reference, which raises these by hand in
+            // devices/control.py -- unlike the 422 bodies, which are FastAPI's
+            // own shape rather than anything anyone designed. A client that
+            // matches on the message text keeps working.
+            Self::UnknownMode(v) => write!(f, "Unknown mode: {v}"),
+            Self::UnknownSwingMode(v) => write!(f, "Unknown swing mode: {v}"),
         }
     }
 }
 
 impl std::error::Error for ValidationError {}
+
+impl ValidationError {
+    /// The HTTP status the reference answers for this kind of bad value.
+    ///
+    /// Not one status for all of them, because the reference does not use one:
+    /// a **bad enum member is 400** and an out-of-range number is 422. That
+    /// looks arbitrary until you see where each comes from -- pydantic rejects
+    /// the numeric bounds while parsing the body, so FastAPI turns it into its
+    /// own 422, whereas an unknown mode name survives parsing and is refused by
+    /// the route with an explicit 400.
+    ///
+    /// Answering 422 for everything, as this did, is invisible until a client
+    /// branches on the status. CLAUDE.md states the contract as "400 bad enum";
+    /// a differential run against the live 3.2.0 confirmed it.
+    pub fn http_status(&self) -> u16 {
+        match self {
+            Self::UnknownMode(_) | Self::UnknownSwingMode(_) => 400,
+            Self::TemperatureOutOfRange
+            | Self::TemperatureNotHalfDegree
+            | Self::UnknownFanSpeed(_) => 422,
+        }
+    }
+}
 
 impl ControlRequest {
     /// Check the same bounds the REST API does, so a bad value is refused before
@@ -118,6 +140,60 @@ impl ControlRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bad_enum_messages_are_the_reference_wording() {
+        // Matched against the live 3.2.0, which raises these by hand:
+        //   raise HTTPException(400, f"Unknown mode: {req.operational_mode}")
+        let mode = ControlRequest {
+            operational_mode: Some("TELEPORT".into()),
+            ..Default::default()
+        };
+        let swing = ControlRequest {
+            swing_mode: Some("DIAGONAL".into()),
+            ..Default::default()
+        };
+        assert_eq!(mode.validate().unwrap_err().to_string(), "Unknown mode: TELEPORT");
+        assert_eq!(
+            swing.validate().unwrap_err().to_string(),
+            "Unknown swing mode: DIAGONAL"
+        );
+    }
+
+    #[test]
+    fn a_bad_enum_is_400_and_a_bad_number_is_422() {
+        // Measured against a running 3.2.0, not guessed: the reference answers
+        // 400 for an unknown mode or swing name and 422 for a numeric bound.
+        let bad = |r: ControlRequest| r.validate().unwrap_err().http_status();
+        assert_eq!(
+            bad(ControlRequest {
+                operational_mode: Some("TELEPORT".into()),
+                ..Default::default()
+            }),
+            400
+        );
+        assert_eq!(
+            bad(ControlRequest {
+                swing_mode: Some("DIAGONAL".into()),
+                ..Default::default()
+            }),
+            400
+        );
+        assert_eq!(
+            bad(ControlRequest {
+                target_temperature: Some(99.0),
+                ..Default::default()
+            }),
+            422
+        );
+        assert_eq!(
+            bad(ControlRequest {
+                fan_speed: Some(7),
+                ..Default::default()
+            }),
+            422
+        );
+    }
 
     #[test]
     fn none_serialises_as_null_not_omitted() {

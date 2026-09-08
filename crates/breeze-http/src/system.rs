@@ -122,17 +122,76 @@ fn kernel_release() -> Option<String> {
 }
 
 /// Which init system is running, since it decides how the service is managed.
+///
+/// Marker paths first and `/proc/1/comm` only as a last resort -- which is the
+/// order the reference uses, and the order matters more than it looks:
+///
+///   * `/proc/1/comm` is **unreadable under `ProtectProc=invisible`**, and that
+///     directive is in the reference's own hardening drop-in. Having pid 1 as
+///     the *only* probe meant a correctly hardened deployment reported a null
+///     init system and a blank row in the panel's diagnostics. Found by diffing
+///     this endpoint against a live 3.2.0 running under that same drop-in --
+///     which answered "systemd" because it looks at /run/systemd/system, a path
+///     the sandbox does not touch.
+///   * The BSDs have no /proc at all by default, so pid 1 answered nothing
+///     there either, on every platform where the answer is simply "rc.d".
 fn init_facts() -> serde_json::Value {
-    // PID 1's comm is the cheapest reliable answer and needs no dependency.
-    let name = std::fs::read_to_string("/proc/1/comm")
-        .ok()
-        .map(|s| s.trim().to_string());
-    let detail = match name.as_deref() {
-        Some("systemd") => Some("systemctl status breeze-core"),
-        Some("init") => Some("service breeze-core status"),
-        _ => None,
+    let facts = |name: &str, detail: &str| {
+        serde_json::json!({ "name": name, "detail": detail })
     };
-    serde_json::json!({ "name": name, "detail": detail })
+
+    #[cfg(target_os = "macos")]
+    return facts("launchd", "launchctl print system/breeze-core");
+    #[cfg(target_os = "windows")]
+    return facts("windows-sc", "Windows Service Control Manager");
+    #[cfg(any(
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd",
+        target_os = "dragonfly"
+    ))]
+    return facts("rc.d", "service breeze_core status");
+
+    #[cfg(all(
+        unix,
+        not(target_os = "macos"),
+        not(target_os = "freebsd"),
+        not(target_os = "openbsd"),
+        not(target_os = "netbsd"),
+        not(target_os = "dragonfly")
+    ))]
+    {
+        // systemd's own documented check: the directory exists iff it booted us.
+        if Path::new("/run/systemd/system").is_dir() {
+            return facts("systemd", "systemctl status breeze-core");
+        }
+        if Path::new("/run/openrc").exists() {
+            return facts("openrc", "rc-service breeze-core status");
+        }
+        // procd is OpenWrt, where the init script is the interface.
+        if Path::new("/sbin/procd").exists() {
+            return facts("procd", "/etc/init.d/breeze-core status");
+        }
+        if Path::new("/run/runit").is_dir() || Path::new("/etc/runit").is_dir() {
+            return facts("runit", "sv status breeze-core");
+        }
+        if Path::new("/run/s6-rc").exists() {
+            return facts("s6", "s6-rc -a list");
+        }
+        // Last resort, and only that: in a container the app itself may be pid 1
+        // and no service manager is involved at all.
+        let comm = std::fs::read_to_string("/proc/1/comm")
+            .ok()
+            .map(|s| s.trim().to_string());
+        return match comm {
+            Some(name) if !name.is_empty() => {
+                serde_json::json!({ "name": name, "detail": "from /proc/1/comm" })
+            }
+            // "unknown" rather than null, so a client rendering this shows a
+            // word instead of a blank.
+            _ => facts("unknown", "no init system could be identified"),
+        };
+    }
 }
 
 fn cpu_facts() -> serde_json::Value {

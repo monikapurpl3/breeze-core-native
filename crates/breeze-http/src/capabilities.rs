@@ -19,6 +19,23 @@ use crate::respond::Reply;
 use crate::state::AppState;
 
 /// Serialise a unit's capabilities in the reference's shape.
+/// Whole degrees as a JSON integer, fractional ones as a float.
+///
+/// The reference holds these as Python ints and serialises `30`; this held them
+/// as f64 and serialised `30.0`. JSON has one number type and consumers do not:
+/// JavaScript cannot tell the difference, and a strictly typed client asking for
+/// an integer breaks outright -- Dart's `as int` throws on a double. The Android
+/// app happens to use `as num` and survived it; a third-party client need not.
+///
+/// Found by diffing this endpoint against a live 3.2.0.
+fn degrees(v: f64) -> serde_json::Value {
+    if v.fract() == 0.0 && v.is_finite() {
+        serde_json::json!(v as i64)
+    } else {
+        serde_json::json!(v)
+    }
+}
+
 pub fn view(unit_id: &str, caps: &Capabilities) -> serde_json::Value {
     // `null`, not `false`, when nothing was reported: see the module docs.
     let (vertical, horizontal) = if caps.swing_horizontal || caps.swing_vertical {
@@ -38,8 +55,8 @@ pub fn view(unit_id: &str, caps: &Capabilities) -> serde_json::Value {
         "supports_horizontal_swing": horizontal,
         "fan_speeds": caps.fan_speeds(),
         "supports_custom_fan_speed": caps.fan_custom,
-        "min_target_temperature": caps.min_temperature(),
-        "max_target_temperature": caps.max_temperature(),
+        "min_target_temperature": degrees(caps.min_temperature()),
+        "max_target_temperature": degrees(caps.max_temperature()),
         "supports_eco": caps.eco,
         "supports_turbo": caps.turbo(),
         "supports_display_control": caps.display_control,
@@ -114,8 +131,8 @@ mod tests {
         assert_eq!(view["supports_display_control"], true);
         assert_eq!(view["supports_freeze_protection"], true);
         assert_eq!(view["supports_humidity"], true);
-        assert_eq!(view["min_target_temperature"], 16.0);
-        assert_eq!(view["max_target_temperature"], 30.0);
+        assert_eq!(view["min_target_temperature"], 16, "whole degrees must be an integer, as the reference sends");
+        assert_eq!(view["max_target_temperature"], 30, "whole degrees must be an integer, as the reference sends");
     }
 
     #[test]
@@ -153,8 +170,8 @@ mod tests {
             view["fan_speeds"],
             serde_json::json!(["LOW", "MEDIUM", "HIGH", "AUTO"])
         );
-        assert_eq!(view["min_target_temperature"], 16.0);
-        assert_eq!(view["max_target_temperature"], 30.0);
+        assert_eq!(view["min_target_temperature"], 16, "whole degrees must be an integer, as the reference sends");
+        assert_eq!(view["max_target_temperature"], 30, "whole degrees must be an integer, as the reference sends");
         assert_eq!(view["supports_eco"], false);
     }
 

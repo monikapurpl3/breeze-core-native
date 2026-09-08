@@ -967,11 +967,12 @@ fn route_control(state: &AppState, incoming: &Incoming) -> Reply {
         Ok(r) => r,
         Err(e) => return Reply::detail(422, format!("invalid control request: {e}")),
     };
-    // Bounds are checked here, before the value can reach the firmware. Breeze
-    // Core answers 422 for these, so a client can tell a bad value from a unit
-    // that would not answer.
+    // Bounds are checked here, before the value can reach the firmware, and the
+    // status comes from the error rather than being one constant: the reference
+    // answers 400 for a bad enum member and 422 for an out-of-range number.
+    // See ValidationError::http_status.
     if let Err(e) = request.validate() {
-        return Reply::detail(422, e.to_string());
+        return Reply::detail(e.http_status(), e.to_string());
     }
     match crate::control::apply(&state.manager, id, &request) {
         Ok(value) => Reply::json(200, &value),
