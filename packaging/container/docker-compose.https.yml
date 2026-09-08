@@ -1,0 +1,66 @@
+# Breeze Core behind a TLS proxy.
+#
+#   docker compose -f docker-compose.https.yml up -d
+#
+# This replaces the Python line's `alpine-edge-nginx` image, and the split is
+# the point. That image put two processes in one container, needed a supervisor
+# to keep them both alive, generated a self-signed certificate on first boot,
+# and was the only image that could not run with a read-only rootfs. Two
+# containers, each doing one thing, needs none of that -- and the proxy is the
+# upstream image, patched by people who do that for a living.
+#
+# Caddy rather than nginx because it obtains and renews a real certificate on
+# its own. Swap it for nginx if you already have one and a certificate to go
+# with it; the only thing Breeze Core cares about is the two headers below.
+
+services:
+  breeze-core:
+    image: ghcr.io/monikapurpl3/breeze-core:4.0.1
+    container_name: breeze-core
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Zagreb
+      BREEZE_HOST: 0.0.0.0
+      # Load-bearing, not optional, once a proxy is in front.
+      #
+      # Without it every request looks like it came from the proxy's address,
+      # and since that is a private address, the LAN-only checks on admin
+      # endpoints stop meaning anything: approving a pairing would be reachable
+      # from anywhere the proxy is.
+      AC_BEHIND_PROXY: "1"
+      # The proxy sets its own security headers; two CSP headers are
+      # intersected rather than deduplicated, which quietly forbids everything
+      # either one forbids.
+      AC_SECURITY_HEADERS: "0"
+    volumes:
+      - breeze-config:/etc/breeze-core
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # No published ports. The only way in is through the proxy, which is what
+    # "behind a proxy" should mean -- otherwise 8420 stays open beside it and
+    # the TLS is decoration.
+    networks: [front]
+
+  proxy:
+    image: caddy:2-alpine
+    container_name: breeze-proxy
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [front]
+    depends_on: [breeze-core]
+
+networks:
+  front:
+
+volumes:
+  breeze-config:
+  caddy-data:
+  caddy-config:

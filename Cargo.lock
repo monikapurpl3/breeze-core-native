@@ -89,7 +89,7 @@ dependencies = [
 
 [[package]]
 name = "breeze-core"
-version = "4.0.0"
+version = "4.0.1"
 dependencies = [
  "breeze-auth",
  "breeze-device",

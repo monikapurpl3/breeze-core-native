@@ -1,0 +1,40 @@
+# Caddy in front of Breeze Core, for docker-compose.https.yml.
+#
+# Replace the hostname with yours. Caddy gets and renews the certificate by
+# itself, which is the whole reason it is here rather than nginx.
+
+breeze.example.org {
+	# The two headers the server needs, and nothing it does not.
+	#
+	# X-Forwarded-For is what AC_BEHIND_PROXY=1 makes the server trust, and it
+	# is how the LAN-only admin checks see the real client instead of the
+	# proxy. Caddy sets it by default; it is named here so that deleting the
+	# line is a deliberate act.
+	reverse_proxy breeze-core:8420 {
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+
+		# Server-Sent Events. Without this the panel's live updates arrive in
+		# bursts when a buffer fills, or not at all -- which looks exactly like
+		# a server that has stopped responding.
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		# The panel is same-origin, no inline anything, no external resources.
+		Content-Security-Policy "default-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+		-Server
+	}
+
+	encode gzip
+}
+
+# The admin endpoints are LAN-only in the server itself, unconditionally, so
+# there is nothing to configure here for them -- but if this proxy is reachable
+# from the internet, that check now sees the *forwarded* address, so it is only
+# as good as X-Forwarded-For above. Read the "Exposing it safely" page before
+# pointing a public DNS name at this.

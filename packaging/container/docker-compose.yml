@@ -1,0 +1,61 @@
+# Breeze Core, plain HTTP on the LAN.
+#
+#   docker compose up -d
+#
+# Pair first, or it will exit immediately with a message telling you to:
+#
+#   docker compose run --rm --network host breeze-core pair
+#
+# That needs host networking because discovery is a UDP broadcast and a bridge
+# network has no access to the units' layer 2. Normal operation does not: the
+# server only makes unicast TCP connections to addresses it already knows.
+
+services:
+  breeze-core:
+    image: ghcr.io/monikapurpl3/breeze-core:4.0.1
+    container_name: breeze-core
+    restart: unless-stopped
+
+    # NOT cosmetic. Everything scheduled here -- schedules, curves, timers --
+    # uses the server's local clock, and a container's clock is UTC unless you
+    # say otherwise. Get this wrong and every program fires at the wrong hour
+    # while the server looks perfectly healthy.
+    environment:
+      TZ: Europe/Zagreb
+      BREEZE_HOST: 0.0.0.0
+
+    # Published to the LAN address you actually want to reach, not to every
+    # interface. Change 192.168.1.10 to this machine's address, or drop the
+    # host part if you genuinely want it on all of them.
+    ports:
+      - "192.168.1.10:8420:8420"
+
+    volumes:
+      - breeze-config:/etc/breeze-core
+
+    # The image has no shell, no package manager and no writable filesystem
+    # outside the volume, so most of the usual hardening is already true of it.
+    # These make the rest explicit.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+    # NO HEALTHCHECK, deliberately, and this is worth explaining because the
+    # obvious one is actively harmful.
+    #
+    # A container healthcheck has to be a command inside the container, and this
+    # image has no shell and no curl -- so the only candidate is the binary
+    # itself. `breeze-core diag` looks like the right answer and is not: part of
+    # what it checks is input validation, which it tests by POSTing a
+    # deliberately out-of-range temperature to a real unit. As a healthcheck
+    # that would send a control request to an air conditioner every 60 seconds,
+    # forever.
+    #
+    # Until there is a `breeze-core healthcheck` subcommand that does nothing
+    # but GET /api/health, the honest options are no healthcheck or one run from
+    # outside the container. Docker restarts the container if the process dies,
+    # which is the failure mode that actually happens.
+
+volumes:
+  breeze-config:

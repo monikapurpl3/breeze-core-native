@@ -1,0 +1,44 @@
+# Breeze Core — the same image, plus a shell.
+#
+#   docker buildx build -f packaging/container/Dockerfile.debug \
+#     --platform linux/amd64,linux/arm64 \
+#     -t ghcr.io/monikapurpl3/breeze-core:4.0.1-debug packaging/out
+#
+# For when something is wrong and `docker logs` is not enough. Identical binary,
+# identical paths, identical uid -- the only difference is that busybox is in
+# there, so `docker exec -it <container> sh` works and `tar` is available for
+# the backup commands without a sidecar.
+#
+# busybox rather than distroless's own :debug variant: it is the same musl
+# world the binary is built against, it is ~4 MB, and it brings tar, wget and
+# vi, which are the three things anyone actually wants at 2 a.m.
+#
+# **Not for normal use.** A shell in a production container is a shell an
+# attacker gets too. The plain image has none, and that is the point of it.
+
+FROM alpine:3.20 AS prep
+RUN apk add --no-cache tzdata
+ARG TARGETARCH
+COPY bin/${TARGETARCH}/breeze-core /staged/breeze-core
+RUN chmod 0755 /staged/breeze-core
+
+FROM busybox:1.36-musl
+
+COPY --from=prep /usr/share/zoneinfo /usr/share/zoneinfo
+COPY --from=prep /staged/breeze-core /usr/bin/breeze-core
+# busybox HAS mkdir, unlike scratch, so the directory is made the normal way.
+RUN mkdir -p /etc/breeze-core && chown 1001:1001 /etc/breeze-core && chmod 0750 /etc/breeze-core
+
+USER 1001:1001
+VOLUME ["/etc/breeze-core"]
+EXPOSE 8420
+ENV BREEZE_HOST=0.0.0.0 \
+    BREEZE_PORT=8420 \
+    AC_CONFIG_DIR=/etc/breeze-core
+ENTRYPOINT ["/usr/bin/breeze-core"]
+CMD ["serve"]
+
+LABEL org.opencontainers.image.title="Breeze Core (debug)" \
+      org.opencontainers.image.description="Breeze Core with a shell, for diagnosis only" \
+      org.opencontainers.image.source="https://github.com/monikapurpl3/breeze-core-native" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later"
