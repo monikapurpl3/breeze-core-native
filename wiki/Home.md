@@ -9,7 +9,7 @@ This wiki is the full documentation. The
 [repository README](https://github.com/monikapurpl3/breeze-core-native) is the
 short version.
 
-**4.0.0 is the same project, reimplemented in Rust.** Same REST API, same store
+**4.x is the same project, reimplemented in Rust.** Same REST API, same store
 files, same `AC_*` variables, same service name, same panel, same Android app —
 it is meant to be installed *over* a 3.x deployment rather than migrated to. One
 static executable, around 2.5 MB, with the panel compiled into it and no
@@ -75,8 +75,8 @@ set of crates. Layer by layer: [Architecture](Architecture).
   `python3-*` dependencies. Every Linux package declares **zero dependencies**,
   and so do all three BSD packages.
 - **Packages, not tarballs** — deb, rpm, pacman, apk, OpenWrt ipk, FreeBSD,
-  NetBSD, OpenBSD, an OPNsense plugin, a Windows installer, and a signed
-  repository so updates arrive the normal way.
+  NetBSD, OpenBSD, an OPNsense plugin, a Windows installer, container images,
+  and a signed repository so updates arrive the normal way.
 - **Quiet by default** — the beep is off unless a client asks for it, so a 3 a.m.
   setpoint change wakes nobody.
 
@@ -89,7 +89,7 @@ Nothing about the contract, and quite a lot about what it costs to run. The
 detail is in [Version history](Version-history) and
 [Ports and architectures](Ports-and-architectures); the summary:
 
-| | 3.2.0 (Python) | 4.0.0 (Rust) |
+| | 3.2.0 (Python) | 4.x (Rust) |
 |---|---|---|
 | what installs | interpreter + ~40 wheels, or a ~25 MB frozen bundle | one ~2.5 MB executable |
 | package dependencies | `python312` / `python311` and friends | **none** |
@@ -98,6 +98,7 @@ detail is in [Version history](Version-history) and
 | architectures with real packages | amd64, arm64, armhf | those **plus riscv64, ppc64le, s390x** |
 | ppc64le / s390x / riscv64 | proof-of-concept, built under QEMU, frozen | tier-1, cross-built, published every release |
 | OpenBSD | source install into a virtualenv | a signed `pkg_add` package |
+| containers | five images, 137–291 MB | two, **5.9 MB** — see [Installing with containers](Installing-with-containers) |
 | build | emulate the target, compile everything on it | cross-compile with `cargo-zigbuild`, no emulation |
 
 <sub>Both figures are from the same x86-64 server, running the same three

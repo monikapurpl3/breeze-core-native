@@ -130,7 +130,7 @@ column layout sized to the longest name:
 
 ```
 Living Room      192.168.1.73     153931628470980
-kitchen          192.168.1.74     153931628470981
+Kitchen          192.168.1.74     153931628470981
 ```
 
 It answers "is this unit in the config at all", which is the first thing worth

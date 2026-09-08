@@ -1,6 +1,6 @@
 # Coming from the Python line
 
-4.0.0 is the same project reimplemented, not a successor with a compatibility
+4.x is the same project reimplemented, not a successor with a compatibility
 layer. Same REST API, same `config.json` / `devices.json` / `programs.json` /
 `timers.json`, same `AC_*` environment variables, same service name, same web
 panel, same Android app. **It is meant to be installed *over* a 3.x deployment**,
@@ -106,7 +106,7 @@ If you would rather do it by hand, it is four steps and no script:
   The flags they took (`--base-url`, `--config`, `--auto`) are still accepted so
   existing scripts keep working. See [Command-line tools](Command-line-tools).
 - **Nothing about the wire format changed**, so a mixed fleet is fine. An Android
-  app or a browser talking to 4.0.0 cannot tell, other than by
+  app or a browser talking to 4.x cannot tell, other than by
   `GET /api/version`.
 
 ## What you gain
@@ -126,11 +126,18 @@ If you would rather do it by hand, it is four steps and no script:
 Stated plainly, because "drop-in replacement" should not have quiet exceptions:
 
 - **The interactive `/docs` page.** No framework, no generated schema.
-- **The container images.** The Python line published five; the native line
-  publishes none *yet*. If you run it in a container today you build your own —
-  [Installing with containers](Installing-with-containers) has the two-line
-  Dockerfile, which is genuinely two lines now that there is no interpreter to
-  install.
+- **Three of the five container images.** The Python line published five —
+  Alpine, Alpine+nginx, and two UBI variants. The native line publishes **two**:
+  a distroless image on `scratch` and a `-debug` variant with a shell. See
+  [Installing with containers](Installing-with-containers).
+
+  All five of the old ones existed because an interpreter needs a distribution
+  around it, and that reason is gone — so this is a replacement rather than a
+  reduction. What genuinely goes away: `docker exec breeze-setup` (there is no
+  shell; `docker run <image> pair` replaces it), and the bundled-nginx image,
+  which is now a compose file pairing the server with a real proxy container.
+  If you relied on a Red Hat base for policy rather than for glibc, say so —
+  nothing replaces UBI.
 - **Brotli response compression.** gzip only, deliberately — see
   [Configuration](Configuration).
 - **The ability to loosen some settings.** LAN-only admin approval, the code TTL,
