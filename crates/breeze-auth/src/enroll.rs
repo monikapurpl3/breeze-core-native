@@ -101,8 +101,13 @@ fn hex(bytes: &[u8]) -> String {
 /// A short code a person can read aloud: base32, uppercase, `XXXX-XXXX`.
 ///
 /// Base32 avoids the case ambiguity of base64 and the hyphen makes it easier to
-/// dictate. Five bytes is 40 bits, which is ample inside a 60-second, single-use,
-/// rate-limited window.
+/// dictate. Five bytes is 40 bits, which is ample inside a 60-second,
+/// single-use window.
+///
+/// It said "rate-limited window" until 4.0.1, and nothing here is rate limited:
+/// the reference throttles the three enrolment endpoints per source address and
+/// this does not. Recorded rather than quietly reworded, because a comment
+/// describing a control that does not exist is worse than no comment.
 pub fn new_pairing_code() -> Result<String, EnrollError> {
     const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
     let raw = random_bytes(5)?;
