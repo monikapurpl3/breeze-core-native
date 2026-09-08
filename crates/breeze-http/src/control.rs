@@ -13,6 +13,16 @@ use breeze_store::ControlRequest;
 
 use crate::units::UnitState;
 
+/// Whether to trace the control path. `BREEZE_DEBUG=1` turns it on, along with
+/// the authentication dump -- one switch, because anyone debugging a control
+/// that does nothing wants both halves and should not have to know two names.
+fn debug_control() -> bool {
+    matches!(
+        std::env::var("BREEZE_DEBUG").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
+    )
+}
+
 /// Merge `request` into the unit's current state and apply it.
 pub fn apply(
     manager: &DeviceManager,
@@ -53,7 +63,31 @@ pub fn apply(
             // schedule firing at 2 a.m. should not chirp.
             setpoint.beep = request.beep.unwrap_or(false);
 
+            if debug_control() {
+                eprintln!(
+                    "  control {id}: requested {}",
+                    serde_json::to_string(request).unwrap_or_default()
+                );
+                eprintln!(
+                    "  control {id}: unit reported mode={:?} temp={} fan={:?} power={}",
+                    current.mode, current.target_temperature, current.fan_speed, current.power_on
+                );
+                eprintln!(
+                    "  control {id}: sending mode={:?} temp={} fan={:?} power={} swing={:?}",
+                    setpoint.mode,
+                    setpoint.target_temperature,
+                    setpoint.fan_speed,
+                    setpoint.power_on,
+                    setpoint.swing_mode
+                );
+            }
             let applied = device.apply(&setpoint)?;
+            if debug_control() {
+                eprintln!(
+                    "  control {id}: unit echoed mode={:?} temp={} fan={:?} power={}",
+                    applied.mode, applied.target_temperature, applied.fan_speed, applied.power_on
+                );
+            }
             let state = UnitState::from_device(device, &applied);
             Ok(serde_json::to_value(state).unwrap_or_else(|_| serde_json::json!({})))
         })

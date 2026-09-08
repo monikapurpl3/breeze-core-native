@@ -268,6 +268,9 @@ pub fn debug_auth() -> bool {
     matches!(
         std::env::var("BREEZE_DEBUG_AUTH").as_deref(),
         Ok("1") | Ok("true") | Ok("yes")
+    ) || matches!(
+        std::env::var("BREEZE_DEBUG").as_deref(),
+        Ok("1") | Ok("true") | Ok("yes")
     )
 }
 
@@ -596,6 +599,22 @@ fn authorise(
         .verify_device(&devices, &incoming.presented(), &mut nonces, now)
     {
         Decision::Allow(who) => {
+            // Logged on SUCCESS too, not only on rejection. Only logging
+            // failures meant a run where everything worked could not answer
+            // "which auth version did that client actually use?" -- and for an
+            // intermittent fault that is the first thing you want to know.
+            if debug_auth() {
+                eprintln!(
+                    "  auth ok: key_id={} version={} label={:?}",
+                    who.token_id,
+                    who.auth_version,
+                    devices
+                        .devices
+                        .iter()
+                        .find(|d| d.token_id == who.token_id)
+                        .map(|d| d.label.as_str())
+                );
+            }
             let token_id = who.token_id.to_string();
             // Release the read lock before asking for the write lock, or this
             // deadlocks on the first authenticated request.
