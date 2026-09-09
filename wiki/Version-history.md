@@ -4,6 +4,74 @@ The 4.x line. For 3.x and earlier, see the Python project's own
 [version history](https://github.com/monikapurpl3/breeze-core/wiki/Version-history) —
 everything published for it stays where it is and keeps installing.
 
+## 4.0.2
+
+Settings that had quietly become constants are settings again, two new package
+managers, and two CLI papercuts.
+
+**Configuration**
+
+Three values were compile-time constants in 4.0.0 and are read from the
+environment again. One default changed:
+
+| | | |
+|---|---|---|
+| `AC_CODE_TTL` | `60` | seconds a pairing code lives |
+| `AC_TOKEN_TTL_DAYS` | **`3650`** | days a device credential lives — was 90 |
+| `AC_AUTH_SKEW_SECONDS` | `60` | signed-request clock skew, each way |
+
+Ten years rather than ninety days because the failure mode of a short lifetime
+is a phone that stops working while its owner is away from the LAN that could
+re-approve it. `0` or less means never.
+
+Fixing them had been justified as removing "a switch whose only use was a worse
+configuration". For the credential lifetime that was simply wrong — on a LAN
+deployment the alternative to a long life is re-pairing every phone in the
+house on a timer — and removing the setting silently *shortened* it for anyone
+who had set it.
+
+`GET /api/system` reports the live values now rather than the constants, and
+both worker settings are clamped where they are read, so a `BREEZE_WORKERS=0`
+is reported as the `1` the server is actually running.
+
+**New**
+
+- **Void Linux and Gentoo packages.** Ten `.xbps` — five architectures ×
+  glibc and musl — in a signed repository, and a Gentoo overlay with
+  `app-misc/breeze-core-bin`. See
+  [Ports and architectures](Ports-and-architectures).
+- **`BREEZE_BG_WORKERS`**, how many units the background state poller contacts
+  at once. Default `1`, which is the previous behaviour exactly. Raise it when
+  a poll pass stops fitting inside `AC_STREAM_TICK` — at roughly a second per
+  unit, more than about five means every tick starts later than the last. It is
+  *not* a count of background threads: the timer runner, the scheduler and the
+  poller are one thread each because each is a singleton role, and a second
+  scheduler would fire every program twice. See
+  [Configuration](Configuration).
+- **Init templates for runit, s6, SysV, supervisord and launchd**, in
+  `deploy/init/`, alongside the systemd, OpenRC, procd and BSD rc scripts the
+  packages already install.
+
+**Fixed**
+
+- **`breeze-core` with no arguments started a server.** It prints the usage
+  now, which is what the reference did. The old default was justified by "an
+  init script may simply exec the binary" — nothing does; all eleven init
+  scripts here pass `serve` explicitly. The cost was paid by people instead: a
+  curious `breeze-core` at a shell either collided with the running server
+  ("Address in use") or failed to read a config it has no permission for
+  ("Permission denied"), and since neither message mentions serving, the binary
+  looked like it needed root to print its own help.
+- **A store error did not say which file.** `Permission denied (os error 13)`
+  and nothing else — no path, no indication that a file was even involved.
+  Every store error names its path now, and a permission failure adds that the
+  stores belong to the service account.
+- **The legacy-config hint printed as one long line**, with thirty-space gaps
+  in the middle of it, from a multi-line string literal that carried its own
+  source indentation.
+- **The usage text** was a wall of prose in a single paragraph. Three short
+  groups now.
+
 ## 4.0.1
 
 A bug-fix release, and most of what it fixes was found by a tool rather than by
