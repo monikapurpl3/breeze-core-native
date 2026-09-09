@@ -17,3 +17,4 @@ Cargo.lock.bak
 # build-installer.ps1 makes the other.
 /packaging/windows/vendor/
 /packaging/windows/Breeze-Core-Setup.exe
+packaging/repo/portage-git/

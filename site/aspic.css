@@ -130,6 +130,7 @@ footer b{color:#dde5ee;font-weight:650}
   --deb:#e0507c; --rpm:#4d97ea; --suse:#5fc768; --arch:#48bdf2;
   --alpine:#7b8cf0; --owrt:#f2982f; --src:#b189f2;
   --fbsd:#e2504a; --nbsd:#f0ad45; --obsd:#f4d03f; --opn:#d9622a;
+  --void:#5aa85a; --gentoo:#9b7cc4;
 }
 .s-deb{--c:var(--deb)}
 .s-rpm{--c:var(--rpm)}
@@ -141,6 +142,8 @@ footer b{color:#dde5ee;font-weight:650}
 .s-fbsd{--c:var(--fbsd)}
 .s-nbsd{--c:var(--nbsd)}
 .s-obsd{--c:var(--obsd)}
+.s-void{--c:var(--void)}
+.s-gentoo{--c:var(--gentoo)}
 .s-opn{--c:var(--opn)}
 .t-deb{background:var(--deb);color:#26060f!important}
 .t-rpm{background:var(--rpm);color:#04121f!important}
@@ -152,6 +155,8 @@ footer b{color:#dde5ee;font-weight:650}
 .t-nbsd{background:var(--nbsd);color:#1a1000!important}
 .t-obsd{background:var(--obsd);color:#1a1500!important}
 .t-opn{background:var(--opn);color:#1f0800!important}
+.t-void{background:var(--void);color:#04140a!important}
+.t-gentoo{background:var(--gentoo);color:#150a1f!important}
 
 /* Project cards on the index: the roster of what this repository carries. Each
  * links to that project's own page, which is where its documentation lives —

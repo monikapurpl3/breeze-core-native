@@ -12,12 +12,14 @@
 #   packaging/out/aspic/
 #   ├── index.html  aspic.css  favicon.svg      the repository's own page
 #   ├── breeze-core/index.html                  one page per project
-#   ├── aspic.asc  aspic-alpine.rsa.pub  aspic-usign.pub
+#   ├── aspic.asc  aspic-alpine.rsa.pub  aspic-usign.pub  aspic-xbps.fingerprint
 #   ├── deb/     dists/stable/… + pool/         (apt,  GPG InRelease)
 #   ├── rpm/     <arch>/repodata/ + aspic.repo  (dnf/zypper, signed rpms)
 #   ├── arch/    <arch>/aspic.db…               (pacman, signed db + packages)
 #   ├── alpine/  <arch>/APKINDEX.tar.gz         (apk, RSA-signed index)
-#   └── openwrt/ <arch>/Packages + Packages.sig (opkg, usign)
+#   ├── openwrt/ <arch>/Packages + Packages.sig (opkg, usign)
+#   ├── xbps/    <arch>-repodata + .xbps        (Void, RSA-signed, trust-on-first-use)
+#   └── portage/breeze.git/                     (Gentoo overlay, dumb-HTTP git)
 #
 # **One repository per package-manager family, at the root — not one per
 # project.** Somebody who has added aspic gets everything published here, and a
@@ -35,6 +37,14 @@ KEYS="packaging/repo/keys"
 GPG_NAME="Aspic Repository"
 GPG_EMAIL="repo@aspic.salataputarica.hr.eu.org"
 APK_KEY="aspic-alpine.rsa"
+XBPS_KEY="aspic-xbps.pem"
+# Persistent, and it MUST be: the Gentoo overlay is published as a git
+# repository, and regenerating it from scratch each release would give every
+# commit a new hash. A user who had added the overlay would then get
+# "refusing to merge unrelated histories" from `emerge --sync` and would have
+# to remove and re-add it every time. So the history lives here, next to the
+# keys, and needs backing up for the same reason they do.
+PORTAGE_GIT="packaging/repo/portage-git"
 
 MOUNT="$REPO"
 case "$MOUNT" in /[a-z]/*) MOUNT="$(echo "$MOUNT" | sed -E 's#^/([a-z])/#\U\1:/#')" ;; esac
@@ -143,14 +153,38 @@ if [ ! -f "$KEYS/$APK_KEY" ]; then
   "
 fi
 
+if [ ! -f "$KEYS/$XBPS_KEY" ]; then
+  echo "=== generating the xbps RSA key (first run) ==="
+  # A fourth key, and RSA again because that is all xbps-rindex signs with.
+  #
+  # xbps trusts on first use: the public half is embedded in the repodata
+  # signature, and `xbps-install` shows the fingerprint and asks once before
+  # storing it under /var/db/xbps/keys. So unlike the apt, apk and opkg keys
+  # there is nothing for a user to fetch beforehand — but the fingerprint is
+  # published next to the repository so the prompt can be checked against
+  # something rather than accepted blind.
+  docker run --rm -v "$MOUNT/$KEYS:/keys" alpine:3.20 sh -c "
+    apk add --no-cache openssl >/dev/null
+    openssl genrsa -out /keys/$XBPS_KEY 4096 2>/dev/null
+    chmod 600 /keys/$XBPS_KEY
+  "
+fi
+
 rm -rf "$OUT"; mkdir -p "$OUT"
 
 # The pages and the repositories are one tree, because publishing replaces the
 # whole thing: a page-only push that did not carry the repositories would delete
 # them, and a repository-only push would delete the pages.
-cp site/index.html site/aspic.css site/favicon.svg "$OUT/"
+cp site/aspic.css site/favicon.svg "$OUT/"
 mkdir -p "$OUT/breeze-core"
-cp site/breeze-core/index.html "$OUT/breeze-core/index.html"
+# @VER@ substituted rather than written out, because these pages carry download
+# URLs with the version in the path -- the NetBSD and OpenBSD tarballs, the
+# OPNsense plugin, the Windows installer. Hand-maintained, they went stale
+# silently: the page kept advertising 4.0.0 files after 4.0.1 shipped, and a
+# stale link on a download page is a 404 for a visitor and looks like the
+# project is broken rather than the page being old.
+sed "s/@VER@/$VER/g" site/index.html > "$OUT/index.html"
+sed "s/@VER@/$VER/g" site/breeze-core/index.html > "$OUT/breeze-core/index.html"
 
 # The migration script, with a checksum generated here rather than pasted into a
 # page. It is served from the root because the one-liner that fetches it is the
@@ -283,6 +317,128 @@ stage alpine:3.20 '
       abuild-sign -k /work/packaging/repo/keys/aspic-alpine.rsa APKINDEX.tar.gz )
   done
 '
+
+# --- xbps (Void) ------------------------------------------------------------
+# Two packages per architecture, glibc and musl, with identical bytes. Void
+# treats the two libcs as separate architectures with separate repodata, and
+# xbps reads only <its own arch>-repodata, so a single package would be
+# invisible to half of Void even though a static binary runs on both.
+#
+# One directory holds every architecture's repodata, which is how Void's own
+# repository is laid out. xbps-rindex indexes only packages matching XBPS_ARCH
+# and says "ignoring …, unmatched arch" for the others, so it runs once per
+# architecture rather than once over the directory.
+echo "=== xbps repo (Void) ==="
+if ls packaging/out/xbps/*.xbps >/dev/null 2>&1; then
+  stage ghcr.io/void-linux/void-glibc-full:latest '
+    KEY=/work/packaging/repo/keys/aspic-xbps.pem
+    ARCHES="x86_64 x86_64-musl aarch64 aarch64-musl armv7l armv7l-musl
+            riscv64 riscv64-musl ppc64le ppc64le-musl"
+    mkdir -p /out/xbps
+    cp /work/packaging/out/xbps/*.xbps /out/xbps/
+
+    for a in $ARCHES; do
+      XBPS_ARCH="$a" xbps-rindex -a /out/xbps/*.xbps 2>&1 \
+        | grep -v "unmatched arch" || true
+    done
+
+    # The packages, all at once: --sign-pkg works off each package file and
+    # does not care about XBPS_ARCH.
+    xbps-rindex --sign-pkg --privkey "$KEY" /out/xbps/*.xbps >/dev/null 2>&1
+
+    # The indexes, ONCE PER ARCHITECTURE. --sign signs only the repodata of
+    # the current XBPS_ARCH, silently and with no hint that the other nine were
+    # left alone: it prints "Initialized signed repository (1 package)" either
+    # way. Running it once shipped nine unsigned architectures, which a Void
+    # box on any of them would have accepted without a word about the key.
+    for a in $ARCHES; do
+      XBPS_ARCH="$a" xbps-rindex --sign --signedby "Aspic Repository" \
+        --privkey "$KEY" /out/xbps >/dev/null
+    done
+
+    # The fingerprint, taken FROM XBPS rather than computed here.
+    #
+    # xbps shows this string when it asks a user whether to trust the key, and
+    # it is not the md5, sha1 or sha256 of the DER or PEM public key -- all four
+    # were checked against it and none matched. Publishing a digest of our own
+    # invention would give a user something that disagrees with their prompt,
+    # which is worse than publishing nothing: the natural reading of a mismatch
+    # is that the repository has been tampered with.
+    #
+    # Void own default repository is removed first so this does not also pull
+    # two megabytes of their index just to print one line.
+    rm -f /usr/share/xbps.d/*.conf /etc/xbps.d/*.conf
+    mkdir -p /tmp/conf && echo "repository=/out/xbps" > /tmp/conf/aspic.conf
+    xbps-install -C /tmp/conf -S 2>&1 \
+      | sed -n "s/^Fingerprint: //p" | head -1 > /out/aspic-xbps.fingerprint
+    chmod 644 /out/aspic-xbps.fingerprint
+
+    printf "  %s repodata, all signed\n" "$(ls -1 /out/xbps/*-repodata | wc -l | tr -d " ")"
+    printf "  key fingerprint (as xbps shows it): %s\n" "$(cat /out/aspic-xbps.fingerprint)"
+  '
+  [ -s "$OUT/aspic-xbps.fingerprint" ] || {
+    echo "  !! could not read the key fingerprint back out of xbps"; exit 1; }
+else
+  echo "  !! nothing in packaging/out/xbps"
+  echo "     run packaging/xbps/build-xbps.sh, or that section will 404"
+fi
+
+# --- portage overlay (Gentoo) -----------------------------------------------
+# Not a package but a git repository, because that is Gentoo's unit of
+# distribution for third-party ebuilds. Served as ORDINARY STATIC FILES: a bare
+# repository plus `git update-server-info` is a "dumb HTTP" remote, which git
+# still clones and pulls from with no git backend on the host at all. That is
+# what lets the overlay live in this static tree instead of needing a public
+# git forge — verified by cloning one out of `python3 -m http.server`.
+#
+# The history is kept in $PORTAGE_GIT between releases. See the comment on that
+# variable: a fresh repository each release would break `emerge --sync` for
+# everyone who had already added it.
+echo "=== portage overlay (Gentoo) ==="
+if [ -f packaging/out/portage/app-misc/breeze-core-bin/Manifest ]; then
+  # Done on the host rather than in a container: this is the one piece of
+  # durable state the build writes, and a writable bind mount is the thing
+  # Docker Desktop here is least reliable about.
+  if [ ! -d "$PORTAGE_GIT/.git" ]; then
+    echo "  creating the overlay history (first run) — BACK $PORTAGE_GIT UP"
+    mkdir -p "$PORTAGE_GIT"
+    git -C "$PORTAGE_GIT" init -q -b master
+  fi
+  # core.autocrlf off for this repository specifically. The workstation has it
+  # on globally, and an ebuild is bash sourced by portage: a CRLF checkout
+  # fails on its first line for every user of the overlay.
+  git -C "$PORTAGE_GIT" config core.autocrlf false
+  git -C "$PORTAGE_GIT" config user.name "Aspic Repository"
+  git -C "$PORTAGE_GIT" config user.email "$GPG_EMAIL"
+
+  # Mirror the generated overlay over the history, deletions included, so a
+  # package removed upstream disappears here too.
+  find "$PORTAGE_GIT" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+  cp -r packaging/out/portage/. "$PORTAGE_GIT/"
+  git -C "$PORTAGE_GIT" add -A
+  if git -C "$PORTAGE_GIT" diff --cached --quiet; then
+    echo "  overlay unchanged since the last release, history untouched"
+  else
+    git -C "$PORTAGE_GIT" commit -q -m "breeze-core-bin $VER"
+    echo "  committed breeze-core-bin $VER"
+  fi
+
+  mkdir -p "$OUT/portage"
+  rm -rf "$OUT/portage/breeze.git"
+  git clone -q --bare "$PORTAGE_GIT" "$OUT/portage/breeze.git"
+  # Without this there is no info/refs or objects/info/packs, and a dumb HTTP
+  # clone fails with "repository not found" — which reads as a missing repo
+  # rather than a missing index.
+  git -C "$OUT/portage/breeze.git" update-server-info
+  # A bare clone carries the origin it came from, which is a path on this
+  # workstation. Harmless but pointless in a published tree, and it names a
+  # local directory to anyone who reads it.
+  git -C "$OUT/portage/breeze.git" remote remove origin 2>/dev/null || true
+  echo "  $(git -C "$PORTAGE_GIT" rev-list --count HEAD) commit(s), served over dumb HTTP"
+else
+  echo "  !! nothing in packaging/out/portage"
+  echo "     run packaging/portage/build-overlay.sh, or that section will 404"
+fi
 
 # --- opkg feed (OpenWrt) ----------------------------------------------------
 # opkg verifies feeds with usign, OpenWrt's own ed25519 signer: GPG is useless
