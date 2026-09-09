@@ -18,10 +18,32 @@ Debian 12, Alpine and RHEL 8 alike.
 | openSUSE Leap · Tumbleweed · SLES | `zypper` | the same rpms |
 | Arch · Manjaro · Artix · EndeavourOS | `pacman` | x86_64, aarch64, armv7h |
 | Alpine | `apk` | x86_64, aarch64, armv7, riscv64, ppc64le, s390x |
+| Void | `xbps` | x86_64, aarch64, armv7l, riscv64, ppc64le — each in **glibc and musl** |
+| Gentoo · Funtoo | `emerge` | an overlay: `~amd64 ~arm ~arm64 ~ppc64 ~riscv ~s390` |
 | OpenWrt | `opkg` | x86_64, 3 × aarch64, arm_cortex-a7, riscv64 |
 
 Plus [the BSDs](Installing-on-the-BSDs), [OPNsense](Installing-on-OPNsense),
 [Windows](Installing-on-Windows) and [containers](Installing-with-containers).
+
+**Void gets two packages per architecture**, glibc and musl, holding the same
+bytes — the binary is static and does not care which libc the host has, but
+xbps keeps separate package indexes per architecture, so one package would be
+invisible to half of Void. It ships the runit service, disabled, the way Void
+expects.
+
+**Gentoo is an overlay rather than a package**, because that is Gentoo's unit
+of distribution for third-party ebuilds. `app-misc/breeze-core-bin` is a
+prebuilt package that needs no apology there: the binary is statically linked,
+so there is nothing a local build could specialise. On `arm` and `ppc64` the
+ebuild checks your `CHOST` and refuses rather than installing something that
+cannot run, because Gentoo's keywords are coarser than these binaries —
+`arm` spans armv4 through armv7 and both float ABIs, `ppc64` spans both
+endiannesses.
+
+`pacman` stops at three architectures because Arch has no official riscv64,
+ppc64le or s390x port for a repository to serve. Those packages are still
+built and attached to each release, so `pacman -U <url>` works on the
+unofficial ports.
 
 ## The repository is signed, and that is the point
 

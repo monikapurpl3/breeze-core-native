@@ -74,7 +74,10 @@ stage() {
     | tar -xf - -C "$OUT"
 }
 
-[ -e "$PKG/breeze-core_${VER}_amd64.deb" ] || {
+# Globbed on the release, not just the version: nfpm names a deb
+# breeze-core_4.0.2-2_amd64.deb once BC_RELEASE is set, so an exact filename
+# here reported "no packages for 4.0.2" about a directory that was full of them.
+ls "$PKG"/breeze-core_"${VER}"*_amd64.deb >/dev/null 2>&1 || {
   echo "no packages for $VER — run packaging/nfpm/build-packages.sh first"; exit 1; }
 
 # Refuse to build a repository out of two versions at once.
@@ -343,17 +346,35 @@ stage archlinux:base '
 echo "=== apk repo ==="
 stage alpine:3.20 '
   apk add --no-cache abuild apk-tools >/dev/null
+  missing=""
   for a in x86_64 aarch64 armv7 riscv64 ppc64le s390x; do
-    src=/work/packaging/out/pkg/breeze-core_${VER}_${a}.apk
-    [ -f "$src" ] || continue
+    # Globbed, because nfpm writes the RELEASE into the name too and does it in
+    # apk own dialect: breeze-core_4.0.2-r2_x86_64.apk. An exact
+    # breeze-core_${VER}_${a}.apk matched nothing once BC_RELEASE was set, and
+    # the `continue` below used to be silent -- so every architecture was
+    # skipped and the alpine repository was published EMPTY, with the build
+    # reporting success.
+    src=$(ls /work/packaging/out/pkg/breeze-core_"${VER}"*_"${a}".apk 2>/dev/null | head -1)
+    if [ -z "$src" ]; then
+      missing="$missing $a"
+      continue
+    fi
     mkdir -p "/out/alpine/$a"
-    # apk fetches a package as <name>-<V field>.apk, so the filename has to
-    # match the index rather than nfpm output naming.
-    cp "$src" "/out/alpine/$a/breeze-core-${VER}.apk"
+    # apk fetches a package as <name>-<V field>.apk, so the destination has to
+    # carry the same version-release string the package declares. nfpm has
+    # already put exactly that between the underscores of the source name.
+    v=$(basename "$src" | sed -e "s/^breeze-core_//" -e "s/_${a}\.apk\$//")
+    cp "$src" "/out/alpine/$a/breeze-core-${v}.apk"
     ( cd "/out/alpine/$a"
       apk index --allow-untrusted --rewrite-arch "$a" -o APKINDEX.tar.gz *.apk 2>/dev/null
       abuild-sign -k /work/packaging/repo/keys/aspic-alpine.rsa APKINDEX.tar.gz )
   done
+  # Loud, because an empty repository section that builds cleanly is only found
+  # by the first person to try installing from it.
+  if [ -n "$missing" ]; then
+    echo "  !! no apk found for:$missing" >&2
+    exit 1
+  fi
 '
 
 # --- xbps (Void) ------------------------------------------------------------
