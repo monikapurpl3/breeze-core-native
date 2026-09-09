@@ -88,17 +88,55 @@ stage() {
 # disagrees with the release page. Clients would still resolve the newer one, so
 # nothing would look wrong until somebody counted.
 #
-# The version is matched delimited by - or _ so that 4.0.10 is not mistaken for
-# a 4.0.1 package.
-vre="[-_]$(printf '%s' "$VER" | sed 's/\./\\./g')[-_]"
-stray="$(ls -1 "$PKG" 2>/dev/null | grep -Ev -- "$vre" || true)"
-if [ -n "$stray" ]; then
-  echo "packages from another version are sitting in $PKG:"
-  printf '%s\n' "$stray" | sed 's/^/  /'
+# Checked in EVERY staging directory, not just out/pkg: the BSD trees are
+# carried with `cp -R` of the whole directory, which is blunter still.
+#
+# The version needs a delimiter before it and a delimiter OR END OF NAME after,
+# and the trailing set must include `.`: the nfpm names bracket the version
+# (breeze-core_4.0.2_x86_64.apk, breeze-core-4.0.2-1.x86_64.rpm) while the BSD
+# and Windows ones end it with an extension (breeze-core-4.0.2.pkg,
+# Breeze-Core-Setup-4.0.2.exe). Demanding [-_] on both sides flagged every
+# correct BSD package as a stray. Demanding a delimiter at all is what stops
+# 4.0.10 matching a 4.0.1 pattern.
+vre="[-_]$(printf '%s' "$VER" | sed 's/\./\\./g')([-_.]|$)"
+# Discovered rather than written out: the OpenBSD tree nests by release and
+# architecture (7.9/packages/amd64), and both come off the build machine.
+OBSD_STAGE="$(ls -d packaging/out/bsd/openbsd/*/packages/* 2>/dev/null | head -1 || true)"
+# `name|rebuild command|exclusions`. The exclusions are files that legitimately
+# carry no version: FreeBSD's own repository metadata, and the OpenBSD/NetBSD
+# directory scaffolding.
+STAGING="
+$PKG|./packaging/nfpm/build-packages.sh|
+packaging/out/bsd/freebsd|./packaging/bsd/build-freebsd.sh|data.pkg packagesite.pkg digests.pkg filesite.pkg meta meta.conf packagesite.yaml aspic-freebsd.pub
+packaging/out/bsd/netbsd/All|./packaging/bsd/build-netbsd.sh|pkg_summary pkg_summary.gz pkg_summary.bz2
+$OBSD_STAGE|./packaging/bsd/build-openbsd.sh|
+packaging/out/opnsense|./packaging/opnsense/build-plugin.sh|
+packaging/out/windows|packaging/windows/build-installer.ps1|Breeze-Core-Setup.exe Breeze-Core-Setup.exe.sha256
+"
+gate_fail=0
+while IFS='|' read -r dir cmd excl; do
+  [ -n "$dir" ] || continue
+  [ -d "$dir" ] || continue
+  stray="$(ls -1 "$dir" 2>/dev/null | grep -Ev -- "$vre" || true)"
+  for e in $excl; do
+    stray="$(printf '%s\n' "$stray" | grep -vFx "$e" || true)"
+  done
+  # Directories are skipped: the OpenBSD tree nests by release and arch.
+  keep=""
+  for f in $stray; do [ -d "$dir/$f" ] || keep="$keep $f"; done
+  if [ -n "${keep# }" ]; then
+    echo "artifacts from another version are sitting in $dir:"
+    for f in $keep; do echo "  $f"; done
+    echo "  rebuild with: $cmd"
+    gate_fail=1
+  fi
+done <<< "$STAGING"
+
+if [ "$gate_fail" = 1 ]; then
   echo
-  echo "this builder globs by extension, not by version, so they would all be"
-  echo "signed into the repository. Remove them and rebuild what you need:"
-  echo "  rm -rf $PKG && ./packaging/nfpm/build-packages.sh"
+  echo "This builder carries whole directories and globs by extension, never by"
+  echo "version, so everything above would be published alongside $VER. Delete"
+  echo "the old files (or the whole staging directory) and rebuild."
   exit 1
 fi
 

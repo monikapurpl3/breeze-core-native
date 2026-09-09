@@ -213,6 +213,91 @@ run_case alpine alpine:3.20 '
   echo "   installed from an RSA-signed APKINDEX"
 '
 
+# --- xbps -------------------------------------------------------------------
+# The "both directions" shape is different here, because xbps trusts on first
+# use rather than from a key installed beforehand: there is no without-the-key
+# case to construct. What matters instead is that xbps reports the repository as
+# SIGNED and by us, that the fingerprint it shows matches the one the site
+# publishes, and that every architecture is signed rather than only the one the
+# signing container happened to be.
+run_case void ghcr.io/void-linux/void-glibc-full:latest '
+  # curl FIRST: the image ships no HTTP client at all -- no curl, no wget --
+  # and the next line removes the repositories it would be installed from.
+  xbps-install -Sy curl >/dev/null 2>&1
+  # Void own repository removed, so this exercises ours and only ours, and does
+  # not depend on their mirror being reachable.
+  rm -f /usr/share/xbps.d/*.conf /etc/xbps.d/*.conf
+  mkdir -p /etc/xbps.d
+  echo "repository=$BASE/xbps" > /etc/xbps.d/20-aspic.conf
+
+  echo "-- xbps must see it as RSA signed, and attribute it to us"
+  xbps-install -S >/tmp/sync 2>&1 </dev/null || true
+  grep -q "has been RSA signed by .Aspic Repository." /tmp/sync || {
+    echo "   !! not reported as signed"; sed "s/^/      /" /tmp/sync | head; exit 1; }
+  echo "   signed by Aspic Repository"
+
+  echo "-- and the fingerprint must match the published one"
+  shown=$(sed -n "s/^Fingerprint: //p" /tmp/sync | head -1 | tr -d " \r")
+  published=$(curl -fsS "$BASE/aspic-xbps.fingerprint" | tr -d " \r\n")
+  [ -n "$shown" ] && [ "$shown" = "$published" ] || {
+    echo "   !! xbps shows [$shown], the site publishes [$published]"; exit 1; }
+  echo "   $shown"
+
+  echo "-- every architecture signed, not just this one"
+  for a in x86_64 x86_64-musl aarch64 aarch64-musl armv7l armv7l-musl \
+           riscv64 riscv64-musl ppc64le ppc64le-musl; do
+    XBPS_ARCH=$a xbps-install -S 2>&1 </dev/null | grep -q "RSA signed by" \
+      || { echo "   !! $a is UNSIGNED"; exit 1; }
+  done
+  echo "   all ten architecture/libc combinations"
+
+  echo "-- and it installs, once the key is accepted"
+  yes | xbps-install -S >/dev/null 2>&1 || true
+  yes | xbps-install -y breeze-core >/tmp/inst 2>&1 || true
+  [ -x /usr/bin/breeze-core ] || {
+    echo "   !! not installed"; tail -6 /tmp/inst | sed "s/^/      /"; exit 1; }
+  breeze-core --version | grep -q "breeze-core $VER"
+  echo "   installed, and reports $VER"
+'
+
+# --- portage ----------------------------------------------------------------
+# No signature to check: Gentoo trust is the Manifest, whose hashes portage
+# enforces against the tarball it fetches from GitHub. What has no precedent in
+# the other repositories -- and so is what this checks -- is that the overlay is
+# reachable as a DUMB HTTP git remote from a purely static tree.
+run_case gentoo alpine:3.20 '
+  apk add --no-cache git >/dev/null
+
+  echo "-- the overlay must clone over plain static HTTP"
+  git clone -q "$BASE/portage/breeze.git" /tmp/aspic 2>/tmp/err || {
+    echo "   !! clone failed"; sed "s/^/      /" /tmp/err; exit 1; }
+  echo "   cloned"
+
+  echo "-- carrying this version ebuild and a complete Manifest"
+  test -f "/tmp/aspic/app-misc/breeze-core-bin/breeze-core-bin-$VER.ebuild" || {
+    echo "   !! no ebuild for $VER"; ls /tmp/aspic/app-misc/breeze-core-bin; exit 1; }
+  n=$(grep -c "^DIST " /tmp/aspic/app-misc/breeze-core-bin/Manifest || echo 0)
+  [ "$n" = 6 ] || { echo "   !! Manifest has $n DIST lines, expected 6"; exit 1; }
+  echo "   breeze-core-bin-$VER.ebuild, 6 architectures in the Manifest"
+
+  echo "-- the account ebuilds must be there too"
+  test -f /tmp/aspic/acct-user/breeze/breeze-0.ebuild || { echo "   !! no acct-user"; exit 1; }
+  test -f /tmp/aspic/acct-group/breeze/breeze-0.ebuild || { echo "   !! no acct-group"; exit 1; }
+  grep -q "^acct-user_add_deps" /tmp/aspic/acct-user/breeze/breeze-0.ebuild || {
+    echo "   !! acct-user is missing its add_deps call and would fail at merge"; exit 1; }
+  echo "   acct-user and acct-group present, add_deps called"
+
+  echo "-- and it must identify itself as aspic"
+  grep -qx aspic /tmp/aspic/profiles/repo_name || { echo "   !! wrong repo_name"; exit 1; }
+  grep -q "^masters = gentoo" /tmp/aspic/metadata/layout.conf || { echo "   !! no masters"; exit 1; }
+  echo "   repo_name and layout.conf in place"
+
+  echo "-- an incremental pull must work (what emerge --sync does)"
+  git -C /tmp/aspic pull -q 2>/tmp/err2 || {
+    echo "   !! pull failed"; sed "s/^/      /" /tmp/err2; exit 1; }
+  echo "   pulled"
+'
+
 echo
 echo "=== $pass passed, $fail failed ==="
 [ "$fail" = 0 ] || exit 1
