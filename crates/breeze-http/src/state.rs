@@ -42,6 +42,12 @@ pub struct Settings {
     pub stream_tick_seconds: u64,
     /// Samples kept per unit for the history endpoint and /metrics.
     pub history_size: usize,
+    /// How long a pairing code lives. Seconds.
+    pub code_ttl_seconds: u64,
+    /// How long a device credential lives. Days; zero or less means never.
+    pub token_ttl_days: i64,
+    /// How far a signed request's timestamp may be from server time, each way.
+    pub auth_skew_seconds: u64,
 }
 
 impl Settings {
@@ -76,6 +82,28 @@ impl Settings {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(crate::history::DEFAULT_SIZE),
+            // These three were constants in 4.0.0 and are settings again.
+            //
+            // The reasoning for fixing them was that each was "a switch whose
+            // only use was a worse configuration". For the credential lifetime
+            // that was simply wrong: on a LAN deployment the alternative to a
+            // long life is re-pairing every phone in the house on a timer, so a
+            // longer one is the better choice and the reference let you say so.
+            // Removing the setting turned a deliberate choice into an
+            // unreachable one -- and silently shortened it for anyone who had
+            // set it.
+            code_ttl_seconds: std::env::var("AC_CODE_TTL")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(breeze_auth::enroll::CODE_TTL_SECONDS),
+            token_ttl_days: std::env::var("AC_TOKEN_TTL_DAYS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(breeze_auth::enroll::TOKEN_TTL_DAYS),
+            auth_skew_seconds: std::env::var("AC_AUTH_SKEW_SECONDS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(breeze_auth::signing::DEFAULT_SKEW_SECONDS),
             stream_tick_seconds: std::env::var("AC_STREAM_TICK")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -149,11 +177,38 @@ impl core::fmt::Display for StartupError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::Store(e) => write!(f, "{e}"),
-            Self::NoApiKey(p) => write!(
-                f,
-                "{} has no api_key — run `breeze-core pair` to set the deployment up",
-                p.display()
-            ),
+            Self::NoApiKey(p) => {
+                write!(
+                    f,
+                    "{} has no api_key — run `breeze-core pair` to set the deployment up",
+                    p.display()
+                )?;
+                // Point at a legacy config if one is sitting there, because
+                // following the advice above would otherwise pair from scratch
+                // and look like a paired unit's V3 credentials had been lost.
+                // /etc/meow-ac is where releases before 2.5.0 defaulted, so
+                // anyone who never set AC_CONFIG has their units in there.
+                for legacy in ["/etc/meow-ac/config.json", "/usr/local/etc/meow-ac/config.json"] {
+                    let path = std::path::Path::new(legacy);
+                    if path != p.as_path() && path.exists() {
+                        // The newlines and leading spaces below are the message's
+                        // own wrapping, so the continuation lines sit at column
+                        // 0 in the source. Do not re-indent them to match this
+                        // block: Rust keeps everything between the quotes, and
+                        // this message shipped once as a single line with
+                        // thirty-space gaps in the middle of it.
+                        write!(
+                            f,
+                            "
+  note: {legacy} exists. If that is your existing deployment, point
+        AC_CONFIG_DIR at its directory rather than pairing again — pairing
+        again cannot recover a V3 unit's credentials."
+                        )?;
+                        break;
+                    }
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -185,6 +240,10 @@ impl AppState {
         let verifier = Verifier::new(settings.min_auth_version);
         let stream = crate::stream::StateStream::new(settings.stream_tick_seconds);
         let history = crate::history::History::new(settings.history_size);
+        // Read before `settings` is moved into the struct below.
+        let nonces = NonceCache::new(settings.auth_skew_seconds);
+        let enrollment =
+            EnrollmentService::new(settings.code_ttl_seconds, settings.token_ttl_days);
 
         Ok(Self {
             settings,
@@ -193,8 +252,8 @@ impl AppState {
             devices: RwLock::new(devices),
             manager,
             verifier,
-            nonces: Mutex::new(NonceCache::default()),
-            enrollment: Mutex::new(EnrollmentService::default()),
+            nonces: Mutex::new(nonces),
+            enrollment: Mutex::new(enrollment),
             timers: RwLock::new(timers),
             runner: Mutex::new(crate::timer_routes::RunnerStats::default()),
             programs: RwLock::new(programs),
@@ -318,6 +377,9 @@ mod tests {
             sched_tick_seconds: 30,
             stream_tick_seconds: 5,
             history_size: 720,
+            code_ttl_seconds: 60,
+            token_ttl_days: 3650,
+            auth_skew_seconds: 60,
             security_headers: true,
         };
         assert_eq!(

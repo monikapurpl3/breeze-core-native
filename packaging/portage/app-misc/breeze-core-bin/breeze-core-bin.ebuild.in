@@ -1,0 +1,160 @@
+# Copyright 2026 Monika
+# Distributed under the terms of the GNU Affero General Public License v3
+
+# NOTE: this file is a TEMPLATE. packaging/portage/build-overlay.sh copies it
+# to breeze-core-bin-<version>.ebuild — the version lives in the filename and
+# reaches the body as ${PV}, so there is nothing to substitute inside.
+
+EAPI=8
+
+inherit systemd
+
+DESCRIPTION="LAN-first REST API, web panel and CLI for Midea air conditioners"
+HOMEPAGE="https://github.com/monikapurpl3/breeze-core-native"
+
+REL="https://github.com/monikapurpl3/breeze-core-native/releases/download/v${PV}"
+
+# The upstream tarballs are named by our own architecture labels, which are not
+# Gentoo's, so each is renamed on download. ${P} in the destination keeps two
+# versions' distfiles from colliding in DISTDIR.
+SRC_URI="
+	amd64? ( ${REL}/breeze-core-${PV}-linux-amd64.tar.zst -> ${P}-amd64.tar.zst )
+	arm64? ( ${REL}/breeze-core-${PV}-linux-arm64.tar.zst -> ${P}-arm64.tar.zst )
+	arm? ( ${REL}/breeze-core-${PV}-linux-armv7.tar.zst -> ${P}-armv7.tar.zst )
+	ppc64? ( ${REL}/breeze-core-${PV}-linux-ppc64le.tar.zst -> ${P}-ppc64le.tar.zst )
+	riscv? ( ${REL}/breeze-core-${PV}-linux-riscv64.tar.zst -> ${P}-riscv64.tar.zst )
+	s390? ( ${REL}/breeze-core-${PV}-linux-s390x.tar.zst -> ${P}-s390x.tar.zst )
+"
+S="${WORKDIR}"
+
+LICENSE="AGPL-3+"
+SLOT="0"
+
+# -* first: this is a prebuilt binary, so an architecture is supported only
+# where a tarball actually exists. Without the -* an unlisted architecture
+# inherits nothing and the package looks merely untested rather than absent.
+KEYWORDS="-* ~amd64 ~arm ~arm64 ~ppc64 ~riscv ~s390"
+
+# No IUSE. There is nothing to configure at build time: the web panel, the TLS
+# roots and the timezone handling are all compiled in, and the binary is
+# static.
+IUSE=""
+
+RDEPEND="
+	acct-group/breeze
+	acct-user/breeze
+"
+# Called directly in src_unpack, not merely needed by portage's own unpack --
+# see the comment there.
+BDEPEND="app-arch/zstd"
+
+# Prebuilt: nothing to strip (already stripped upstream) and nothing whose
+# debug info could be split out. QA_PREBUILT stops the ELF scanner reporting
+# the binary as unexpectedly non-PIC.
+RESTRICT="strip"
+QA_PREBUILT="usr/bin/breeze-core"
+
+pkg_pretend() {
+	# Gentoo's keywords are coarser than these binaries, and a prebuilt package
+	# gets no compile step in which the mismatch would surface. Two keywords
+	# span machines the tarball cannot run on:
+	#
+	#   arm    — covers armv4 through armv7, soft- and hard-float. The tarball
+	#            is armv7 hard-float only.
+	#   ppc64  — covers both endiannesses. The tarball is little-endian only.
+	#
+	# Refusing here, with the reason, beats installing a binary that dies as
+	# "cannot execute binary file" or SIGILL on first start. CHOST is the right
+	# thing to test rather than /proc/cpuinfo: it is also correct when the
+	# package is built once and pushed to other machines as a binary package.
+	if use arm && [[ ${CHOST} != armv7*hf ]] && [[ ${CHOST} != armv7*eabihf ]]; then
+		eerror "The prebuilt ARM binary is armv7 hard-float."
+		eerror "This machine's CHOST is ${CHOST}, which cannot run it."
+		eerror "Build from source instead, or use the upstream tarball directly."
+		die "unsupported ARM variant for a prebuilt binary"
+	fi
+	if use ppc64 && [[ ${CHOST} != powerpc64le-* ]]; then
+		eerror "The prebuilt ppc64 binary is little-endian (powerpc64le)."
+		eerror "This machine's CHOST is ${CHOST}, which cannot run it."
+		die "unsupported ppc64 endianness for a prebuilt binary"
+	fi
+}
+
+src_unpack() {
+	# By hand, because portage's unpack() handles no zstd format in ANY EAPI.
+	# Its supported-suffix list follows PMS 8 §12.3.15 and stops at tar.xz
+	# (checked against portage 3.0.81), so a .tar.zst distfile is silently
+	# passed over with
+	#   === Skipping unpack of 'breeze-core-bin-4.0.2-amd64.tar.zst'
+	# leaving WORKDIR empty. That is only noticed two phases later, as
+	# "dobin: breeze-core does not exist", which points at the wrong thing
+	# entirely. Piped rather than `tar --zstd`, so this does not also depend
+	# on the host tar being GNU tar built with zstd support.
+	#
+	# -o (--no-same-owner) is not optional. Portage builds under FEATURES
+	# userpriv, so the unpack runs as the portage user, and these tarballs are
+	# rolled on a machine whose uid/gid pair does not exist on any Gentoo box.
+	# Without -o, tar tries to restore that ownership, cannot, and exits
+	# non-zero having already written the files. Portage's own unpack() passes
+	# -o for the same reason.
+	# The redirect is not a stylistic choice either. Inside an ebuild
+	# ${DISTDIR} is NOT the real distfile directory: portage points it at a
+	# private per-package directory holding SYMLINKS to the real files. zstd
+	# refuses to read a symlink given as an argument — it says
+	#   Warning : …tar.zst is a symbolic link, ignoring
+	# on stderr, writes nothing, and exits 0, so the failure lands on tar as
+	# "This does not look like a tar archive" and looks like a corrupt
+	# download. Redirecting makes the shell open the file, following the link,
+	# and hands zstd a plain stream. `zstd -f` would also work but buys a lot
+	# of unrelated force-overwrite behaviour to fix one symlink.
+	local f
+	for f in ${A}; do
+		zstd -dc < "${DISTDIR}/${f}" | tar -xof - || die "unpacking ${f} failed"
+	done
+}
+
+src_install() {
+	dobin breeze-core
+	dodoc README.md
+
+	newinitd "${FILESDIR}"/breeze-core.initd breeze-core
+	newconfd "${FILESDIR}"/breeze-core.confd breeze-core
+	systemd_dounit "${FILESDIR}"/breeze-core.service
+
+	# The state directory only. No config file is installed: config.json is
+	# written by `breeze-core pair`, and on Gentoo the service's settings live
+	# in /etc/conf.d/breeze-core like every other OpenRC service.
+	keepdir /etc/breeze-core
+	fowners breeze:breeze /etc/breeze-core
+	fperms 0750 /etc/breeze-core
+}
+
+pkg_postinst() {
+	if [[ -z ${REPLACING_VERSIONS} ]]; then
+		elog ""
+		elog "Breeze Core installed. To get started:"
+		elog ""
+		elog "  1. Pair your AC units (writes /etc/breeze-core/config.json):"
+		elog "       breeze-core pair"
+		elog "  2. For direct LAN use, set this machine's LAN address in"
+		elog "       /etc/conf.d/breeze-core   (BREEZE_HOST=...)"
+		elog "     or keep 127.0.0.1 if a reverse proxy fronts it."
+		elog "  3. Start it:"
+		elog "       rc-update add breeze-core default"
+		elog "       rc-service breeze-core start"
+		elog "     or, on a systemd profile:"
+		elog "       systemctl enable --now breeze-core"
+		elog ""
+		elog "Then open http://<BREEZE_HOST>:8420 and pair a browser or the app."
+		elog "Docs: https://github.com/monikapurpl3/breeze-core-native/wiki"
+		elog ""
+	fi
+
+	# Said on every install, not just the first: it is the one irreversible
+	# thing about this package. A paired V3 unit's token and key were issued
+	# once by a cloud that no longer hands them out.
+	if [[ -f ${EROOT}/etc/breeze-core/config.json ]]; then
+		ewarn "Back up ${EROOT}/etc/breeze-core — a paired unit's V3 credentials"
+		ewarn "cannot be re-issued if config.json is lost."
+	fi
+}

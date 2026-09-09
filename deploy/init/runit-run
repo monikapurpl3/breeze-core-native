@@ -1,0 +1,31 @@
+#!/bin/sh
+# Breeze Core — runit run script (Void, Artix-runit).
+#
+#   mkdir -p /etc/sv/breeze-core
+#   install -m 0755 deploy/init/runit-run /etc/sv/breeze-core/run
+#   ln -s /etc/sv/breeze-core /var/service/
+#
+# runit needs the process in the FOREGROUND and `breeze-core serve` stays
+# there, so there is no --daemonize to avoid and no pidfile to keep in step.
+
+BREEZE_HOST=127.0.0.1
+BREEZE_PORT=8420
+BREEZE_OPTS=""
+# The packaged default first, then Void's own per-service override. Both are
+# read so that this one file works whether it arrived from the xbps package or
+# was installed by hand: `conf` is where a Void admin expects to put a local
+# change, and breeze-core.env is the file every other platform's package ships.
+[ -r /etc/breeze-core/breeze-core.env ] && . /etc/breeze-core/breeze-core.env
+[ -r ./conf ] && . ./conf
+
+# One variable, not four: AC_CONFIG_DIR names the directory and the four store
+# paths are derived from it. Override an individual file with AC_CONFIG,
+# AC_DEVICES, AC_PROGRAMS or AC_TIMERS if one of them lives elsewhere.
+export AC_CONFIG_DIR=/etc/breeze-core
+
+# No `cd` first. The web panel is compiled into the executable, so there is no
+# static/ directory for a relative path to resolve against — the most common
+# way to mis-deploy the Python line does not exist here.
+exec 2>&1
+exec chpst -u breeze:breeze \
+	/usr/bin/breeze-core serve --host "$BREEZE_HOST" --port "$BREEZE_PORT" $BREEZE_OPTS

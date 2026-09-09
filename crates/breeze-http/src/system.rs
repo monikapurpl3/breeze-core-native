@@ -393,15 +393,12 @@ pub fn snapshot(state: &AppState, connection: serde_json::Value) -> serde_json::
             "timer_tick_seconds": state.settings.timer_tick_seconds,
             "history_size": state.settings.history_size,
             "compression": compression_setting(),
-            // Reported even though they are no longer configurable.
-            //
-            // "Not settable" is not the same as "not a fact": these are still
-            // true of the running server, the panel displays them by name, and
-            // omitting them left blank rows where the reference showed values.
-            // The numbers are the constants 4.x fixed them at.
-            "code_ttl_seconds": breeze_auth::enroll::CODE_TTL_SECONDS,
-            "token_ttl_days": breeze_auth::enroll::TOKEN_TTL_DAYS,
-            "auth_skew_seconds": breeze_auth::signing::DEFAULT_SKEW_SECONDS,
+            // The live values, not the compile-time defaults. These were
+            // reported as constants in 4.0.1, which was accurate then and would
+            // now lie to anyone who has set them.
+            "code_ttl_seconds": state.settings.code_ttl_seconds,
+            "token_ttl_days": state.settings.token_ttl_days,
+            "auth_skew_seconds": state.settings.auth_skew_seconds,
             // Unconditional in 4.x, which is why there is no setting for it.
             "enrollment_lan_only": true,
             // No OpenAPI schema exists to expose, so this can only ever be false.

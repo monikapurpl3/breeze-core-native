@@ -1,0 +1,35 @@
+#!/bin/sh
+# Breeze Core — xbps REMOVE script (Void Linux).
+#
+# xbps calls this as: REMOVE <action> <pkgname> <version> <update> <arch>
+#   action = pre | post | purge
+#   update = yes when this removal is the first half of an upgrade
+set -e
+
+ACTION="$1"
+UPDATE="$4"
+
+case "$ACTION" in
+pre)
+	# Never on an upgrade. xbps removes the old version's files before
+	# unpacking the new ones and runs this script while doing it, so stopping
+	# unconditionally would take the service down on every `xbps-install -Su`.
+	[ "$UPDATE" = "yes" ] && exit 0
+	if [ -L /var/service/breeze-core ]; then
+		sv stop breeze-core >/dev/null 2>&1 || true
+		rm -f /var/service/breeze-core
+	fi
+	;;
+
+purge)
+	# Config, device tokens, programs and timers are deliberately KEPT, even
+	# here. A paired V3 unit's token and key were issued once by a cloud that
+	# no longer hands them out — losing config.json means re-pairing through
+	# the vendor app, so no packaging action deletes it.
+	if [ -d /etc/breeze-core ]; then
+		echo "breeze-core: kept /etc/breeze-core (config + device tokens)." >&2
+		echo "breeze-core: delete it manually for a full wipe: rm -rf /etc/breeze-core" >&2
+	fi
+	;;
+esac
+exit 0

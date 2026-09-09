@@ -1,0 +1,20 @@
+# /etc/conf.d/breeze-core — configuration for the Breeze Core service.
+#
+# OpenRC sources this file before running the init script, so this is the
+# normal place to configure the service on Gentoo. The other distributions'
+# packages use /etc/breeze-core/breeze-core.env instead; that file is NOT
+# installed here, and if you create one it is sourced by the init script AFTER
+# this file and therefore overrides it. Pick one.
+
+# The address to bind.
+#   - For direct LAN use, set this machine's LAN address (e.g. 192.168.1.10).
+#   - Keep 127.0.0.1 if a reverse proxy (nginx/Apache/Caddy) fronts it.
+#   - Never 0.0.0.0. See the wiki, "Exposing it safely".
+BREEZE_HOST=127.0.0.1
+BREEZE_PORT=8420
+
+# Extra arguments for `breeze-core serve`. Use --behind-proxy when a reverse
+# proxy terminates TLS and forwards the client address: without it every
+# request appears to come from the proxy, which is itself a private address, so
+# the LAN-only check on admin actions stops meaning anything.
+BREEZE_OPTS=""

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Breeze Core — runit LOG service, the companion to runit-run.
+#
+#   mkdir -p /etc/sv/breeze-core/log
+#   install -m 0755 deploy/init/runit-log-run /etc/sv/breeze-core/log/run
+#
+# Worth installing rather than skipping: `breeze-core serve` writes one line
+# per request to stdout, runit-run folds stderr into that, and without a log
+# service the lot ends up in runit's catch-all where nothing rotates it.
+
+mkdir -p /var/log/breeze-core
+chown breeze:breeze /var/log/breeze-core
+exec chpst -u breeze:breeze svlogd -tt /var/log/breeze-core

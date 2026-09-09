@@ -1,0 +1,77 @@
+#!/bin/sh
+# Breeze Core — xbps INSTALL script (Void Linux).
+#
+# xbps calls this as: INSTALL <action> <pkgname> <version> <update> <arch>
+#   action = pre | post
+#   update = yes on an upgrade, no on a first install
+#
+# Same job as the deb/rpm preinstall + postinstall pair, which xbps folds into
+# one file. The account has to exist before "post" chowns anything, and xbps
+# gives us no hook that runs between unpacking and here, so both halves live
+# in the "pre"/"post" branches below.
+set -e
+
+ACTION="$1"
+UPDATE="$4"
+
+case "$ACTION" in
+pre)
+	# Before the files land, for the same reason the deb does it in preinst:
+	# a chown against an account that does not exist yet fails mid-install.
+	if ! getent group breeze >/dev/null 2>&1; then
+		groupadd --system breeze
+	fi
+	if ! getent passwd breeze >/dev/null 2>&1; then
+		useradd --system --gid breeze --no-create-home \
+			--home-dir /etc/breeze-core --shell /usr/bin/nologin breeze
+	fi
+	;;
+
+post)
+	# /usr/bin/nologin, not /sbin/nologin: Void has no /sbin at all — it is a
+	# symlink to /usr/bin — and useradd stores whatever string it is given, so
+	# a wrong shell path here is only discovered the first time something tries
+	# to run it.
+	chown breeze:breeze /etc/breeze-core 2>/dev/null || true
+	chmod 750 /etc/breeze-core 2>/dev/null || true
+	if [ -f /etc/breeze-core/breeze-core.env ]; then
+		# Readable by the service, writable only by root: an admin edits it,
+		# the daemon only ever reads it.
+		chown root:breeze /etc/breeze-core/breeze-core.env 2>/dev/null || true
+		chmod 640 /etc/breeze-core/breeze-core.env 2>/dev/null || true
+	fi
+
+	# svlogd's directory, since the log service runs as breeze and cannot
+	# create it under /var/log itself.
+	mkdir -p /var/log/breeze-core 2>/dev/null || true
+	chown breeze:breeze /var/log/breeze-core 2>/dev/null || true
+
+	if [ "$UPDATE" = "yes" ]; then
+		# Restart only if the admin had actually enabled it. `sv` returns
+		# non-zero for a service with no supervise directory, which is exactly
+		# the "never enabled" case, so this is also the enabled test.
+		if [ -L /var/service/breeze-core ]; then
+			sv restart breeze-core >/dev/null 2>&1 || true
+		fi
+		exit 0
+	fi
+
+	cat <<'BANNER'
+
+  Breeze Core installed.
+
+  1. Pair your AC units (writes /etc/breeze-core/config.json):
+         sudo breeze-core pair
+  2. For direct LAN use, set this machine's LAN IP in
+         /etc/breeze-core/breeze-core.env   (BREEZE_HOST=...)
+     or keep 127.0.0.1 if a reverse proxy fronts it.
+  3. Enable the runit service:
+         sudo ln -s /etc/sv/breeze-core /var/service/
+
+  Then open http://<BREEZE_HOST>:8420 and pair a browser or the app.
+  Docs: https://github.com/monikapurpl3/breeze-core-native/wiki
+
+BANNER
+	;;
+esac
+exit 0

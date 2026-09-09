@@ -1,0 +1,19 @@
+#!/bin/sh
+# Breeze Core — s6 / s6-rc run script.
+# Place as the "run" file of an s6 longrun service directory.
+#
+# Like runit, s6 wants the process in the FOREGROUND, which is where
+# `breeze-core serve` already is.
+
+BREEZE_HOST=127.0.0.1
+BREEZE_PORT=8420
+BREEZE_OPTS=""
+[ -r /etc/breeze-core/breeze-core.env ] && . /etc/breeze-core/breeze-core.env
+
+# One variable, not four — the four store paths are derived from the directory.
+export AC_CONFIG_DIR=/etc/breeze-core
+
+# No working directory to set: the panel is compiled into the executable.
+exec 2>&1
+exec s6-setuidgid breeze \
+	/usr/bin/breeze-core serve --host "$BREEZE_HOST" --port "$BREEZE_PORT" $BREEZE_OPTS

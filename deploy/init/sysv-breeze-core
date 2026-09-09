@@ -1,0 +1,69 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          breeze-core
+# Required-Start:    $network $remote_fs
+# Required-Stop:     $network $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Breeze Core - self-hosted Midea AC control
+### END INIT INFO
+#
+# Legacy SysV init script, start-stop-daemon (Debian family).
+#
+#   install -m 0755 deploy/init/sysv-breeze-core /etc/init.d/breeze-core
+#   update-rc.d breeze-core defaults
+#
+# Prefer OpenRC, runit or s6 if you have the choice — they supervise the
+# process and rotate its log. This script does neither: if the server exits,
+# nothing restarts it.
+
+NAME=breeze-core
+USER=breeze
+BREEZE_HOST=127.0.0.1
+BREEZE_PORT=8420
+BREEZE_OPTS=""
+[ -r /etc/breeze-core/breeze-core.env ] && . /etc/breeze-core/breeze-core.env
+
+DAEMON=/usr/bin/breeze-core
+PIDFILE=/var/run/$NAME.pid
+LOGFILE=/var/log/$NAME.log
+
+export AC_CONFIG_DIR=/etc/breeze-core
+
+case "$1" in
+	start)
+		echo "Starting $NAME"
+		[ -e "$LOGFILE" ] || { : > "$LOGFILE"; chown "$USER" "$LOGFILE"; }
+		# --startas /bin/sh because the append redirect needs a shell. There is
+		# no --chdir: the panel is compiled into the binary, so there is no
+		# directory the process has to be standing in.
+		start-stop-daemon --start --background --make-pidfile --pidfile "$PIDFILE" \
+			--chuid "$USER" \
+			--startas /bin/sh -- -c \
+			"exec $DAEMON serve --host $BREEZE_HOST --port $BREEZE_PORT $BREEZE_OPTS >> $LOGFILE 2>&1"
+		;;
+	stop)
+		echo "Stopping $NAME"
+		# Plain TERM, no INT first. Every store is written to a temporary file
+		# in the same directory and rename(2)d over the real one, so a signal
+		# at any instant leaves either the old file or the new one, never a
+		# half-written one. The Python line asked for INT because uvicorn
+		# wanted it; nothing here traps either signal specially.
+		start-stop-daemon --stop --pidfile "$PIDFILE" --retry TERM/10/KILL/5 --oknodo
+		rm -f "$PIDFILE"
+		;;
+	restart|force-reload)
+		"$0" stop; sleep 2; "$0" start
+		;;
+	status)
+		if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+			echo "$NAME running (pid $(cat "$PIDFILE"))"
+		else
+			echo "$NAME not running"; exit 3
+		fi
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|status}"; exit 1
+		;;
+esac
+exit 0

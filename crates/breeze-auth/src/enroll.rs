@@ -29,7 +29,7 @@ use crate::verify::hash_secret;
 pub const CODE_TTL_SECONDS: u64 = 60;
 
 /// How long a minted credential lasts. 0 or less means non-expiring.
-pub const TOKEN_TTL_DAYS: i64 = 90;
+pub const TOKEN_TTL_DAYS: i64 = 3650;
 
 /// Outcomes of a poll, spelled as the clients expect.
 pub const PENDING: &str = "pending";
@@ -457,13 +457,30 @@ mod tests {
         assert!(record.expires_at.is_none());
     }
 
+    /// Ten years, not ninety days.
+    ///
+    /// It was ninety, inherited from the reference's default -- and on a LAN
+    /// deployment that default is the wrong way round: the alternative to a
+    /// long-lived credential is re-pairing every phone in the house on a timer,
+    /// and a credential that quietly expires locks somebody out of their own
+    /// heating. Anybody who wants ninety days can set AC_TOKEN_TTL_DAYS.
     #[test]
-    fn the_default_ttl_is_ninety_days() {
+    fn the_default_ttl_is_ten_years() {
         let mut e = EnrollmentService::default();
         let (_, code, _) = e.start("Phone", 1, None, NOW).unwrap();
         let record = e.approve(&code, NOW).unwrap();
         let expires = record.expires_at.expect("should expire");
-        assert_eq!(expires, NOW + 90.0 * 86400.0);
+        assert_eq!(expires, NOW + 3650.0 * 86400.0);
+    }
+
+    /// The lifetime is configurable again, and this pins that it is actually
+    /// plumbed through rather than only present in the struct.
+    #[test]
+    fn a_configured_ttl_is_honoured() {
+        let mut e = EnrollmentService::new(CODE_TTL_SECONDS, 90);
+        let (_, code, _) = e.start("Phone", 1, None, NOW).unwrap();
+        let record = e.approve(&code, NOW).unwrap();
+        assert_eq!(record.expires_at.unwrap(), NOW + 90.0 * 86400.0);
     }
 
     #[test]

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<maintainer type="person">
+		<email>monika.purpl3@gmail.com</email>
+		<name>Monika</name>
+	</maintainer>
+	<longdescription lang="en">
+		Breeze Core controls multiple Midea air conditioners over the local
+		network, with no cloud dependency after the initial pairing. It is a
+		REST API, a web control panel and a diagnostic CLI in one static
+		executable of about 2.5 MB with no runtime dependencies.
+
+		This is the prebuilt package. The binary is statically linked against
+		musl, so it is independent of the host's libc, USE flags and CHOST.
+	</longdescription>
+	<upstream>
+		<remote-id type="github">monikapurpl3/breeze-core-native</remote-id>
+		<doc lang="en">https://github.com/monikapurpl3/breeze-core-native/wiki</doc>
+	</upstream>
+</pkgmetadata>

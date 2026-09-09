@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Breeze Core — macOS launchd daemon.
+
+    sudo cp deploy/init/com.breeze.core.plist /Library/LaunchDaemons/
+    sudo chown root:wheel /Library/LaunchDaemons/com.breeze.core.plist
+    sudo launchctl load /Library/LaunchDaemons/com.breeze.core.plist
+
+  A LaunchDaemon, not a LaunchAgent: an agent only runs while its user is
+  logged in, which is the wrong lifetime for something a phone talks to. That
+  is also why UserName is set explicitly below — a daemon starts as root and
+  would otherwise stay there.
+
+  Create the account first:
+    sudo dscl . -create /Users/_breeze UserShell /usr/bin/false
+    sudo dscl . -create /Users/_breeze UniqueID 476
+    sudo dscl . -create /Users/_breeze PrimaryGroupID 476
+    sudo mkdir -p /usr/local/etc/breeze-core /usr/local/var/log
+    sudo chown -R _breeze /usr/local/etc/breeze-core
+
+  macOS has no systemd sandbox, so keep it bound to loopback or the LAN and
+  put a firewall in front. See the wiki, "Exposing it safely".
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.breeze.core</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/breeze-core</string>
+    <string>serve</string>
+    <!-- 127.0.0.1 assumes a reverse proxy. For direct LAN use put this
+         machine's own LAN address here, never 0.0.0.0. -->
+    <string>--host</string><string>127.0.0.1</string>
+    <string>--port</string><string>8420</string>
+  </array>
+  <!-- No WorkingDirectory. The web panel is compiled into the executable, so
+       there is nothing for a relative path to resolve against. -->
+  <key>UserName</key><string>_breeze</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>AC_CONFIG_DIR</key><string>/usr/local/etc/breeze-core</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <!-- Not /tmp: it is world-writable, and a log path there can be swapped for
+       a symlink to something a root-started daemon should not truncate. -->
+  <key>StandardOutPath</key><string>/usr/local/var/log/breeze-core.log</string>
+  <key>StandardErrorPath</key><string>/usr/local/var/log/breeze-core.log</string>
+</dict>
+</plist>
