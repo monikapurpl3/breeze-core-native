@@ -388,6 +388,9 @@ pub fn snapshot(state: &AppState, connection: serde_json::Value) -> serde_json::
             "behind_proxy": state.settings.behind_proxy,
             "min_auth_version": state.settings.min_auth_version,
             "worker_threads": state.settings.worker_threads,
+            // Both pools, because "it is slow" is answered by different
+            // numbers depending on which one is saturated.
+            "bg_workers": state.settings.bg_workers,
             "scheduler_tick_seconds": state.settings.sched_tick_seconds,
             "stream_tick_seconds": state.settings.stream_tick_seconds,
             "timer_tick_seconds": state.settings.timer_tick_seconds,

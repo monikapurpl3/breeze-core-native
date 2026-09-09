@@ -23,6 +23,9 @@ pub struct Settings {
     /// device working, which is the drop-in default.
     pub min_auth_version: u8,
     pub worker_threads: usize,
+    /// How many units the background state poller contacts concurrently. 1 is
+    /// the sequential walk every release before 4.0.2 did.
+    pub bg_workers: usize,
     /// Whether to trust `X-Forwarded-For`. Only true behind a real proxy:
     /// otherwise any client could claim a private address and approve its own
     /// pairing.
@@ -70,10 +73,37 @@ impl Settings {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(1),
+            // Both pools are clamped to at least 1 HERE, at the boundary,
+            // rather than only where they are used. /api/system reports these
+            // fields, and a diagnostic that prints 0 while the server is
+            // actually running one lane is telling you about the string in the
+            // env file instead of about the server -- which is the whole
+            // failure this endpoint exists to avoid.
             worker_threads: std::env::var("BREEZE_WORKERS")
                 .ok()
                 .and_then(|v| v.parse().ok())
+                .map(|n: usize| n.max(1))
                 .unwrap_or(8),
+            // How many units the background state poller contacts at once.
+            //
+            // Defaults to 1, which is exactly what every release before this
+            // one did: poll_once walks the units in order, paying a LAN
+            // round-trip each. That is fine for a few units and stops being
+            // fine when the walk takes longer than AC_STREAM_TICK, at which
+            // point every tick starts late and the stream falls behind the
+            // units it is reporting on.
+            //
+            // Raising it is safe because each unit has its own lock and its own
+            // cached connection, so two units are genuinely independent; what
+            // it must NOT be read as is "more background threads". The timer
+            // runner, the scheduler and the poller are one thread each because
+            // each is a singleton role — a second scheduler would fire every
+            // program twice.
+            bg_workers: std::env::var("BREEZE_BG_WORKERS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .map(|n: usize| n.max(1))
+                .unwrap_or(1),
             timer_tick_seconds: std::env::var("AC_TIMER_TICK")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -372,6 +402,7 @@ mod tests {
             bind: "127.0.0.1:8420".into(),
             min_auth_version: 1,
             worker_threads: 8,
+            bg_workers: 1,
             behind_proxy: false,
             timer_tick_seconds: 15,
             sched_tick_seconds: 30,

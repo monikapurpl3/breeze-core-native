@@ -181,36 +181,89 @@ pub fn spawn_poller(state: Arc<AppState>) -> std::thread::JoinHandle<()> {
 }
 
 /// One refresh of every unit, broadcasting whatever changed.
+///
+/// Units are contacted `BREEZE_BG_WORKERS` at a time, and the default of 1 is
+/// the plain sequential walk every release before 4.0.2 did. Each unit costs a
+/// LAN round-trip of roughly a second, so past a handful of them the walk
+/// outlasts `AC_STREAM_TICK` and every tick starts later than the last; fanning
+/// out fixes that without shortening the tick, which would only add traffic.
 pub fn poll_once(state: &AppState) {
-    for id in state.manager.known_units() {
-        let value = read_unit(state, id);
-        // Canonical form for change detection only. `serde_json` sorts object
-        // keys, which is exactly the reference's `json.dumps(..., sort_keys=True)`
-        // -- the string itself is never sent anywhere.
-        let canonical = serde_json::to_string(&value).unwrap_or_default();
+    let units = state.manager.known_units();
+    let lanes = lane_count(units.len(), state.settings.bg_workers);
 
-        let changed = {
-            let Ok(mut last) = state.stream.last.lock() else {
-                continue;
-            };
-            match last.get(&id) {
-                Some((previous, _)) if *previous == canonical => false,
-                _ => {
-                    last.insert(id, (canonical, value.clone()));
-                    true
-                }
-            }
-        };
-        // Recorded every tick, changed or not: a flat line is data, and this is
-        // the only sampler that runs on a clock rather than when somebody asks.
-        state.history.record(&value, crate::history::now_unix());
-
-        // Broadcast only on change: a unit whose temperature has not moved is
-        // not news, and waking every client every tick is what this feature
-        // exists to stop.
-        if changed {
-            state.stream.broadcast(("state", value));
+    if lanes <= 1 {
+        for id in units {
+            poll_one(state, id);
         }
+        return;
+    }
+
+    // Scoped threads, so each lane borrows &AppState directly instead of
+    // needing an Arc: the scope cannot outlive this call, which is the
+    // guarantee that makes the borrow sound. Lanes claim ids by index modulo
+    // lane count -- even, and with no shared queue to lock, which is worth
+    // having when every item costs about the same and there is nothing to steal.
+    std::thread::scope(|scope| {
+        let units = &units;
+        for lane in 0..lanes {
+            scope.spawn(move || {
+                for (i, id) in units.iter().enumerate() {
+                    if i % lanes == lane {
+                        poll_one(state, *id);
+                    }
+                }
+            });
+        }
+    });
+}
+
+/// How many lanes to actually run, given the units present and what was asked
+/// for.
+///
+/// Clamped at both ends, and the lower clamp is load-bearing rather than
+/// defensive: lanes is the modulus in `i % lanes`, so a configured `0` would
+/// divide by zero and take the poller thread down with it — leaving a server
+/// that answers every request but never streams an update again.
+fn lane_count(units: usize, requested: usize) -> usize {
+    // Never more lanes than units: eight threads for three units is five
+    // threads that exist to do nothing.
+    requested.max(1).min(units.max(1))
+}
+
+/// Read one unit, record it, and broadcast it if it moved.
+///
+/// Extracted so the sequential and fanned-out paths cannot drift: both call
+/// exactly this, and every shared structure it touches (`last`, `history`, the
+/// subscriber list) was already behind its own lock because the HTTP workers
+/// reach them too.
+fn poll_one(state: &AppState, id: u64) {
+    let value = read_unit(state, id);
+    // Canonical form for change detection only. `serde_json` sorts object
+    // keys, which is exactly the reference's `json.dumps(..., sort_keys=True)`
+    // -- the string itself is never sent anywhere.
+    let canonical = serde_json::to_string(&value).unwrap_or_default();
+
+    let changed = {
+        let Ok(mut last) = state.stream.last.lock() else {
+            return;
+        };
+        match last.get(&id) {
+            Some((previous, _)) if *previous == canonical => false,
+            _ => {
+                last.insert(id, (canonical, value.clone()));
+                true
+            }
+        }
+    };
+    // Recorded every tick, changed or not: a flat line is data, and this is
+    // the only sampler that runs on a clock rather than when somebody asks.
+    state.history.record(&value, crate::history::now_unix());
+
+    // Broadcast only on change: a unit whose temperature has not moved is
+    // not news, and waking every client every tick is what this feature
+    // exists to stop.
+    if changed {
+        state.stream.broadcast(("state", value));
     }
 }
 
@@ -489,6 +542,45 @@ mod tests {
         );
         stream.unsubscribe(id);
         assert_eq!(stream.subscriber_count(), 0);
+    }
+
+    #[test]
+    fn lane_count_is_clamped_at_both_ends() {
+        // A configured zero must never reach the modulus.
+        assert_eq!(lane_count(3, 0), 1, "0 lanes would divide by zero");
+        assert_eq!(lane_count(0, 0), 1);
+        // The default is a sequential walk.
+        assert_eq!(lane_count(3, 1), 1);
+        // Never more lanes than there are units to put in them.
+        assert_eq!(lane_count(3, 8), 3);
+        assert_eq!(lane_count(0, 8), 1, "no units still needs a valid modulus");
+        // And an honest request under the unit count is granted as asked.
+        assert_eq!(lane_count(10, 2), 2);
+        assert_eq!(lane_count(10, 10), 10);
+    }
+
+    #[test]
+    fn the_lanes_partition_the_units_exactly() {
+        // The failure this guards against is silent: a lane assignment that
+        // skips an index means one air conditioner simply stops appearing in
+        // the stream, with nothing logged and every other unit still updating.
+        for total in 0..13usize {
+            for requested in 0..11usize {
+                let lanes = lane_count(total, requested);
+                let mut times_polled = vec![0u32; total];
+                for lane in 0..lanes {
+                    for i in 0..total {
+                        if i % lanes == lane {
+                            times_polled[i] += 1;
+                        }
+                    }
+                }
+                assert!(
+                    times_polled.iter().all(|&n| n == 1),
+                    "total={total} requested={requested} lanes={lanes} gave {times_polled:?}"
+                );
+            }
+        }
     }
 
     #[test]

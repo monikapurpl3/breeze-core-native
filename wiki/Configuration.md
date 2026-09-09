@@ -53,7 +53,8 @@ admin approval restricted to the LAN, proxy headers distrusted.
 | `AC_TIMERS` | `<dir>/timers.json` | one-shot timers ([Timers](Timers)) |
 | `BREEZE_HOST` | `127.0.0.1` | address to bind |
 | `BREEZE_PORT` | `8420` | port to bind |
-| `BREEZE_WORKERS` | `8` | HTTP worker threads |
+| `BREEZE_WORKERS` | `8` | HTTP worker threads. A control blocks ~1.8 s on a unit, so this is how many slow requests fit in flight — but each unit is locked while its own request runs, so the useful ceiling is roughly the number of units you own |
+| `BREEZE_BG_WORKERS` | `1` | how many units the background state poller contacts **at once**. `1` is a sequential walk. Raise it when the walk stops fitting inside `AC_STREAM_TICK`. Not a count of background threads — see below |
 | `AC_SCHED_TICK` | `30` | seconds between scheduler passes |
 | `AC_TIMER_TICK` | `15` | seconds between timer due-checks |
 | `AC_STREAM_TICK` | `5` | seconds between state polls **while at least one client is streaming** |
@@ -105,6 +106,44 @@ BREEZE_OPTS=
 `serve` accepts and ignores unknown options rather than refusing to start: the
 variable is usually empty, and a service that died on an empty expansion would be
 a worse failure than a warning on an unrecognised flag.
+
+## Concurrency, and the two worker settings
+
+Breeze Core serves requests on a **fixed pool of threads** — `BREEZE_WORKERS`,
+default 8 — fed from a queue, plus exactly three background threads: the timer
+runner, the scheduler and the state poller.
+
+A pool rather than a thread per request, because a control call blocks for
+around 1.8 seconds waiting on a unit, so some concurrency is essential — and a
+thread per request would let anyone who can reach the port exhaust memory.
+
+**Eight is more than it sounds.** Every operation is a LAN round-trip to one
+*specific* unit, and each unit is locked while its own request runs. Two
+requests for the living room serialise however many workers exist, so the
+parallelism that helps is bounded by **how many units you own**, not by this
+number. Three units cannot keep eight workers busy.
+
+**`BREEZE_BG_WORKERS` is not a count of background threads.** Those three
+threads are singleton roles and have to stay that way — a second scheduler
+would fire every program twice. This setting is how many units the *state
+poller* contacts at once during one pass:
+
+| Units | `BREEZE_BG_WORKERS=1` (default) | Raised |
+|---|---|---|
+| 3 | ~3 s per pass, inside the 5 s tick | no benefit worth having |
+| 8 | ~8 s per pass — **longer than the tick** | `4` brings it to ~2 s |
+
+Once a pass takes longer than `AC_STREAM_TICK`, every tick starts later than
+the last and the stream lags the units it is reporting on. Raising this is the
+fix; shortening the tick is not, since that only adds traffic.
+
+Raising it is safe: each unit has its own lock and its own cached connection,
+so two units are genuinely independent.
+
+A streaming client never occupies a worker at all — each Server-Sent Events
+connection gets its own thread, specifically so a watching browser cannot sit
+in the pool. There is a ceiling of 64 simultaneous streams, and the 65th gets a
+refusal rather than a dropped socket.
 
 ## Timezone
 
