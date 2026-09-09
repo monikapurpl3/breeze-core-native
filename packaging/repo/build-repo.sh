@@ -67,6 +67,31 @@ stage() {
 [ -e "$PKG/breeze-core_${VER}_amd64.deb" ] || {
   echo "no packages for $VER — run packaging/nfpm/build-packages.sh first"; exit 1; }
 
+# Refuse to build a repository out of two versions at once.
+#
+# Every copy below globs on extension and architecture, never on version --
+# `cp .../pkg/*.deb`, `*."$a".rpm`, and so on. build-packages.sh deliberately
+# does NOT clear its output directory, because it takes an architecture list and
+# clearing it would delete the architectures this run is not building. The two
+# behaviours combine badly: after building 4.0.1 and later 4.0.2, out/pkg holds
+# both and the repository silently ships both, with a package count that
+# disagrees with the release page. Clients would still resolve the newer one, so
+# nothing would look wrong until somebody counted.
+#
+# The version is matched delimited by - or _ so that 4.0.10 is not mistaken for
+# a 4.0.1 package.
+vre="[-_]$(printf '%s' "$VER" | sed 's/\./\\./g')[-_]"
+stray="$(ls -1 "$PKG" 2>/dev/null | grep -Ev -- "$vre" || true)"
+if [ -n "$stray" ]; then
+  echo "packages from another version are sitting in $PKG:"
+  printf '%s\n' "$stray" | sed 's/^/  /'
+  echo
+  echo "this builder globs by extension, not by version, so they would all be"
+  echo "signed into the repository. Remove them and rebuild what you need:"
+  echo "  rm -rf $PKG && ./packaging/nfpm/build-packages.sh"
+  exit 1
+fi
+
 # --- keys (generated once; keep keys/ backed up and OUT of git) --------------
 mkdir -p "$KEYS"
 
