@@ -9,10 +9,10 @@ Two images. One to run, one to debug.
 
 **amd64 and arm64**, as one manifest — `docker pull` picks the right one.
 
-**Versioned tags only. There is no `latest`**, deliberately: the Python line's
-`latest` points at its Alpine image, and repointing it at a distroless one would
-change what `docker pull` gives anybody who has it in a compose file — no shell,
-a different entrypoint, `breeze-setup` gone. Ask for the version you want.
+**Versioned tags only. There is no `latest`**, deliberately. A `latest` on a
+daemon that controls heating is an upgrade nobody asked for at a moment nobody
+chose, and a compose file pinned to it changes underneath you. Ask for the
+version you want.
 
 > **The package is private, so pulling needs authentication:**
 >

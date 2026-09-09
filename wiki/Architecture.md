@@ -26,10 +26,9 @@ Three components share exactly one contract — the `/api/*` endpoints — and a
 otherwise fully decoupled. Delete either client and the API and the other client
 keep working.
 
-The difference from 3.x is underneath: there is no
-[msmart-ng](https://github.com/mill1000/midea-msmart) and no Python. The Midea
-LAN protocol is implemented directly, and the panel is bytes inside the
-executable rather than files on disk.
+The Midea LAN protocol is implemented directly here — the framing, the V3
+handshake, the encryption and discovery — and the panel is bytes inside the
+executable rather than files on disk. Both are described below.
 
 ## Seven crates
 
@@ -39,19 +38,20 @@ dependency. Nothing is circular, and nothing reaches for global state.
 | Crate | Depends on | Responsibility |
 |---|---|---|
 | `breeze-proto` | — | The Midea LAN protocol: V2/V3 framing, the handshake, encryption, discovery, and the AC command and response layout. |
-| `breeze-store` | — | The four store files, read and written **byte-compatibly with 3.x**. Also the shared `ControlRequest` and its bounds. |
+| `breeze-store` | — | The four store files, read and written **byte-compatibly with the format already on disk**. Also the shared `ControlRequest` and its bounds. |
 | `breeze-cloud` | — | Fetching a unit's V3 credentials from the vendor cloud, once, as a last resort. |
 | `breeze-auth` | `breeze-store` | The two-credential model: API key, v1 bearer tokens, v2 Ed25519 request signing, the enrolment handshake, the nonce cache. |
 | `breeze-device` | `breeze-proto` | Connection lifecycle, the per-unit cache and lock, LAN scanning. |
 | `breeze-http` | the above | The REST surface, the SSE stream, the scheduler and timer runners, the panel, `/metrics`. |
 | `breeze-core` | the above | The binary: argument parsing, `serve`, and every client subcommand. |
 
-**`breeze-store` exists to make the upgrade an upgrade.** Its whole job is
-reading and writing exactly the shapes the Python line did — including fields
-this implementation does not itself use, and including `null` for an absent
-optional rather than omitting the key, because the existing files record absent
-fields explicitly and a migration that rewrites every stored file is not one
-anybody should have to trust.
+**`breeze-store` exists so that an install can be upgraded rather than
+migrated.** Its whole job is reading and writing exactly the shapes already on
+disk — including fields this implementation never itself reads, and including
+`null` for an absent optional rather than omitting the key, because the stored
+files record absent fields explicitly. A migration that rewrites every file
+holding a paired unit's irreplaceable credentials is not one anybody should
+have to trust.
 
 ## The dependency list is the interesting part
 
@@ -115,10 +115,10 @@ runtime allocation, and answers `304` for an unchanged file.
 Generated rather than hand-listed on purpose: a file added to the panel cannot
 be silently left out of the binary.
 
-This is the one structural change a 3.x deployment can notice: there is no
-`static/` directory to edit in place. It is also why there is no
-`WorkingDirectory` requirement any more — the binary can run from anywhere,
-which is what makes a `scratch` container possible.
+Two consequences worth knowing. There is no `static/` directory to edit in
+place, so changing the panel means rebuilding. And there is no working
+directory to get wrong — the binary runs from anywhere, which is what makes a
+`FROM scratch` container possible at all.
 
 ## Extending it
 
@@ -141,7 +141,8 @@ The seams are deliberate; add work through them rather than widening a module.
 
 There is no integration harness and no mock server. What exists:
 
-- **476 unit tests**, mostly in `breeze-proto` and `breeze-store`, where the
+- **479 unit tests** across 18 suites, mostly in `breeze-proto` and
+  `breeze-store`, where the
   logic is pure and the answers are byte vectors.
 - **Reference byte vectors** for the protocol frames, taken from msmart-ng's own
   output rather than from our reading of it.
