@@ -65,7 +65,12 @@ cp "$SRC/$CAT/$PN/metadata.xml" "$PKGDIR/"
 
 # The version lives in the filename and reaches the ebuild body as ${PV}, so
 # the template needs no substitution — only a rename.
-cp "$SRC/$CAT/$PN/$PN.ebuild.in" "$PKGDIR/$PN-$VERSION.ebuild"
+# Gentoo revision: -r1, -r2 ... for a rebuild of the same upstream version.
+# PV stays 4.0.2 (only PVR carries the -rN), so SRC_URI still points at the
+# right release tarball while portage sees a newer package.
+REV="${BC_PORTAGE_REVISION:-}"
+EBUILD="$PN-$VERSION${REV:+-r$REV}.ebuild"
+cp "$SRC/$CAT/$PN/$PN.ebuild.in" "$PKGDIR/$EBUILD"
 
 # --- files/, from the canonical sources -------------------------------------
 cp "$SRC/files/breeze-core.confd"          "$PKGDIR/files/breeze-core.confd"
@@ -120,6 +125,7 @@ docker run --rm \
   -v "$MOUNT/$OUT:/overlay-ro:ro" \
   -v "$MOUNT/$STAGEDIST:/distdir:ro" \
   -e VERSION="$VERSION" \
+  -e EBUILD="$EBUILD" \
   "$STAGE3" bash -eu -c '
     exec 3>&1 1>&2
     # The overlay mount is read-only and the Manifest is written next to the
@@ -144,7 +150,7 @@ EOF
     echo "FEATURES=\"-sandbox -usersandbox -ipc-sandbox -network-sandbox -pid-sandbox digest\"" >> /etc/portage/make.conf
 
     cd /overlay/app-misc/breeze-core-bin
-    ebuild "breeze-core-bin-${VERSION}.ebuild" manifest
+    ebuild "${EBUILD}" manifest
     echo "--- Manifest ---"
     cat Manifest
     tar -cf - -C /overlay . >&3

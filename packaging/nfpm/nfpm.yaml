@@ -23,6 +23,12 @@ version: ${BC_VERSION}
 # nfpm's default schema has rejected shapes this project has used before, and a
 # packaging run is a poor place to discover a version-string opinion.
 version_schema: none
+# The package release, the trailing -N in breeze-core-4.0.2-1. Bumped when the
+# packaged bytes change but the program version does not -- which is the only
+# way a package manager can see a rebuild as newer. Without it, re-releasing a
+# fixed 4.0.2 leaves every existing install on the broken one, because dnf and
+# apt compare identities and this one would be identical.
+release: ${BC_RELEASE}
 section: utils
 priority: optional
 maintainer: monikapurpl3 <monikapurpl3@users.noreply.github.com>

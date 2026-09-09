@@ -150,8 +150,16 @@ RPM_CASE="$(cat <<'CASE'
   # Asked of rpm rather than read out of a header tag: an RSA signature lands in
   # RSAHEADER and an ed25519 one in DSAHEADER, so querying the wrong tag reports
   # "(none)" for a package that is perfectly well signed. `rpm -K` just answers.
-  curl -fsSL -o /tmp/p.rpm "$BASE/rpm/x86_64/breeze-core-$VER-1.x86_64.rpm"
-  rpm -K /tmp/p.rpm | tee /tmp/k
+  # Fetched by dnf rather than by a constructed URL. The filename carries the
+  # package RELEASE too (breeze-core-4.0.2-2.x86_64.rpm), and hardcoding -1
+  # here meant the first rebuilt release 404'd this check while every other
+  # check still passed -- a signature test that silently stops testing the
+  # signature is worse than not having one.
+  dnf -q -y download breeze-core --destdir /tmp/dl >/dev/null 2>&1 \
+    || dnf -q -y install --downloadonly --downloaddir /tmp/dl breeze-core >/dev/null 2>&1
+  ls /tmp/dl/breeze-core-*.rpm >/dev/null 2>&1 || {
+    echo "   !! could not download the rpm to check its signature"; exit 1; }
+  rpm -K /tmp/dl/breeze-core-*.rpm | tee /tmp/k
   grep -q "signatures OK" /tmp/k
 
   echo "-- with the key, it installs"
@@ -274,11 +282,13 @@ run_case gentoo alpine:3.20 '
   echo "   cloned"
 
   echo "-- carrying this version ebuild and a complete Manifest"
-  test -f "/tmp/aspic/app-misc/breeze-core-bin/breeze-core-bin-$VER.ebuild" || {
+  # Globbed: a rebuild of the same upstream version carries a Gentoo revision
+  # suffix (breeze-core-bin-4.0.2-r1.ebuild), and an exact name would fail then.
+  ls /tmp/aspic/app-misc/breeze-core-bin/breeze-core-bin-"$VER"*.ebuild >/dev/null 2>&1 || {
     echo "   !! no ebuild for $VER"; ls /tmp/aspic/app-misc/breeze-core-bin; exit 1; }
   n=$(grep -c "^DIST " /tmp/aspic/app-misc/breeze-core-bin/Manifest || echo 0)
   [ "$n" = 6 ] || { echo "   !! Manifest has $n DIST lines, expected 6"; exit 1; }
-  echo "   breeze-core-bin-$VER.ebuild, 6 architectures in the Manifest"
+  echo "   $(basename $(ls /tmp/aspic/app-misc/breeze-core-bin/breeze-core-bin-"$VER"*.ebuild | head -1)), 6 architectures in the Manifest"
 
   echo "-- the account ebuilds must be there too"
   test -f /tmp/aspic/acct-user/breeze/breeze-0.ebuild || { echo "   !! no acct-user"; exit 1; }

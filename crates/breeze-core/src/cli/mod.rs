@@ -72,12 +72,22 @@ pub enum Command {
 /// Parse `argv`, minus the program name.
 pub fn parse(args: &[String]) -> Result<Command, String> {
     let Some(first) = args.first().map(String::as_str) else {
-        // Bare invocation: serve, as an init script would.
-        return Ok(Command::Serve {
-            host: None,
-            port: None,
-            behind_proxy: false,
-        });
+        // Bare invocation prints the usage, which is what the reference did.
+        //
+        // It used to default to `serve`, on the theory that an init script
+        // might simply exec the binary. Nothing does: all eleven init scripts
+        // and templates here pass `serve` explicitly — systemd, OpenRC, procd,
+        // runit, s6, SysV, supervisord, launchd and the three BSD rc files —
+        // so the default was load-bearing for nobody and the cost was paid by
+        // people at a shell instead.
+        //
+        // What that cost looked like: a curious `breeze-core` tried to start a
+        // server, and so either collided with the running one ("Address in
+        // use") or failed to read a config.json the caller has no permission
+        // for ("Permission denied"). Neither message says anything about
+        // serving, so the binary looked like it needed root to print its own
+        // help. Starting a server is not a thing to do by accident.
+        return Ok(Command::Help);
     };
     let rest = &args[1..];
 
@@ -327,16 +337,46 @@ mod tests {
     }
 
     #[test]
-    fn no_arguments_means_serve() {
-        // An init script that simply execs the binary must keep working.
-        assert!(matches!(
-            parse(&[]).unwrap(),
-            Command::Serve {
-                host: None,
-                port: None,
-                behind_proxy: false
-            }
-        ));
+    fn no_arguments_prints_the_usage() {
+        // It used to serve, which meant a curious `breeze-core` at a shell
+        // tried to start a second server and failed with "Address in use" or
+        // "Permission denied" -- neither of which mentions serving, so the
+        // binary looked like it needed root to show its own help.
+        //
+        // Nothing depended on the old behaviour: every init script and
+        // template here passes `serve` explicitly.
+        assert!(matches!(parse(&[]).unwrap(), Command::Help));
+    }
+
+    #[test]
+    fn every_shipped_init_script_passes_serve_explicitly() {
+        // The guard for the test above. If someone adds an init template that
+        // bare-execs the binary, this fails and says so, rather than the
+        // service silently printing usage and exiting 0 at boot.
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+        let scripts = [
+            "packaging/nfpm/breeze-core.service",
+            "packaging/nfpm/breeze-core.initd",
+            "packaging/nfpm/breeze-core.init",
+            "packaging/bsd/rc.freebsd",
+            "packaging/bsd/rc.netbsd",
+            "packaging/bsd/rc.openbsd",
+            "deploy/init/runit-run",
+            "deploy/init/s6-run",
+            "deploy/init/sysv-breeze-core",
+            "deploy/init/supervisor-breeze-core.conf",
+            "deploy/init/com.breeze.core.plist",
+        ];
+        for rel in scripts {
+            let path = std::path::Path::new(root).join(rel);
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                continue; // not a packaging checkout; nothing to check
+            };
+            assert!(
+                text.contains("serve"),
+                "{rel} does not pass `serve`, so it would print usage and exit"
+            );
+        }
     }
 
     #[test]

@@ -28,7 +28,17 @@ impl Mode {
 
 #[derive(Debug)]
 pub enum StoreError {
-    Io(std::io::Error),
+    /// Something went wrong reaching the file. **Carries the path**, because a
+    /// bare `std::io::Error` does not: an unreadable config.json surfaced as
+    /// `breeze-core: Permission denied (os error 13)` and nothing else, which
+    /// names neither the file nor even the fact that a file was involved.
+    ///
+    /// There is deliberately no `From<std::io::Error>` impl. It could not
+    /// supply a path, so `?` would go on quietly producing pathless errors.
+    Io {
+        path: String,
+        source: std::io::Error,
+    },
     /// The file exists but is not the JSON we expect.
     Parse {
         path: String,
@@ -39,7 +49,21 @@ pub enum StoreError {
 impl core::fmt::Display for StoreError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Io(e) => write!(f, "{e}"),
+            Self::Io { path, source } => {
+                write!(f, "{path}: {source}")?;
+                // The likeliest cause, said out loud. This is what a person
+                // gets for running the server as themselves rather than as the
+                // service account, and "Permission denied" alone sends them to
+                // chmod when the answer is sudo.
+                if source.kind() == std::io::ErrorKind::PermissionDenied {
+                    write!(
+                        f,
+                        "\n  note: the store files belong to the service account \
+                         (breeze). Run this with sudo, or as that user."
+                    )?;
+                }
+                Ok(())
+            }
             Self::Parse { path, source } => write!(f, "{path} is not valid: {source}"),
         }
     }
@@ -47,9 +71,11 @@ impl core::fmt::Display for StoreError {
 
 impl std::error::Error for StoreError {}
 
-impl From<std::io::Error> for StoreError {
-    fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
+/// Attach a path to an IO failure. Curried, so it drops into `.map_err(…)`.
+fn io_at(path: &Path) -> impl Fn(std::io::Error) -> StoreError + '_ {
+    move |source| StoreError::Io {
+        path: path.display().to_string(),
+        source,
     }
 }
 
@@ -79,7 +105,7 @@ pub fn load<T: DeserializeOwned + Default>(path: impl AsRef<Path>) -> Result<T, 
             })
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(T::default()),
-        Err(e) => Err(StoreError::Io(e)),
+        Err(e) => Err(io_at(path)(e)),
     }
 }
 
@@ -92,7 +118,7 @@ pub fn load<T: DeserializeOwned + Default>(path: impl AsRef<Path>) -> Result<T, 
 pub fn save<T: Serialize>(path: impl AsRef<Path>, value: &T, mode: Mode) -> Result<(), StoreError> {
     let path = path.as_ref();
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent).map_err(io_at(parent))?;
     }
     let text = to_json(value).map_err(|source| StoreError::Parse {
         path: path.display().to_string(),
@@ -100,10 +126,10 @@ pub fn save<T: Serialize>(path: impl AsRef<Path>, value: &T, mode: Mode) -> Resu
     })?;
 
     let tmp = path.with_extension("tmp");
-    std::fs::write(&tmp, text.as_bytes())?;
+    std::fs::write(&tmp, text.as_bytes()).map_err(io_at(&tmp))?;
     set_mode(&tmp, mode)?;
     // Rename is atomic within a filesystem, and replaces the target on Unix.
-    std::fs::rename(&tmp, path)?;
+    std::fs::rename(&tmp, path).map_err(io_at(path))?;
     set_mode(path, mode)?;
     Ok(())
 }
@@ -111,7 +137,8 @@ pub fn save<T: Serialize>(path: impl AsRef<Path>, value: &T, mode: Mode) -> Resu
 #[cfg(unix)]
 fn set_mode(path: &Path, mode: Mode) -> Result<(), StoreError> {
     use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode.bits()))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode.bits()))
+        .map_err(io_at(path))?;
     Ok(())
 }
 
@@ -164,6 +191,36 @@ mod tests {
         let err = load::<TimersDoc>(&p).unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("bad.json"), "unhelpful message: {msg}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn an_unreadable_file_names_the_file_and_suggests_sudo() {
+        // The reported symptom was `breeze-core: Permission denied (os error
+        // 13)` and nothing else -- no path, no hint that a file was even
+        // involved, so it read as "this binary needs root to run at all".
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempdir();
+        let p = dir.join("locked.json");
+        std::fs::write(&p, "{}").unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+        let outcome = load::<TimersDoc>(&p);
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600)).unwrap();
+
+        // Root reads a 0000 file happily, so the assertions below would prove
+        // nothing there. Detected by outcome rather than by asking for the uid,
+        // which keeps this crate free of a libc dependency for one test.
+        let Err(err) = outcome else {
+            return;
+        };
+        let msg = err.to_string();
+
+        assert!(msg.contains("locked.json"), "does not name the file: {msg}");
+        assert!(
+            msg.contains("sudo"),
+            "a permission error should say what to do about it: {msg}"
+        );
     }
 
     #[test]

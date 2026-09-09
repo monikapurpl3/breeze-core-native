@@ -138,17 +138,43 @@ def get(base, path, key, token=None, method="GET", body=None):
 
 
 def enrol(base, key, label):
-    """A v1 bearer credential, so the comparison is not about signing."""
+    """A v1 bearer credential, so the comparison is not about signing.
+
+    Returns (token, token_id). The token_id is what revoke() needs, and
+    forgetting to carry it back out of here is how this harness came to leave
+    thirty-odd credentials on a production server -- one per run, each one a
+    real, working, never-expiring credential, until `breeze-core devices` was
+    pages long and the maintainer's actual phones were lost in the noise.
+    """
     s, raw = get(base, "/api/auth/enroll/start", key, method="POST",
                  body={"label": label, "auth_version": 1})
     if s != 200:
-        return None
+        return None, None
     start = json.loads(raw)
     get(base, "/api/auth/enroll/approve", key, method="POST",
         body={"code": start["user_code"]})
     s, raw = get(base, "/api/auth/enroll/poll", key, method="POST",
                  body={"session_id": start["session_id"]})
-    return json.loads(raw).get("device_token") if s == 200 else None
+    if s != 200:
+        return None, None
+    got = json.loads(raw)
+    return got.get("device_token"), got.get("token_id")
+
+
+def revoke(base, key, token_id, what):
+    """Give a credential back. Best-effort and loud about failing.
+
+    Admin routes are LAN-only, so this works from the same place the enrolment
+    was approved from and nowhere else. A failure here is worth a line on
+    stderr rather than a silent leak: the whole point is that the harness
+    leaves nothing behind.
+    """
+    if not token_id:
+        return
+    s, _ = get(base, f"/api/auth/devices/{token_id}", key, method="DELETE")
+    if s not in (200, 204, 404):
+        print(f"  !! could not revoke the {what} credential {token_id} "
+              f"(HTTP {s}) -- revoke it by hand", file=sys.stderr)
 
 
 def jtype(v):
@@ -236,8 +262,8 @@ def main():
     key = cfg["api_key"]
     units = [str(u["id"]) for u in cfg.get("units", [])]
 
-    tr = enrol(args.rust, key, "differential")
-    tp = enrol(args.python, key, "differential")
+    tr, tr_id = enrol(args.rust, key, "differential")
+    tp, tp_id = enrol(args.python, key, "differential")
     if not tr or not tp:
         print("could not enrol against both servers", file=sys.stderr)
         return 2
@@ -273,6 +299,20 @@ def main():
             ("GET", f"/api/units/{u}/history", None),
         ]
 
+    try:
+        checked, findings = run_cases(args, key, tr, tp, cases)
+    finally:
+        # In a finally, so an exception or a Ctrl-C still hands the credentials
+        # back. Not doing this is what filled a production devices.json with
+        # thirty-odd "differential" credentials -- one per run, each of them
+        # real, working and non-expiring, until the maintainer's actual phones
+        # were lost among them.
+        revoke(args.rust, key, tr_id, "4.x")
+        revoke(args.python, key, tp_id, "reference")
+    return report(checked, findings)
+
+
+def run_cases(args, key, tr, tp, cases):
     findings = []
     checked = 0
     for method, path, body in cases:
@@ -292,7 +332,10 @@ def main():
                                  (rb or b"")[:60].decode("utf8", "replace")))
             continue
         compare(label, ja, jb, findings)
+    return checked, findings
 
+
+def report(checked, findings):
     print(f"compared {checked} requests against the reference\n")
     expected, real = [], []
     for fi in findings:

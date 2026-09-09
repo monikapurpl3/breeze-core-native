@@ -15,6 +15,10 @@ cd "$REPO"
 BIN="packaging/out/bin"
 OUT="packaging/out/pkg"
 VERSION="$(grep -m1 '^version' crates/breeze-core/Cargo.toml | cut -d'"' -f2)"
+# Package release -- the trailing -N. Bump it when the packaged bytes change
+# but the version does not, so a package manager can see the rebuild as newer:
+#   BC_RELEASE=2 ./packaging/nfpm/build-packages.sh
+RELEASE="${BC_RELEASE:-1}"
 
 # label | nfpm arch | OpenWrt arch labels (space-separated, or "-")
 #
@@ -99,6 +103,7 @@ while IFS='|' read -r label nfpm_arch owrt; do
   docker run --rm \
     -v "$MOUNT:/work:ro" \
     -e BC_VERSION="$VERSION" \
+    -e BC_RELEASE="$RELEASE" \
     -w /work \
     bc-nfpm sh -eu -c "
       exec 3>&1 1>&2

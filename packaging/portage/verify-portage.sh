@@ -89,7 +89,13 @@ if [ $? -ne 0 ]; then fail=$((fail+1)); fi
 # it is unreachable in a normal amd64 test.
 echo
 echo "=== 2. the pkg_pretend CHOST guard"
-guard="$(sed -n '/^pkg_pretend()/,/^}/p' "$PKGDIR/breeze-core-bin-$VERSION.ebuild")"
+# Globbed, not named: the ebuild carries a Gentoo revision suffix
+# (breeze-core-bin-4.0.2-r1.ebuild) whenever the same upstream version is
+# rebuilt, and naming it exactly would fail the moment that happens.
+EBUILD_FILE="$(ls -1 "$PKGDIR"/breeze-core-bin-"$VERSION"*.ebuild 2>/dev/null | head -1)"
+[ -n "$EBUILD_FILE" ] || { echo "no ebuild for $VERSION in $PKGDIR"; exit 1; }
+echo "    $(basename "$EBUILD_FILE")"
+guard="$(sed -n '/^pkg_pretend()/,/^}/p' "$EBUILD_FILE")"
 [ -n "$guard" ] || bad "could not extract pkg_pretend from the ebuild"
 
 try_guard() {
