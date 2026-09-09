@@ -21,3 +21,22 @@
 # line fails with ": command not found".
 packaging/bsd/rc.*         text eol=lf
 packaging/opnsense/files/** text eol=lf
+
+# Same hazard again, for the init templates and the two new packagers. None of
+# these has an extension for the rules above to match on, and all of them are
+# executed or sourced on a non-Windows host:
+#
+#   deploy/init/*        installed as an init script (runit's run, an s6 run,
+#                        /etc/init.d, a launchd plist)
+#   xbps INSTALL/REMOVE  copied INTO the .xbps and run by xbps on Void
+#   packaging/portage/** ebuilds are bash sourced by portage; breeze-core.confd
+#                        is sourced by OpenRC, where a trailing CR would become
+#                        part of BREEZE_HOST
+#
+# A CRLF checkout of any of them fails on its first line with
+# "\r: command not found", or binds a host address with a carriage return in
+# it, and reads as a corrupt file rather than a checkout artefact.
+deploy/init/**          text eol=lf
+packaging/xbps/INSTALL  text eol=lf
+packaging/xbps/REMOVE   text eol=lf
+packaging/portage/**    text eol=lf
