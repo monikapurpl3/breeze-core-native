@@ -248,14 +248,24 @@ usage:
   breeze-core login [--base-url URL]
   breeze-core --version
 
-  With no arguments at all, it serves -- so an init script may just exec it.
+start here:
+  pair       find the air conditioners on your LAN and write config.json.
+             The only command that does not need a running server.
+  serve      run the server. This is what the service does for you.
+  login      enrol this machine's CLI, so the commands below need no flags.
 
-  `pair` finds the air conditioners on the LAN and writes config.json; it is the
-  one command that needs no running server. Everything else talks to one over
-  its API and enrols itself the first time. `approve`, `devices` and `revoke`
-  are the admin side of that and must come from the local network; they read the
-  API key from --config when it is given, so they work on the server without a
-  profile of their own.
+day to day:
+  control    set a unit:  breeze-core control 'living room' heat 22
+  units      list the configured units and their state
+  diag       check a running server, end to end
+
+admin, from the local network only:
+  approve    approve a pairing code somebody is looking at
+  devices    list enrolled clients
+  revoke     revoke one, by the token id `devices` shows
+
+  These three read the API key from --config, so they work on the server
+  itself without a credential of their own.
 
 Run `breeze-core control --help` for the control grammar.",
         env!("CARGO_PKG_VERSION")
