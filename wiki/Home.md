@@ -9,21 +9,13 @@ This wiki is the full documentation. The
 [repository README](https://github.com/monikapurpl3/breeze-core-native) is the
 short version.
 
-**4.x is the same project, reimplemented in Rust.** Same REST API, same store
-files, same `AC_*` variables, same service name, same panel, same Android app —
-it is meant to be installed *over* a 3.x deployment rather than migrated to. One
-static executable, around 2.5 MB, with the panel compiled into it and no
-interpreter and no runtime dependencies at all. If you are arriving from the
-Python line, read [Coming from the Python line](Coming-from-the-Python-line)
-first; everything else on this wiki describes 4.x.
-
 ---
 
 ## Pick your starting point
 
 | If you… | Go to |
 |---|---|
-| already run **Breeze Core 3.x** | [Coming from the Python line](Coming-from-the-Python-line) |
+| already run **an earlier version** | [Upgrading to 4.x](Upgrading-to-4) |
 | run **Linux** and want updates through your package manager | [Installing from packages](Installing-from-packages) |
 | already run **containers** | [Installing with containers](Installing-with-containers) |
 | run **Windows** | [Installing on Windows](Installing-on-Windows) |
@@ -45,15 +37,13 @@ Delete any client and the rest keeps working.
 | Component | What it is |
 |---|---|
 | **Server** | A Rust binary — the only stateful part, and a standalone REST API that neither knows nor cares that a UI exists. |
-| **Web panel** | The same vanilla-JS ES modules as before, now compiled into the executable. Still just an HTTP client. |
+| **Web panel** | Vanilla-JS ES modules, compiled into the executable. Just an HTTP client. |
 | **CLI** | `breeze-core` itself: pairing, control, diagnostics, the admin side of enrolment. See [Command-line tools](Command-line-tools). |
 | **Breeze for Android** | Optional native app: one unit per screen, home-screen widgets, Android Auto, programs, diagnostics. [Its own repo ↗](https://github.com/monikapurpl3/breeze) |
 
-The Midea LAN protocol — discovery, the V3 handshake, the framing, the
-encryption — is implemented directly in `breeze-proto`, so there is no
-[msmart-ng](https://github.com/mill1000/midea-msmart) and no Python underneath
-any more. HTTP, TLS, JSON and the scheduler are the standard library plus a small
-set of crates. Layer by layer: [Architecture](Architecture).
+One static executable, around 2.5 MB, with the panel compiled into it and no
+interpreter and no runtime dependencies at all. Layer by layer:
+[Architecture](Architecture).
 
 ## What you get out of the box
 
@@ -71,9 +61,8 @@ set of crates. Layer by layer: [Architecture](Architecture).
 - **Real diagnostics** — `breeze-core diag` checks auth posture, per-unit
   latency, capability probing and input validation, and the same battery is
   mirrored in the app.
-- **One file to install** — no interpreter, no virtualenv, no wheels, no
-  `python3-*` dependencies. Every Linux package declares **zero dependencies**,
-  and so do all three BSD packages.
+- **One file to install** — every package, on every platform, declares **zero
+  dependencies**. Nothing to satisfy, nothing to keep up to date alongside it.
 - **Packages, not tarballs** — deb, rpm, pacman, apk, OpenWrt ipk, FreeBSD,
   NetBSD, OpenBSD, an OPNsense plugin, a Windows installer, container images,
   and a signed repository so updates arrive the normal way.
@@ -82,29 +71,6 @@ set of crates. Layer by layer: [Architecture](Architecture).
 
 No account, no telemetry, no cloud callbacks after pairing, no "pro" tier. It is
 [AGPL-3.0](https://github.com/monikapurpl3/breeze-core-native/blob/main/LICENSE).
-
-## What the rewrite actually changed
-
-Nothing about the contract, and quite a lot about what it costs to run. The
-detail is in [Version history](Version-history) and
-[Ports and architectures](Ports-and-architectures); the summary:
-
-| | 3.2.0 (Python) | 4.x (Rust) |
-|---|---|---|
-| what installs | interpreter + ~40 wheels, or a ~25 MB frozen bundle | one ~2.5 MB executable |
-| package dependencies | `python312` / `python311` and friends | **none** |
-| resident memory | ~62 MB | **~2.4 MB** |
-| disk installed | ~59 MB | **~3 MB** |
-| architectures with real packages | amd64, arm64, armhf | those **plus riscv64, ppc64le, s390x** |
-| ppc64le / s390x / riscv64 | proof-of-concept, built under QEMU, frozen | tier-1, cross-built, published every release |
-| OpenBSD | source install into a virtualenv | a signed `pkg_add` package |
-| containers | five images, 137–291 MB | two, **5.9 MB** — see [Installing with containers](Installing-with-containers) |
-| build | emulate the target, compile everything on it | cross-compile with `cargo-zigbuild`, no emulation |
-
-<sub>Both figures are from the same x86-64 server, running the same three
-paired units, before and after the in-place upgrade. What `dnf` said while doing
-it: <i>Total size of inbound packages is 1 MiB… After this operation, 56 MiB
-will be freed (install 3 MiB, remove 59 MiB).</i></sub>
 
 ## What it is not
 

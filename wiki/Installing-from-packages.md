@@ -5,10 +5,9 @@ like anything else. Snippets per distribution live on
 [the aspic index](https://aspic.salataputarica.hr.eu.org/); this page is what
 they do and what to check afterwards.
 
-**Every package declares no dependencies at all.** Not "few" — none. There is
-one static executable with the panel compiled into it, so there is no
-interpreter, no virtualenv, no wheels and no `python3-*` to satisfy. The same
-file installs on Debian 12, Alpine and RHEL 8.
+**Every package declares no dependencies at all.** Not "few" — none. One static
+executable with the panel compiled into it, and the same file installs on
+Debian 12, Alpine and RHEL 8 alike.
 
 ## What you get
 
@@ -44,10 +43,10 @@ package manager will accept. That is what the key in each snippet is for, and it
 is why the snippets add a key rather than passing `--allow-unsigned` or the
 equivalent.
 
-The repository key is **RSA-4096 and not ed25519** for one concrete reason: rpm
-4.14, which is what RHEL/AlmaLinux/Rocky 8 ship, cannot import an ed25519 GPG
-key at all. Every release is verified against AlmaLinux 8 as well as 9 for
-exactly that.
+The GPG key is RSA-4096 rather than ed25519 because rpm 4.14 — what
+RHEL/AlmaLinux/Rocky 8 ship — cannot import an ed25519 key at all. Every release
+is installed and started in a container of each supported distribution,
+AlmaLinux 8 included, before it is published.
 
 ## After installing
 
@@ -84,12 +83,11 @@ Full walkthrough of pairing, including what to do about V3 units:
 
 ## Upgrading
 
-Whatever your package manager already does. The package name does not change
-between 3.x and 4.x, so an upgrade is an upgrade: your config, device tokens,
+Whatever your package manager already does — your config, device tokens,
 programs and timers are untouched and the service stays enabled.
 
-Coming from the Python line, there is one extra step — swapping the repository —
-and a script that does it: [Coming from the Python line](Coming-from-the-Python-line).
+Coming from a version before 4.x, there is one extra step (swapping the
+repository) and a script that does it: [Upgrading to 4.x](Upgrading-to-4).
 
 **Stop the service before a manual upgrade.** If something else still holds port
 8420 the new server cannot bind, and the old one goes on answering
@@ -107,10 +105,9 @@ liveness: `breeze-core --version`.
 | `/etc/init.d/breeze-core` | OpenRC (apk) or procd (OpenWrt) |
 | `/usr/lib/breeze-core/breeze-core` | a **symlink** to the above, kept for compatibility |
 
-That symlink is where the Python package put its executable, and it is kept
-because the reference's own unit file, its OpenRC script and a year of people's
-scripts all name that path. A drop-in replacement should not break a path it can
-keep for the cost of one link.
+That symlink is where earlier versions put the executable. It is kept because
+service units and people's own scripts name that path, and breaking it would cost
+more than the link does.
 
 `/usr/bin`, not `/usr/lib` — and on a SELinux system that is not cosmetic:
 `/usr/lib` is labelled `lib_t`, which gets no domain transition, so a service

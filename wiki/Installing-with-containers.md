@@ -24,13 +24,10 @@ a different entrypoint, `breeze-setup` gone. Ask for the version you want.
 > published; until then the images are visible only to accounts that have been
 > granted access.
 
-The Python line shipped five images: Alpine, Alpine + nginx, and two Red Hat UBI
-variants, from 137 MB to 291 MB. Every one of them existed because **an
-interpreter needs a distribution around it** — the base decided which wheels
-would install and which CPUs the compiled extensions would run on. One static
-binary has no such opinion, so the base stops being a compatibility decision
-and `scratch` becomes the honest answer. The distroless image is **23× smaller
-than the Alpine one it replaces and 49× smaller than UBI**.
+The image is built `FROM scratch`: one static executable, the timezone
+database, and an empty config directory. No shell, no package manager, no libc,
+nothing to patch. If you are replacing an image from an earlier version, see
+[What changed in 4.x](What-changed-in-4).
 
 ## Start it
 
@@ -105,8 +102,7 @@ is the image default; the host side is where you should be specific.
 
 That is the point of a distroless image, and it changes two things.
 
-**`docker exec breeze-setup` is gone.** The binary is the entrypoint, so
-subcommands run directly:
+**The binary is the entrypoint**, so subcommands run directly:
 
 ```sh
 docker run --rm -it --network host -v breeze-config:/etc/breeze-core \
@@ -152,8 +148,8 @@ failure that actually happens.
 | **no** `/etc/passwd` | it runs as numeric uid `1001:1001`, which needs no entry |
 | **no** shell, package manager, or writable filesystem outside the volume | |
 
-uid **1001** is the one the Python images used, so a volume written by one is
-writable by the other.
+It runs as uid **1001**, which is also what earlier container images used — so
+an existing volume is writable without changing anything.
 
 ## Backing it up
 
@@ -217,8 +213,8 @@ copy plus the right image, which the manifest picks for you.
 
 ## Coming from the Python images
 
-No conversion step, because there is nothing to convert: 3.x and 4.x read and
-write the same four files.
+No conversion step, because there is nothing to convert — the store files are
+the same format.
 
 ```sh
 docker stop breeze-core && docker rm breeze-core

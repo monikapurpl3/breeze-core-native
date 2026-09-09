@@ -20,18 +20,6 @@ breeze-core --version  print the version and build commit
 
 **With no arguments at all it serves**, so an init script may simply `exec` it.
 
-## What replaced the zsh tools
-
-3.x shipped `tools/ac-diag.zsh` and `tools/ac-approve.zsh`: self-contained zsh
-scripts that spoke only HTTP, so they could be copied to a laptop without
-installing the Python package. That constraint no longer exists — the binary
-*is* copyable, has no dependencies, and runs on every platform the packages
-target. So the diagnostics and the approval flow are subcommands now.
-
-If you have scripts written against the old tools, the flags they used are
-accepted: `--base-url`, `--config`, and `--auto` (which `diag` takes and ignores,
-because it never prompts in the first place).
-
 ## `pair`
 
 ```sh

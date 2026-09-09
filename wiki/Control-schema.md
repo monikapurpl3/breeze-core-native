@@ -1,7 +1,6 @@
 # Control schema
 
-Used identically by the API, the web panel, the app, and the diagnostic CLI —
-and unchanged from 3.x, because every existing client depends on it.
+Used identically by the API, the web panel, the app and the diagnostic CLI.
 
 | Field | Values |
 |---|---|
@@ -29,12 +28,9 @@ default, which is the failure mode that makes a client look like it worked.
 
 ## Reading enum values back
 
-State comes back with the enum **names**, exactly as above — never the underlying
-integers. This is load-bearing for clients and was a real bug in the Python line:
-`IntEnum.__str__` changed in Python 3.11, so a `str(...)`-based serialiser
-started returning bare numbers on newer interpreters. The Rust implementation has
-no equivalent trap, since the wire form is written out explicitly, but the
-contract is the same one and `breeze-core diag` still checks it.
+State comes back with the enum **names**, exactly as above — never the
+underlying integers. A client that receives `2` instead of `"COOL"` breaks
+silently, so `breeze-core diag` checks it on every run.
 
 ## Temperatures on the wire
 

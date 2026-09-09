@@ -1,8 +1,7 @@
 # REST API
 
-The one contract all three components share. Unchanged from 3.x — this page is
-the reference because there is no generated schema any more: no framework, so no
-`/docs`.
+The one contract all three components share. This page is the reference: there
+is no generated schema and no `/docs` endpoint.
 
 Base URL is wherever the server binds, `http://<host>:8420` by default.
 
@@ -98,9 +97,8 @@ can tell "wrong verb" from "no such thing".
 silently rounded by every JavaScript client on earth. Send it back as a string
 too.
 
-**Enum values are names.** `"COOL"`, not `2`. This was a real bug in the Python
-line — `IntEnum.__str__` changed in Python 3.11 and a `str()`-based serialiser
-started emitting bare integers — so `breeze-core diag` still checks it.
+**Enum values are names.** `"COOL"`, not `2`. `breeze-core diag` checks this,
+because a client that gets a bare integer breaks silently.
 
 `indoor_temperature` and `outdoor_temperature` are nullable and frequently
 null. Plenty of units have no outdoor probe; treat absence as normal, not as a
@@ -139,11 +137,8 @@ Worth reading, because clients branch on them and the split is not arbitrary:
 | `426` | the credential's auth version is below `AC_MIN_AUTH_VERSION` |
 | `503` | the unit is unreachable, or refused the command |
 
-The `400`/`422` split mirrors the reference exactly, and the reason it looks
-inconsistent is that it is inherited: pydantic rejected the numeric bounds while
-parsing the body, so FastAPI turned those into its own `422`, while an unknown
-mode name survived parsing and was refused by the route with an explicit `400`.
-4.0.0 answered `422` for both; 4.0.1 restored the split.
+The rule is: a name the server does not recognise is a `400`, a number outside
+its range is a `422`.
 
 `503` is the one worth handling deliberately: it means the request was valid and
 the *unit* did not cooperate. Retrying may work; sending something different

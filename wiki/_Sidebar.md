@@ -2,10 +2,8 @@
 
 **Start here**
 - [What it is, and why](Home)
-- [Coming from the Python line](Coming-from-the-Python-line)
 - [Compared to NetHome Plus](Compared-to-NetHome-Plus)
 - [First run and pairing](First-run-and-pairing)
-- [Version history](Version-history)
 
 **Install it**
 - [From packages (apt/dnf/…)](Installing-from-packages)
@@ -33,6 +31,11 @@
 - [Reverse proxy and TLS](Reverse-proxy-and-TLS)
 - [Troubleshooting](Troubleshooting)
 - [Signed auth (v2) migration](Signed-auth-v2-migration)
+
+**Coming from an earlier version**
+- [Upgrading to 4.x](Upgrading-to-4)
+- [What changed in 4.x](What-changed-in-4)
+- [Version history](Version-history)
 
 **Develop and port**
 - [Architecture](Architecture)
