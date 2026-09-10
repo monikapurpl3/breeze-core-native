@@ -2,10 +2,14 @@
 
 Two images. One to run, one to debug.
 
-| Tag | Base | Size | For |
+| Tag | Base | Download | For |
 |---|---|---|---|
-| `4.0.1` | `scratch` | **5.9 MB** | everyone |
-| `4.0.1-debug` | `busybox:musl` | 8.4 MB | working out why something is wrong |
+| `4.0.2` | `scratch` | **1.5 MB** | everyone |
+| `4.0.2-debug` | `busybox:musl` | 2.3 MB | working out why something is wrong |
+
+Those are compressed sizes — what you actually pull. On disk they unpack to
+roughly four times that, most of which is the timezone database rather than the
+program.
 
 **amd64 and arm64**, as one manifest — `docker pull` picks the right one.
 
@@ -13,16 +17,6 @@ Two images. One to run, one to debug.
 daemon that controls heating is an upgrade nobody asked for at a moment nobody
 chose, and a compose file pinned to it changes underneath you. Ask for the
 version you want.
-
-> **The package is private, so pulling needs authentication:**
->
-> ```sh
-> echo $GITHUB_TOKEN | docker login ghcr.io -u <your-github-user> --password-stdin
-> ```
->
-> A token with `read:packages` is enough. This will change when the project is
-> published; until then the images are visible only to accounts that have been
-> granted access.
 
 The image is built `FROM scratch`: one static executable, the timezone
 database, and an empty config directory. No shell, no package manager, no libc,
@@ -37,14 +31,14 @@ docker volume create breeze-config
 # Pair first. This needs the host's network -- see below.
 docker run --rm -it --network host \
   -v breeze-config:/etc/breeze-core \
-  ghcr.io/monikapurpl3/breeze-core-native:4.0.1 pair
+  ghcr.io/monikapurpl3/breeze-core-native:4.0.2 pair
 
 docker run -d --name breeze-core --restart unless-stopped \
   -e TZ=Europe/Zagreb \
   -p 192.168.1.10:8420:8420 \
   -v breeze-config:/etc/breeze-core \
   --read-only --cap-drop ALL --security-opt no-new-privileges:true \
-  ghcr.io/monikapurpl3/breeze-core-native:4.0.1
+  ghcr.io/monikapurpl3/breeze-core-native:4.0.2
 ```
 
 Or use the compose files in `packaging/container/` — `docker-compose.yml` for
@@ -106,7 +100,7 @@ That is the point of a distroless image, and it changes two things.
 
 ```sh
 docker run --rm -it --network host -v breeze-config:/etc/breeze-core \
-  ghcr.io/monikapurpl3/breeze-core-native:4.0.1 pair
+  ghcr.io/monikapurpl3/breeze-core-native:4.0.2 pair
 
 docker exec breeze-core breeze-core devices
 docker exec breeze-core breeze-core approve BONG-W3GN
@@ -221,7 +215,7 @@ docker stop breeze-core && docker rm breeze-core
 docker run -d --name breeze-core --restart unless-stopped \
   -e TZ=Europe/Zagreb -p 192.168.1.10:8420:8420 \
   -v breeze-config:/etc/breeze-core \
-  ghcr.io/monikapurpl3/breeze-core-native:4.0.1
+  ghcr.io/monikapurpl3/breeze-core-native:4.0.2
 ```
 
 Check, in this order:
