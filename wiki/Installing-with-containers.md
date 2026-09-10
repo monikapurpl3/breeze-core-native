@@ -7,11 +7,16 @@ Two images. One to run, one to debug.
 | `4.0.2` | `scratch` | **1.6 MB** | everyone |
 | `4.0.2-debug` | `busybox:musl` | 2.5 MB | working out why something is wrong |
 
-Those are download sizes. Unpacked they come to about **3.6 MB** and
-**5.3 MB**, and a little over 4 MB and 6 MB as they actually sit on a disk —
-the timezone database is 345 files of well under a kilobyte each, so block
-rounding costs it roughly three times its own bytes. The executable is still
-the largest single thing in there.
+Those are download sizes. On disk they are **4.3 MB** and **5.9 MB**,
+measured rather than estimated. Most of the gap is the timezone database: some
+600 zone files, nearly all under a kilobyte, so block rounding turns 0.45 MB of
+actual bytes into 1.5 MB of disk. The executable, at 2.7 MB, is still the
+largest single thing in there.
+
+Ignore the `SIZE` column in `docker images` if you are checking this. On Docker
+29's containerd store it reports 5.89 MB for the slim image, whose entire
+unpacked filesystem is 4.30 MB — and 8.37 MB for the debug image, which is
+5.88 MB. It over-reports both.
 
 **amd64 and arm64**, as one manifest — `docker pull` picks the right one.
 

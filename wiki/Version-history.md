@@ -145,8 +145,8 @@ Two images replacing the Python line's five:
 
 | Tag | Base | On disk |
 |---|---|---|
-| `4.0.1` | `scratch` | **5.9 MB** |
-| `4.0.1-debug` | `busybox:musl` | 8.4 MB |
+| `4.0.1` | `scratch` | **4.3 MB** |
+| `4.0.1-debug` | `busybox:musl` | 5.9 MB |
 
 Against 137 MB for the Alpine image and 291 MB for UBI. All five of the old ones
 existed because an interpreter needs a distribution around it, and that reason is
