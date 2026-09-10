@@ -1,6 +1,6 @@
 # Plan: distroless containers, and moving one to another host
 
-**Status: built, tested, and published privately to
+**Status: built, tested, and published publicly to
 `ghcr.io/monikapurpl3/breeze-core-native`.** This began
 as a plan written before any Dockerfile existed; the decisions below were then
 made by the maintainer and the images built against them. Sizes and behaviour
@@ -330,9 +330,24 @@ already has before pushing to it.** The images were removed (13 versions, none
 of them the Python line's) and re-pushed to a package of their own, which is
 also where they belong regardless of visibility.
 
-Verified private the same way anyone else would see it -- an anonymous token
-from `ghcr.io/token` and a manifest request, which returns 403 for both native
-tags while `breeze-core:alpine-edge` returns 200. Note that
-`docker manifest inspect` with an empty `DOCKER_CONFIG` is **not** an anonymous
-test: Docker Desktop's credential helper answers anyway, and it reported those
-same private tags as readable.
+Checked the same way anyone else would see it -- an anonymous token from
+`ghcr.io/token` and a manifest request. Note that `docker manifest inspect`
+with an empty `DOCKER_CONFIG` is **not** an anonymous test: Docker Desktop's
+credential helper answers anyway, and it reported private tags as readable,
+which is precisely why the leak above went unnoticed at the time.
+
+### These images are now public, deliberately (2026-09-10)
+
+The privacy above was a property of an unreleased project, not a requirement.
+With 4.0.2 released and the repository public, the containers wiki page
+documents a bare `docker pull` with no `docker login`, so the images are public
+and `build-images.sh` now asserts **HTTP 200** on an anonymous manifest request
+rather than 403. The direction of that check flipped; the method did not.
+
+One thing to know before reaching for a script: **GHCR package visibility has
+no REST endpoint.** `gh api -X PATCH user/packages/container/breeze-core-native
+-f visibility=public` returns a plain 404. It is web-UI only, under the
+package's own settings, which is why the build script checks the state and
+tells you where to change it instead of changing it itself. Reading it back
+*is* scriptable: `gh api user/packages/container/breeze-core-native` carries
+`.visibility`.

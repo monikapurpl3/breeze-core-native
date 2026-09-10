@@ -143,7 +143,7 @@ release rather than held for the next one.
 
 Two images replacing the Python line's five:
 
-| Tag | Base | Size |
+| Tag | Base | On disk |
 |---|---|---|
 | `4.0.1` | `scratch` | **5.9 MB** |
 | `4.0.1-debug` | `busybox:musl` | 8.4 MB |

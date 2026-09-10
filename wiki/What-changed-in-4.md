@@ -55,7 +55,7 @@ On a router or a Pi that is the difference between "fits" and "does not".
 | NetBSD | a `pkgin` feed | the same |
 | OpenBSD | source install only | **a signed package** |
 | OPNsense | a plugin bundling an interpreter | a plugin with no dependencies |
-| containers | five images, 137–291 MB | two, **5.9 MB** |
+| containers | five images, 137–291 MB on disk | two, **5.9 MB** |
 
 riscv64, ppc64le and s390x were proof-of-concept builds before — built under
 emulation, never published. They are ordinary published packages now. See

@@ -4,12 +4,14 @@ Two images. One to run, one to debug.
 
 | Tag | Base | Download | For |
 |---|---|---|---|
-| `4.0.2` | `scratch` | **1.5 MB** | everyone |
-| `4.0.2-debug` | `busybox:musl` | 2.3 MB | working out why something is wrong |
+| `4.0.2` | `scratch` | **1.6 MB** | everyone |
+| `4.0.2-debug` | `busybox:musl` | 2.5 MB | working out why something is wrong |
 
-Those are compressed sizes — what you actually pull. On disk they unpack to
-roughly four times that, most of which is the timezone database rather than the
-program.
+Those are download sizes. Unpacked they come to about **3.6 MB** and
+**5.3 MB**, and a little over 4 MB and 6 MB as they actually sit on a disk —
+the timezone database is 345 files of well under a kilobyte each, so block
+rounding costs it roughly three times its own bytes. The executable is still
+the largest single thing in there.
 
 **amd64 and arm64**, as one manifest — `docker pull` picks the right one.
 

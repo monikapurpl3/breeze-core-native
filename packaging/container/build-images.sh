@@ -83,21 +83,25 @@ fi
 
 # --- the check that matters --------------------------------------------------
 #
-# These images must stay PRIVATE. GHCR package visibility is per-package and
-# independent of the repository's, and "new packages default to private" is
-# true only of a package that does not exist yet — pushing to a package that is
-# already public keeps it public. That is not hypothetical: it happened here,
-# to ghcr.io/monikapurpl3/breeze-core, and thirteen versions were anonymously
-# pullable until they were deleted.
+# These images must be PULLABLE BY ANYONE. They were private while the project
+# was unreleased; since 4.0.2 the containers wiki page documents a bare
+# `docker pull` with no `docker login`, so a package that has silently gone
+# private makes published instructions wrong.
+#
+# Worth knowing in both directions: GHCR visibility is per-package and
+# independent of the repository's, and it is sticky — pushing does not change
+# it. "New packages default to private" is true only of a package that does not
+# exist yet. There is also no REST endpoint for it: `gh api -X PATCH
+# user/packages/container/<name> -f visibility=…` returns 404. It is web-UI
+# only, which is why this script checks rather than sets.
 #
 # Tested with an ANONYMOUS token fetched from ghcr.io/token, not with
 # `docker manifest inspect`: Docker Desktop's credential helper bypasses
 # DOCKER_CONFIG, so a "logged out" docker command here is still authenticated
-# and reports success on a private image. That unsound test is the reason the
-# leak was not caught immediately.
+# and cannot tell public from private at all.
 echo
-echo "=== anonymous pull check (these images must be private)"
-leaked=0
+echo "=== anonymous pull check (these images must be public)"
+unreachable=0
 for tag in "$VERSION" "$VERSION-debug"; do
   tok="$(curl -fsS "https://ghcr.io/token?service=ghcr.io&scope=repository:monikapurpl3/breeze-core-native:pull" 2>/dev/null \
         | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
@@ -106,19 +110,20 @@ for tag in "$VERSION" "$VERSION-debug"; do
     -H "Accept: application/vnd.oci.image.index.v1+json" \
     "https://ghcr.io/v2/monikapurpl3/breeze-core-native/manifests/$tag" || true)"
   if [ "$code" = "200" ]; then
-    echo "  !! $IMAGE:$tag is ANONYMOUSLY PULLABLE (HTTP 200) — it is PUBLIC"
-    leaked=1
+    echo "  ok  $IMAGE:$tag pulls anonymously (HTTP 200)"
   else
-    echo "  ok  $IMAGE:$tag refuses an anonymous pull (HTTP $code)"
+    echo "  !! $IMAGE:$tag is NOT anonymously pullable (HTTP $code)"
+    unreachable=1
   fi
 done
 
-if [ "$leaked" -eq 1 ]; then
+if [ "$unreachable" -eq 1 ]; then
   echo
-  echo "Set the package back to private at:"
+  echo "The published install instructions assume no login. Set the package"
+  echo "public at (there is no API for this):"
   echo "  https://github.com/users/monikapurpl3/packages/container/breeze-core-native/settings"
   exit 1
 fi
 
 echo
-echo "pushed and verified private."
+echo "pushed, and both tags verified anonymously pullable."
