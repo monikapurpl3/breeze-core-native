@@ -131,6 +131,7 @@ $Domain {
 			@notlan not remote_ip $lanTokens
 			respond @notlan 403
 			reverse_proxy $Upstream {
+				header_up X-Forwarded-For {remote_host}
 				header_up X-Real-IP {remote_host}
 			}
 		}
@@ -141,16 +142,21 @@ $Domain {
 	@stream path /api/units/stream
 	handle @stream {
 		reverse_proxy $Upstream {
+			header_up X-Forwarded-For {remote_host}
 			header_up X-Real-IP {remote_host}
 			flush_interval -1
 		}
 	}
 
-	# Everything else -> the app. Caddy sets X-Forwarded-For to the real peer:
+	# Everything else -> the app. X-Forwarded-For is the ONLY header the server
+	# reads for the client address -- X-Real-IP is ignored by it entirely, and is
+	# set here only because other tooling reads it. Caddy would add XFF anyway,
+	# but naming it keeps the load-bearing header visible in the file:
 	# with NO trusted_proxies configured every client is untrusted, so a
 	# client-sent (forged) XFF is dropped and replaced with the real address.
 	# Do NOT add public ranges to trusted_proxies.
 	reverse_proxy $Upstream {
+		header_up X-Forwarded-For {remote_host}
 		header_up X-Real-IP {remote_host}
 	}
 }

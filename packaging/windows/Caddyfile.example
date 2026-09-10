@@ -7,6 +7,10 @@
 #
 # Every block here is load-bearing:
 #
+#   * X-Forwarded-For is the ONLY header the server reads for the client
+#     address. X-Real-IP is ignored by it entirely and is set alongside only
+#     because other tooling reads it. Caddy adds XFF by default; it is named
+#     explicitly so the header everything depends on is visible here.
 #   * NO trusted_proxies anywhere. That is what makes Caddy overwrite
 #     X-Forwarded-For with the real peer address, so an outsider cannot forge a
 #     private "LAN" client. The server's LAN-only admin check is only as good as
@@ -54,6 +58,7 @@ breeze.example.com {
 			@notlan not remote_ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 127.0.0.1/8
 			respond @notlan 403
 			reverse_proxy 127.0.0.1:8420 {
+				header_up X-Forwarded-For {remote_host}
 				header_up X-Real-IP {remote_host}
 			}
 		}
@@ -63,12 +68,14 @@ breeze.example.com {
 	@stream path /api/units/stream
 	handle @stream {
 		reverse_proxy 127.0.0.1:8420 {
+			header_up X-Forwarded-For {remote_host}
 			header_up X-Real-IP {remote_host}
 			flush_interval -1
 		}
 	}
 
 	reverse_proxy 127.0.0.1:8420 {
+		header_up X-Forwarded-For {remote_host}
 		header_up X-Real-IP {remote_host}
 	}
 }
