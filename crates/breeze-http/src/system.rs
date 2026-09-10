@@ -235,14 +235,14 @@ fn init_facts() -> serde_json::Value {
         let comm = std::fs::read_to_string("/proc/1/comm")
             .ok()
             .map(|s| s.trim().to_string());
-        return match comm {
+        match comm {
             Some(name) if !name.is_empty() => {
                 serde_json::json!({ "name": name, "detail": "from /proc/1/comm" })
             }
             // "unknown" rather than null, so a client rendering this shows a
             // word instead of a blank.
             _ => facts("unknown", "no init system could be identified"),
-        };
+        }
     }
 }
 
