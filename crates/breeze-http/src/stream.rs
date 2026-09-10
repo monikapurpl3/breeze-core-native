@@ -569,9 +569,9 @@ mod tests {
                 let lanes = lane_count(total, requested);
                 let mut times_polled = vec![0u32; total];
                 for lane in 0..lanes {
-                    for i in 0..total {
+                    for (i, polls) in times_polled.iter_mut().enumerate() {
                         if i % lanes == lane {
-                            times_polled[i] += 1;
+                            *polls += 1;
                         }
                     }
                 }

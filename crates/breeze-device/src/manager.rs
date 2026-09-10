@@ -130,7 +130,10 @@ impl DeviceManager {
     ///
     /// Never triggers a probe, for the same reason `is_connected` never opens a
     /// session.
-    pub fn cached_capabilities(&self, id: u64) -> Option<breeze_proto::ac::capabilities::Capabilities> {
+    pub fn cached_capabilities(
+        &self,
+        id: u64,
+    ) -> Option<breeze_proto::ac::capabilities::Capabilities> {
         self.get(id)?
             .lock()
             .ok()

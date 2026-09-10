@@ -153,7 +153,10 @@ mod tests {
             swing_mode: Some("DIAGONAL".into()),
             ..Default::default()
         };
-        assert_eq!(mode.validate().unwrap_err().to_string(), "Unknown mode: TELEPORT");
+        assert_eq!(
+            mode.validate().unwrap_err().to_string(),
+            "Unknown mode: TELEPORT"
+        );
         assert_eq!(
             swing.validate().unwrap_err().to_string(),
             "Unknown swing mode: DIAGONAL"

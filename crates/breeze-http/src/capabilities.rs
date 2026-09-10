@@ -131,8 +131,14 @@ mod tests {
         assert_eq!(view["supports_display_control"], true);
         assert_eq!(view["supports_freeze_protection"], true);
         assert_eq!(view["supports_humidity"], true);
-        assert_eq!(view["min_target_temperature"], 16, "whole degrees must be an integer, as the reference sends");
-        assert_eq!(view["max_target_temperature"], 30, "whole degrees must be an integer, as the reference sends");
+        assert_eq!(
+            view["min_target_temperature"], 16,
+            "whole degrees must be an integer, as the reference sends"
+        );
+        assert_eq!(
+            view["max_target_temperature"], 30,
+            "whole degrees must be an integer, as the reference sends"
+        );
     }
 
     #[test]
@@ -170,8 +176,14 @@ mod tests {
             view["fan_speeds"],
             serde_json::json!(["LOW", "MEDIUM", "HIGH", "AUTO"])
         );
-        assert_eq!(view["min_target_temperature"], 16, "whole degrees must be an integer, as the reference sends");
-        assert_eq!(view["max_target_temperature"], 30, "whole degrees must be an integer, as the reference sends");
+        assert_eq!(
+            view["min_target_temperature"], 16,
+            "whole degrees must be an integer, as the reference sends"
+        );
+        assert_eq!(
+            view["max_target_temperature"], 30,
+            "whole degrees must be an integer, as the reference sends"
+        );
         assert_eq!(view["supports_eco"], false);
     }
 

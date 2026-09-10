@@ -218,7 +218,10 @@ impl core::fmt::Display for StartupError {
                 // and look like a paired unit's V3 credentials had been lost.
                 // /etc/meow-ac is where releases before 2.5.0 defaulted, so
                 // anyone who never set AC_CONFIG has their units in there.
-                for legacy in ["/etc/meow-ac/config.json", "/usr/local/etc/meow-ac/config.json"] {
+                for legacy in [
+                    "/etc/meow-ac/config.json",
+                    "/usr/local/etc/meow-ac/config.json",
+                ] {
                     let path = std::path::Path::new(legacy);
                     if path != p.as_path() && path.exists() {
                         // The newlines and leading spaces below are the message's
@@ -272,8 +275,7 @@ impl AppState {
         let history = crate::history::History::new(settings.history_size);
         // Read before `settings` is moved into the struct below.
         let nonces = NonceCache::new(settings.auth_skew_seconds);
-        let enrollment =
-            EnrollmentService::new(settings.code_ttl_seconds, settings.token_ttl_days);
+        let enrollment = EnrollmentService::new(settings.code_ttl_seconds, settings.token_ttl_days);
 
         Ok(Self {
             settings,

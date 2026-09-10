@@ -96,18 +96,6 @@ exposed to the internet by default; away-from-home control means a VPN or a
 proxy you secure yourself. The feature ceiling is your firmware's. The native
 app is Android-only. It is one brand, one job — not a home-automation platform.
 
-Specific to this implementation, and stated here rather than discovered later:
-
-- **There is no rate limiting.** Put a limiter in your reverse proxy if the
-  server is reachable from anywhere you do not control.
-- **The OPNsense GUI page has never run on a real firewall.** The binary is the
-  same one every platform gets; the plugin's GUI plumbing around it is unproven.
-- **riscv64, ppc64le and s390x** are cross-built and executed nowhere in
-  testing.
-- **The NetBSD feed is the one repository here carrying no signature**, because
-  pkgin has no verification to offer. Every other one verifies a signature made
-  off the web host.
-
 The full comparison with the vendor app, drawbacks included:
 [Compared to NetHome Plus](https://github.com/monikapurpl3/breeze-core-native/wiki/Compared-to-NetHome-Plus).
 

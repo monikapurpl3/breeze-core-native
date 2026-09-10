@@ -229,19 +229,20 @@ pub fn serve(state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error>> {
                         .map(|a| a.ip().to_string())
                         .unwrap_or_else(|| "-".into());
                     match handle(&state, &mut request) {
-                    Outcome::Reply(reply) => {
-                        // Logged before responding, so a client that hangs up
-                        // mid-write still leaves the line behind.
-                        access_log(&peer, &line, reply.status, started);
-                        let _ = request.respond(reply.into_http(state.settings.security_headers));
-                    }
-                    // An endless response cannot be handed to `respond()`, and
-                    // it must not hold a pooled worker either: eight open
-                    // streams would starve the whole API. It gets its own thread.
-                    Outcome::Stream => {
-                        access_log(&peer, &line, 200, started);
-                        crate::stream::hijack(Arc::clone(&state), request)
-                    }
+                        Outcome::Reply(reply) => {
+                            // Logged before responding, so a client that hangs up
+                            // mid-write still leaves the line behind.
+                            access_log(&peer, &line, reply.status, started);
+                            let _ =
+                                request.respond(reply.into_http(state.settings.security_headers));
+                        }
+                        // An endless response cannot be handed to `respond()`, and
+                        // it must not hold a pooled worker either: eight open
+                        // streams would starve the whole API. It gets its own thread.
+                        Outcome::Stream => {
+                            access_log(&peer, &line, 200, started);
+                            crate::stream::hijack(Arc::clone(&state), request)
+                        }
                     }
                 }
                 None => break,
@@ -645,8 +646,8 @@ fn authorise(
             if debug_auth() {
                 let p = incoming.presented();
                 eprintln!(
-                    "  auth reject: {} status={} key_id={:?} auth_version={:?}",
-                    format!("{:?}", r.reason), r.status, p.key_id, p.auth_version
+                    "  auth reject: {:?} status={} key_id={:?} auth_version={:?}",
+                    r.reason, r.status, p.key_id, p.auth_version
                 );
                 eprintln!(
                     "  presented: ts={:?} nonce={:?} sig={:?} body={} bytes",

@@ -190,9 +190,7 @@ fn kernel_release() -> Option<String> {
 ///   * The BSDs have no /proc at all by default, so pid 1 answered nothing
 ///     there either, on every platform where the answer is simply "rc.d".
 fn init_facts() -> serde_json::Value {
-    let facts = |name: &str, detail: &str| {
-        serde_json::json!({ "name": name, "detail": detail })
-    };
+    let facts = |name: &str, detail: &str| serde_json::json!({ "name": name, "detail": detail });
 
     #[cfg(target_os = "macos")]
     return facts("launchd", "launchctl print system/breeze-core");

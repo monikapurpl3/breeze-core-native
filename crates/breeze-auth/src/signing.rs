@@ -170,7 +170,10 @@ mod tests {
             );
             for (label, value) in [
                 ("standard, padded", standard.clone()),
-                ("standard, unpadded", standard.trim_end_matches('=').to_string()),
+                (
+                    "standard, unpadded",
+                    standard.trim_end_matches('=').to_string(),
+                ),
                 ("url-safe, unpadded", url_safe.clone()),
                 ("url-safe, padded", format!("{url_safe}==")),
             ] {
@@ -178,7 +181,6 @@ mod tests {
             }
         }
     }
-
 
     #[test]
     fn the_empty_body_digest_is_the_known_sha3_512_value() {

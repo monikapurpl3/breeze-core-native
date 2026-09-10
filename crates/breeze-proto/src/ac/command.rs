@@ -223,9 +223,12 @@ mod tests {
         let got = set_state(0x11, &sp);
         let hex: String = got.iter().map(|b| format!("{b:02x}")).collect();
         let want = "aa24ac000000000000024003483c7f7f00300000000000000000000000280000000011867a";
-        assert_eq!(hex, want, "
+        assert_eq!(
+            hex, want,
+            "
  got {hex}
-want {want}");
+want {want}"
+        );
     }
 
     /// msmart's own framing test: with message id 0x11, the GetState payload is
