@@ -1,0 +1,108 @@
+name: Device report
+description: A unit that will not pair, will not respond, or behaves oddly
+labels: ["device"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Its own category because the protocol here is a reimplementation. It is
+        checked against captured reference vectors, but the device quirks that
+        only appear on hardware nobody here owns get handled as they surface —
+        and this is how they surface.
+
+        **Don't paste secrets:** not a unit's V3 `token` or `key`, not your
+        `api_key`, not `config.json`.
+
+  - type: dropdown
+    id: symptom
+    attributes:
+      label: What is it doing?
+      options:
+        - Not found by `breeze-core pair` at all
+        - Found, but pairing fails
+        - Paired, but every request returns 503
+        - Responds, but a setting is ignored
+        - Responds, but a value read back is wrong or implausible
+        - Works, then stops after a while
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: The model string on the unit or its indoor plate.
+      placeholder: "Midea MSAGBU-09HRFN8"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: Protocol version
+      description: "`GET /api/system` lists each unit; a V3 unit is one with a `token` and `key` in its config."
+      options:
+        - "V3 (needs a token and key)"
+        - "V2"
+        - "not sure"
+    validations:
+      required: true
+
+  - type: input
+    id: vendor_app
+    attributes:
+      label: Does the vendor app control it?
+      description: NetHome Plus, Midea Air, SmartHome, or whichever rebadge. Worth knowing whether the unit works at all over Wi-Fi.
+      placeholder: "yes, NetHome Plus works"
+    validations:
+      required: true
+
+  - type: textarea
+    id: discovery
+    attributes:
+      label: What discovery says
+      description: |
+        `sudo breeze-core pair` broadcasts and lists what answers. If nothing is
+        found, try naming the address directly — that is a unicast probe, so a
+        reply can only have come from that host:
+
+        ```
+        sudo breeze-core pair --ip 192.168.1.73
+        ```
+
+        If something answers but cannot be decoded, `pair` says so explicitly.
+        **That message is the single most useful thing in this report.**
+      render: text
+
+  - type: textarea
+    id: trace
+    attributes:
+      label: A control trace, if it responds at all
+      description: |
+        `BREEZE_DEBUG=1` traces every command from what the client sent through
+        to what the unit echoed back, which is what identifies a firmware that
+        accepts a command and ignores it:
+
+        ```
+        sudo systemctl stop breeze-core
+        sudo -u breeze BREEZE_DEBUG=1 /usr/bin/breeze-core serve --host 127.0.0.1 --port 8420
+        ```
+      render: text
+
+  - type: input
+    id: network
+    attributes:
+      label: Is the unit on the same subnet as the server?
+      description: Discovery is a broadcast and control is direct TCP to port 6444, so neither crosses a VLAN boundary.
+      placeholder: "yes — server 192.168.1.10, unit 192.168.1.73"
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        One thing to rule out first, because it accounts for a good share of
+        these: **Midea firmware accepts one control connection at a time.** The
+        vendor app in the foreground on a phone can lock the server out, and
+        the other way round. Close the other one and try again.

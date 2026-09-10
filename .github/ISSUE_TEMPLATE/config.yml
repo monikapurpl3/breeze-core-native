@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/monikapurpl3/breeze-core-native/security/advisories/new
+    about: Please report vulnerabilities privately — see SECURITY.md — not as public issues.
+
+  - name: Breeze (Android app) issues
+    url: https://github.com/monikapurpl3/breeze/issues
+    about: Bugs or requests for the mobile app belong in the app repo. The server never assumes a particular client.
+
+  - name: Installing, upgrading, or exposing it safely
+    url: https://github.com/monikapurpl3/breeze-core-native/wiki/Installing-from-packages
+    about: Per-distro install, the signed repository, Void, Gentoo, the BSDs, OpenWrt, Windows — and read Exposing it safely before putting it on the internet.
+
+  - name: Something already broken? Try the troubleshooting guide
+    url: https://github.com/monikapurpl3/breeze-core-native/wiki/Troubleshooting
+    about: 503s from a unit, LAN-only approval behind a proxy, schedules firing an hour off, a stream that shows nothing — and BREEZE_DEBUG=1.

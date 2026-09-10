@@ -1,0 +1,63 @@
+name: Feature request
+description: Suggest an improvement to Breeze Core
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: The use case or the pain point, not only the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Area
+      options:
+        - label: API / auth
+        - label: Scheduler / programs / timers
+        - label: Web panel
+        - label: CLI
+        - label: Packaging (deb / rpm / apk / pacman / xbps / ebuild / opkg / BSD / Windows / OPNsense)
+        - label: A new platform, init system or architecture
+        - label: Observability (metrics / history / system info)
+        - label: The protocol layer
+        - label: Deployment or docs
+
+  - type: markdown
+    attributes:
+      value: |
+        A few things worth knowing before you write, because they are decisions
+        rather than omissions:
+
+        - **The wire contract is fixed.** The `/api/*` shapes, the status codes
+          and the four store formats are shared with the Android app and every
+          script anyone has written. Additions are welcome; changes to what
+          exists need a reason that outweighs breaking a client.
+        - **No async runtime, no web framework, no TLS server.** TLS terminates
+          in a reverse proxy — see
+          [Reverse proxy and TLS](https://github.com/monikapurpl3/breeze-core-native/wiki/Reverse-proxy-and-TLS).
+        - **Some things are deliberately absent**, with the reasoning written
+          down: the commercial-appliance protocol class, V1 devices, and a way
+          to obtain a V3 unit's credentials without the vendor. See
+          [Architecture](https://github.com/monikapurpl3/breeze-core-native/wiki/Architecture).
+        - **Rate limiting is a known gap**, and the current answer is a limiter
+          in your reverse proxy. If you want it in the server, say what your
+          deployment looks like — that is the part that decides the design.
+
+        If this needs the app to change too, please say so: the app lives in
+        [breeze](https://github.com/monikapurpl3/breeze) and the two are
+        deliberately decoupled, so the server never assumes a particular client.

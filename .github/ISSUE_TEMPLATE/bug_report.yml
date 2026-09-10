@@ -1,0 +1,213 @@
+name: Bug report
+description: Something in Breeze Core (server / API / web panel / CLI) isn't working
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report.
+
+        **Don't paste secrets:** not your `api_key`, not a device credential,
+        not `config.json` or `devices.json`, and not a unit's V3 `token`/`key`.
+
+        Most of the boxes below can be read off one screen. In the web panel
+        that is the **Nerd** panel; in the Breeze app, **tap the version seven
+        times**. `GET /api/system` is the same data over HTTP and contains no
+        secrets — `breeze-core diag` checks that rather than trusting it, so it
+        is safe to paste.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Breeze Core version
+      description: "`breeze-core --version`, the panel footer, or Nerd → Server → Version."
+      placeholder: "4.0.2"
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Build commit
+      description: Printed next to the version. Tells us the exact build — and says `-dirty` if it was built from an edited tree.
+      placeholder: "a1832e6"
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Nerd → Host → Operating system, or `cat /etc/os-release`.
+      placeholder: "AlmaLinux 10 / Debian 13 / Void / FreeBSD 15.1 / Windows 11"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Architecture
+      options:
+        - x86_64 / amd64
+        - aarch64 / arm64
+        - armv7 / armhf
+        - riscv64
+        - ppc64le
+        - s390x
+        - other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - Signed repository (apt / dnf / zypper / pacman / apk / xbps / opkg)
+        - Gentoo overlay (app-misc/breeze-core-bin)
+        - Package or tarball downloaded from a release
+        - Windows installer (Breeze-Core-Setup.exe)
+        - Container (Docker / Podman)
+        - FreeBSD pkg / NetBSD pkgin / OpenBSD pkg_add
+        - OPNsense plugin (os-breeze-core)
+        - From source (cargo build)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: service
+    attributes:
+      label: How is it running?
+      description: Nerd → Host → Init system, if you're not sure.
+      options:
+        - systemd
+        - OpenRC
+        - runit
+        - s6 / s6-rc
+        - SysV init
+        - procd (OpenWrt)
+        - BSD rc.d / rcctl
+        - launchd (macOS)
+        - supervisord
+        - Windows service (NSSM)
+        - Container
+        - By hand (`breeze-core serve`)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: exposure
+    attributes:
+      label: How do you reach it?
+      description: Worth knowing — a proxy that does not forward the real client address is the usual cause of LAN-only checks behaving oddly.
+      options:
+        - Directly on the LAN
+        - Behind nginx
+        - Behind Apache
+        - Behind Caddy
+        - Over a VPN (WireGuard / Tailscale)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part?
+      options:
+        - Pairing / enrolment / approval
+        - Authentication on an already-paired client (401 / 426)
+        - Unit control or state (including 503s)
+        - Programs / scheduler (favourites, schedules, curves)
+        - Timers
+        - Live updates (SSE stream)
+        - Web panel
+        - CLI (pair / control / diag / approve / devices / revoke / login)
+        - Packaging / install / upgrade
+        - Docs or the wiki
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: authv
+    attributes:
+      label: "Auth version of the affected client, if it's a 401 or 426"
+      description: "`breeze-core devices`, or Nerd → Connection → Auth version."
+      options:
+        - "not applicable"
+        - "v2 (Ed25519 signed)"
+        - "v1 (bearer token)"
+        - "not sure"
+
+  - type: input
+    id: auth_reason
+    attributes:
+      label: "…and the `error` the server gave"
+      description: |
+        An auth failure body carries one, and it decides what to do.
+        `clock_skew` is retryable and self-healing — the response includes the
+        server's own time so a client can correct its offset. A `426` means the
+        credential's auth version is below `AC_MIN_AUTH_VERSION`, so it needs
+        upgrading, not replacing.
+      placeholder: "clock_skew"
+
+  - type: input
+    id: units
+    attributes:
+      label: Air conditioner model(s), if hardware is involved
+      description: What works depends on your firmware — some units silently ignore settings they do not support.
+      placeholder: "Midea MSAGBU-09HRFN8 (V3), 3 units"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        An access log is on by default: one line per request with its status and
+        how long it took.
+
+        systemd: `journalctl -u breeze-core -n 80 --no-pager`
+        runit: `sv status breeze-core` and `/var/log/breeze-core/current`
+        Windows: `Get-Content "$env:ProgramData\breeze-core\logs\service.log" -Tail 80`
+        container: `docker logs --tail 80 <container>`
+
+        **For a control problem, `BREEZE_DEBUG=1` is the useful one** — it
+        traces every command from what the client sent through to what the unit
+        echoed back:
+
+        ```
+        sudo systemctl stop breeze-core
+        sudo -u breeze BREEZE_DEBUG=1 /usr/bin/breeze-core serve --host 127.0.0.1 --port 8420
+        ```
+      render: text
+
+  - type: textarea
+    id: system
+    attributes:
+      label: "`GET /api/system`, or the Nerd panel"
+      description: |
+        Optional but usually decisive: it reports the OS, the init system, the
+        store paths and their modes, the units and their cached capabilities,
+        and **how your request reached the server** — which is what settles a
+        proxy question. It contains no secrets.
+      render: json

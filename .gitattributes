@@ -40,3 +40,7 @@ deploy/init/**          text eol=lf
 packaging/xbps/INSTALL  text eol=lf
 packaging/xbps/REMOVE   text eol=lf
 packaging/portage/**    text eol=lf
+
+# GitHub parses these itself, and a CRLF checkout of a YAML issue form is the
+# kind of thing that fails in the form editor rather than anywhere useful.
+.github/**              text eol=lf
