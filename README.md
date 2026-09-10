@@ -1,159 +1,134 @@
-# Breeze Core Native
+<div align="center">
 
-A native rewrite of [Breeze Core](https://github.com/monikapurpl3/breeze-core) —
-the LAN-first REST API and web panel for Midea air conditioners — in Rust, with
-Zig as the cross-linker.
+# Breeze Core
 
-**Status: 4.0.0 is built and packaged.** Breeze Core 3.2.0 is the last release of
-the Python line, which is being sunset; its packages stay published and
-installable, and everything after it happens here.
+**Your air conditioner. Your network. No cloud.**
 
-Every endpoint the Python server has — all 30 — verified against 3.2.0 running
-side by side: 23 of 24 compared responses byte-identical (the exception is
-documented), unit capabilities agreeing on all three real air conditioners, and
-`breeze-core diag --auto` passing with no failures. The CLI answers every verb
-the packaged Python binary answers, including `pair`, `devices` and `revoke`, and
-takes the same flags the shell aliases in the wild pass. 473 tests.
+Self-hosted control for Midea air conditioners — a REST API, a web panel, and a
+native Android app that talk to your units over your own LAN.
 
-**31 packages** — six Linux architectures × deb/rpm/pacman/apk/ipk, plus a
-NetBSD one built on a NetBSD machine — installed in clean containers and checked
-to run, to keep `/etc/breeze-core` on removal, and to install *over* the Python
-package of the same name without losing a paired unit's credentials.
-They come from **one static musl binary per architecture** — no libc dependency
-is declared, because there is none to satisfy — and are served from
-[aspic](https://aspic.salataputarica.hr.eu.org/) as five signed repositories
-(apt, dnf/zypper, pacman, apk, opkg) plus an unsigned pkgin feed for NetBSD.
-`packaging/` has the details, `site/` has the host.
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/monikapurpl3/breeze-core-native?label=release)](https://github.com/monikapurpl3/breeze-core-native/releases/latest)
+[![Packages](https://img.shields.io/badge/packages-deb%20·%20rpm%20·%20apk%20·%20pacman%20·%20xbps%20·%20ebuild%20·%20opkg-6aa84f)](https://aspic.salataputarica.hr.eu.org)
+[![Documentation](https://img.shields.io/badge/docs-wiki-8e7cc3)](https://github.com/monikapurpl3/breeze-core-native/wiki)
 
-| | size |
-|---|---|
-| the binary | 2.0–2.6 MB depending on architecture |
-| an rpm / deb | ~1.4 MB (zstd) |
-| the same thing in Python | 25.1 MB, 61.7 MB installed |
-
-It also fixes what never worked here: **automatic pairing**. Broadcast discovery
-found nothing because a reply to a broadcast matches no conntrack entry and gets
-dropped, so this sweeps the local subnet by unicast as well — a scan now finds
-every unit. Getting a *new* V3 unit's `token`/`key` is a harder problem that is
-not ours: Midea has withdrawn token fetching from all but one of its apps, and
-the one left only answers for the account the unit is registered to. There is a
-last-resort path for that, and `POST /api/units` takes a `token` and `key`
-directly, which is what keeps working when the API finally goes.
-
-| build | size | what you give up |
-|---|---|---|
-| `cargo build --release` | **2.5 MB** | nothing |
-| `--no-default-features` | **1.3 MB** | cloud pairing (the TLS stack is 1.2 MB of that) |
-
+</div>
 
 ## Why
 
-Breeze Core works, but it is a Python application, and that has a cost measured
-in megabytes and architectures:
+The vendor app sends "make it 23°" to a datacentre and back, to reach a machine
+three metres away. Breeze Core cuts the round trip: after one local pairing
+there is **no cloud dependency, no account, and no telemetry**. When your
+internet is down, your air conditioning still works.
 
-|  | Python today | native target | measured |
-|---|---|---|---|
-| package size | **25.0 MB** | **~2–2.5 MB** | 1.8 MB for the full dependency set incl. TLS |
-| resident memory | **65 MB** | no runtime, no GC | — |
-| riscv64 / s390x / ppc64le | frozen proof-of-concept | ordinary targets | 1.3–1.5 MB each |
-| OpenWrt on 8–16 MB flash | documented as impossible | fits | — |
+- **Control it from anywhere on your LAN** — browser, Android app, home-screen
+  widgets, Android Auto, REST, `curl`, cron.
+- **Automation that runs on the server.** Schedules and temperature curves fire
+  whether or not your phone is home, charged, or awake.
+- **Live, not polled.** Changes push to every client over SSE — yours, a
+  schedule's, or another device's.
+- **Quiet by default.** The beep is off unless a client asks for it, so a 3 a.m.
+  setpoint change wakes nobody.
+- **One credential per device**, each individually revocable, each approved from
+  the LAN. No shared password to pass around the household.
+- **Installs like software should** — a signed repository and native packages
+  for Linux, Windows, the BSDs, Void, Gentoo, OpenWrt and OPNsense, plus
+  container images.
 
-The bloat is not incidental. A self-contained bundle has to carry CPython, every
-dependency, and a PyInstaller shim; that is what makes an 8 MB router impossible
-and what makes each new architecture an emulated multi-hour build.
+It is **one static executable of about 2.5 MB with no dependencies at all** —
+not few, none — which is why it fits as comfortably on a router as on a server.
 
-## Why Rust, and why Zig too
+## Install
 
-Both were measured rather than assumed. For an equivalent binary — AES, MD5,
-HMAC, JSON, an HTTP server — Go produced 3.3–4.1 MB across 15 targets with no
-toolchain at all; Rust produced 375–601 KB but could not even link musl on the
-build host. `cargo-zigbuild` closes exactly that gap: Zig supplies libc and the
-linker for every target, and can pin a glibc floor (`-target
-x86_64-linux-gnu.2.17`) — which is what the Python build currently achieves by
-compiling inside deliberately ancient containers.
-
-The one gap is MIPS: Zig 0.16's bundled `mipsel` musl emits references to its own
-standard-library internals that it then fails to provide. MIPS links with the
-OpenWrt SDK toolchain instead, which this project already uses for `.ipk` builds.
-
-## Layout
-
-```
-crates/breeze-proto     the Midea LAN protocol: framing, crypto, discovery, AC commands
-crates/breeze-device    connections, retries, per-unit locking
-crates/breeze-store     the four JSON store files, written byte-compatibly
-crates/breeze-auth      API key, v1 bearer tokens, v2 Ed25519 signatures
-crates/breeze-http      routes, guards, the SSE stream, the embedded panel
-crates/breeze-cloud     one cloud round-trip for a V3 token (optional; pulls in TLS)
-crates/breeze-core      the binary
-static/                 the web panel, compiled into that binary by build.rs
-tools/                  scripts that diff this server against the Python one
-site/                   the aspic host: its pages, vhost and deployment
-packaging/              binaries, packages, the signed repository tree
-```
-
-The protocol is four layers, wrapped one inside the next:
-
-```
-┌ lan     0x8370 session (V3 only) — AES-256-CBC + SHA-256
-│ ┌ packet  0x5A5A V2 packet      — AES-128-ECB + MD5
-│ │ ┌ frame   0xAA appliance frame — checksum
-│ │ │ ┌ ac      command / state payload — CRC-8
-```
-
-Every layer is codec-only — bytes in, bytes out, no sockets — so all of it is
-testable without hardware, and the transport can be swapped without touching the
-protocol.
-
-## Correctness
-
-The conformance vectors in `crates/breeze-proto/tests/vectors.rs` are ported from
-msmart-ng's own test suite: real captured messages with the values a known-good
-implementation decodes from them. They are the closest thing this protocol has to
-a specification.
-
-That mattered. Two bugs were caught this way rather than in the field:
-
-- the swing axis was **transposed** (`HORIZONTAL` is `0x3`, `VERTICAL` is `0xC`),
-  which is invisible in review and shows up only as a unit waving the wrong flap;
-- the V3 session key is **32 bytes, so it is AES-256**, not AES-128.
-
-A third quirk is not a bug and cannot be tested for: a unit ignores its first
-request after a handshake, so you must wait ~1 s or every command times out with
-no error at all.
+**Linux** — add the signed repository and updates arrive through your package
+manager:
 
 ```bash
-cargo test --workspace   # 473 tests, no hardware needed
-cargo clippy --all-targets --workspace -- -D warnings
+curl -fsSL https://aspic.salataputarica.hr.eu.org/aspic.asc \
+  | sudo gpg --dearmor -o /usr/share/keyrings/aspic.gpg
+echo "deb [signed-by=/usr/share/keyrings/aspic.gpg] https://aspic.salataputarica.hr.eu.org/deb stable main" \
+  | sudo tee /etc/apt/sources.list.d/aspic.list
+sudo apt update && sudo apt install breeze-core
+
+sudo breeze-core pair                      # finds your units, writes the config
+sudo systemctl enable --now breeze-core    # start it, survives reboots
 ```
 
-## What is deliberately not here
+Then open `http://<server>:8420` and enter the key it printed.
 
-- **The commercial-appliance class (`0xCC`).** Not for want of hardware — the
-  criterion is verifiability. An s390x build can be checked without a
-  mainframe: cross-compile, run the suite under emulation, and being wrong
-  fails in CI. A `0xCC` implementation could only be checked against
-  msmart's vectors, never against reality, and being wrong fails silently in
-  someone's building. The architecture keeps the door open: outside tests,
-  only `frame::DeviceType` and the `ac` module know what an appliance is, so
-  adding it is one enum variant and a module, not a refactor.
-- **V1 devices.** They answer discovery with XML and need a separate TCP query.
-- **A way to get a new V3 unit's credentials that does not involve Midea.**
-  Not for want of trying. A bare V2 packet to a V3 unit gets no reply, so there
-  is no downgrade path; the unit never reveals its own key; msmart's shared
-  accounts are refused by every cloud that still answers; and the one API left
-  standing only issues a token to the account the unit is registered to. So
-  `breeze-cloud` asks for that account, uses it once, and forgets it -- and
-  `POST /api/units` takes a `token` and `key` directly, which is the path that
-  survives Midea finishing the job. Back up your `config.json`.
+**Everything else** —
+[Windows](https://github.com/monikapurpl3/breeze-core-native/wiki/Installing-on-Windows)
+· [containers](https://github.com/monikapurpl3/breeze-core-native/wiki/Installing-with-containers)
+· [OPNsense](https://github.com/monikapurpl3/breeze-core-native/wiki/Installing-on-OPNsense)
+· [the BSDs](https://github.com/monikapurpl3/breeze-core-native/wiki/Installing-on-the-BSDs)
+· [Void, Gentoo and the other package managers](https://github.com/monikapurpl3/breeze-core-native/wiki/Installing-from-packages)
+· [macOS and from source](https://github.com/monikapurpl3/breeze-core-native/wiki/Installing-from-source)
+· [one-off downloads](https://aspic.salataputarica.hr.eu.org)
 
-Reimplementing the protocol means owning the device quirks that msmart-ng
-collects upstream for hardware we do not have. That is a deliberate trade, taken
-with eyes open, and quirks get handled as they surface.
+**Android app** — [Breeze](https://github.com/monikapurpl3/breeze), with widgets
+and Android Auto.
+
+**Already running an earlier version?**
+[Upgrading to 4.x](https://github.com/monikapurpl3/breeze-core-native/wiki/Upgrading-to-4)
+is one command, and your units, key, paired phones and programs all stay where
+they are.
+
+## Documentation
+
+Everything lives in the **[wiki](https://github.com/monikapurpl3/breeze-core-native/wiki)**:
+
+|  |  |
+|---|---|
+| [First run and pairing](https://github.com/monikapurpl3/breeze-core-native/wiki/First-run-and-pairing) | getting from installed to controlling |
+| [The web panel](https://github.com/monikapurpl3/breeze-core-native/wiki/The-web-panel) · [Programs, schedules, curves](https://github.com/monikapurpl3/breeze-core-native/wiki/Programs-schedules-and-curves) · [Timers](https://github.com/monikapurpl3/breeze-core-native/wiki/Timers) | using it day to day |
+| [REST API](https://github.com/monikapurpl3/breeze-core-native/wiki/REST-API) · [Control schema](https://github.com/monikapurpl3/breeze-core-native/wiki/Control-schema) · [Configuration](https://github.com/monikapurpl3/breeze-core-native/wiki/Configuration) | writing a client, automating it |
+| [Exposing it safely](https://github.com/monikapurpl3/breeze-core-native/wiki/Exposing-it-safely) · [Reverse proxy and TLS](https://github.com/monikapurpl3/breeze-core-native/wiki/Reverse-proxy-and-TLS) | reaching it from outside the house |
+| [Troubleshooting](https://github.com/monikapurpl3/breeze-core-native/wiki/Troubleshooting) | when something is off |
+| [Architecture](https://github.com/monikapurpl3/breeze-core-native/wiki/Architecture) · [Building and releasing](https://github.com/monikapurpl3/breeze-core-native/wiki/Building-and-releasing) · [Ports and architectures](https://github.com/monikapurpl3/breeze-core-native/wiki/Ports-and-architectures) | working on it |
+| [Version history](https://github.com/monikapurpl3/breeze-core-native/wiki/Version-history) | what each release actually gave you |
+
+## Honest limits
+
+It needs a machine that is always on, and you are its sysadmin. Units join Wi-Fi
+through the vendor app, and V3 units need **one** internet-connected discovery
+run to fetch their credentials — everything after that is offline. Nothing is
+exposed to the internet by default; away-from-home control means a VPN or a
+proxy you secure yourself. The feature ceiling is your firmware's. The native
+app is Android-only. It is one brand, one job — not a home-automation platform.
+
+Specific to this implementation, and stated here rather than discovered later:
+
+- **There is no rate limiting.** Put a limiter in your reverse proxy if the
+  server is reachable from anywhere you do not control.
+- **The OPNsense GUI page has never run on a real firewall.** The binary is the
+  same one every platform gets; the plugin's GUI plumbing around it is unproven.
+- **riscv64, ppc64le and s390x** are cross-built and executed nowhere in
+  testing.
+- **The NetBSD feed is the one repository here carrying no signature**, because
+  pkgin has no verification to offer. Every other one verifies a signature made
+  off the web host.
+
+The full comparison with the vendor app, drawbacks included:
+[Compared to NetHome Plus](https://github.com/monikapurpl3/breeze-core-native/wiki/Compared-to-NetHome-Plus).
+
+## Security
+
+Two credentials, never one: an enrolment key to *begin* pairing, and a
+per-device credential to use the API. **Ed25519 request signing** is available,
+with the secret never on the wire, and can be made mandatory. Admin actions are
+gated to the LAN unconditionally — there is no setting to turn that off — with
+strict security headers and no interactive docs to leak a schema.
+
+Before exposing anything to the internet, read
+**[Exposing it safely](https://github.com/monikapurpl3/breeze-core-native/wiki/Exposing-it-safely)**.
+
+Found a vulnerability? [SECURITY.md](SECURITY.md) — privately, please.
 
 ## Licence
 
-AGPL-3.0-or-later, matching Breeze Core. The protocol layer is a reimplementation
-informed by [msmart-ng](https://github.com/mill1000/midea-msmart) (MIT) and its
-test vectors, and by [MideaUART](https://github.com/dudanov/MideaUART) for the
+[AGPL-3.0-or-later](LICENSE).
+
+The protocol layer is a reimplementation informed by
+[msmart-ng](https://github.com/mill1000/midea-msmart) (MIT) and its test
+vectors, and by [MideaUART](https://github.com/dudanov/MideaUART) for the
 temperature encoding.

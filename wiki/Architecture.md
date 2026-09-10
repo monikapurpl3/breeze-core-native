@@ -159,3 +159,45 @@ There is no integration harness and no mock server. What exists:
 
 `breeze-core diag` is the closest thing to an end-to-end test, and it needs real
 hardware. See [Command-line tools](Command-line-tools).
+
+## Two bugs the reference vectors caught
+
+Worth recording, because both are the kind that review does not find and a
+field report describes badly.
+
+- **The swing axis was transposed.** `HORIZONTAL` is `0x3` and `VERTICAL` is
+  `0xC`. Getting them the wrong way round is invisible in code and shows up
+  only as a unit waving the wrong flap at somebody.
+- **The V3 session key is 32 bytes, so it is AES-256**, not AES-128.
+
+A third quirk is not a bug and cannot be tested for: **a unit ignores its first
+request after a handshake.** Wait about a second, or every command times out
+with no error at all. That is why the first request to a unit after a restart
+is slower than the rest.
+
+## Scope: what is deliberately not here
+
+- **The commercial-appliance class (`0xCC`).** Not for want of hardware — the
+  criterion is verifiability. An s390x build can be checked without a
+  mainframe: cross-compile, run the suite, and being wrong fails visibly. A
+  `0xCC` implementation could only ever be checked against another
+  implementation's vectors, never against reality, and being wrong fails
+  silently in somebody's building. The architecture keeps the door open:
+  outside the tests, only `frame::DeviceType` and the `ac` module know what an
+  appliance is, so adding one is an enum variant and a module rather than a
+  refactor.
+- **V1 devices.** They answer discovery with XML and need a separate TCP query.
+- **A way to get a new V3 unit's credentials without the vendor.** Not for want
+  of trying: a bare V2 packet to a V3 unit gets no reply, so there is no
+  downgrade path; the unit never reveals its own key; shared accounts are
+  refused by every cloud that still answers; and the one API left standing
+  issues a token only to the account the unit is registered to. So
+  `breeze-cloud` asks for that account, uses it once and forgets it — and
+  `POST /api/units` accepts a `token` and `key` directly, which is the path
+  that survives the vendor finishing the job.
+
+  **Back up `config.json`.** That is the whole reason this page keeps saying so.
+
+Reimplementing the protocol means owning the device quirks that an upstream
+library collects for hardware nobody here has. That is a deliberate trade,
+taken with eyes open, and quirks get handled as they surface.
