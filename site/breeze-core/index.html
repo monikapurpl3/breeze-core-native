@@ -46,14 +46,111 @@ sudoedit /etc/breeze-core/breeze-core.env
 
 <span class="c"># 3. start it</span>
 sudo systemctl enable --now breeze-core</pre>
-    <p class="dim">On OpenWrt that step is
-      <code>/etc/init.d/breeze-core enable &amp;&amp; start</code>; on FreeBSD and
-      NetBSD <code>sysrc breeze_core_enable=YES &amp;&amp; service breeze_core
-      start</code>; on OpenBSD <code>rcctl enable breeze_core &amp;&amp; rcctl
-      start breeze_core</code>. The config lives in
-      <code>/usr/local/etc/breeze-core</code> on FreeBSD and
-      <code>/usr/pkg/etc/breeze-core</code> on NetBSD, so substitute those below
-      — or set <code>AC_CONFIG_DIR</code> and stop thinking about it.</p>
+    <p class="dim">Step 2's file moves with the platform's prefix:
+      <code>/usr/local/etc/breeze-core</code> on FreeBSD and OPNsense,
+      <code>/usr/pkg/etc/breeze-core</code> on NetBSD,
+      <code>%ProgramData%\breeze-core</code> on Windows — or set
+      <code>AC_CONFIG_DIR</code> once and stop thinking about it. Step 3 is
+      whatever your init system is:</p>
+
+    <h3>systemd</h3>
+    <span class="who">Debian · Ubuntu · Fedora · RHEL · SUSE · Arch · Gentoo (systemd profile)</span>
+<pre>sudo systemctl enable --now breeze-core
+sudo systemctl status breeze-core
+journalctl -u breeze-core -f            <span class="c"># follow the log</span></pre>
+
+    <h3>OpenRC</h3>
+    <span class="who">Alpine · Artix (openrc) · Gentoo · Devuan</span>
+<pre>sudo rc-update add breeze-core default
+sudo rc-service breeze-core start
+sudo rc-service breeze-core status</pre>
+    <p class="dim">On Gentoo the settings live in
+      <code>/etc/conf.d/breeze-core</code>, which is where OpenRC expects them —
+      not in <code>breeze-core.env</code>.</p>
+
+    <h3>runit</h3>
+    <span class="who">Void · Artix (runit)</span>
+<pre><span class="c"># The Void package already ships /etc/sv/breeze-core, disabled.
+# Enabling it is the symlink and nothing else:</span>
+sudo ln -s /etc/sv/breeze-core /var/service/
+sudo sv status breeze-core</pre>
+    <p class="dim">Installed by hand instead? The templates are
+      <code>deploy/init/runit-run</code> and its companion
+      <code>runit-log-run</code>, which gives you a rotated log under
+      <code>/var/log/breeze-core</code> rather than runit's catch-all.</p>
+
+    <h3>s6 / s6-rc</h3>
+    <span class="who">Artix (s6) · Obarun</span>
+<pre>sudo mkdir -p /etc/s6/sv/breeze-core
+sudo install -m 0755 deploy/init/s6-run /etc/s6/sv/breeze-core/run
+sudo s6-rc-bundle-update add default breeze-core
+sudo s6-rc -u change breeze-core</pre>
+
+    <h3>SysV init</h3>
+    <span class="who">Devuan (sysvinit) · Slackware · older LTS releases</span>
+<pre>sudo install -m 0755 deploy/init/sysv-breeze-core /etc/init.d/breeze-core
+sudo update-rc.d breeze-core defaults   <span class="c"># RHEL-ish: chkconfig --add</span>
+sudo service breeze-core start</pre>
+
+    <h3>procd</h3>
+    <span class="who">OpenWrt</span>
+<pre>/etc/init.d/breeze-core enable
+/etc/init.d/breeze-core start
+logread -e breeze-core                  <span class="c"># follow the log</span></pre>
+
+    <h3>rc.d — FreeBSD and OPNsense</h3>
+    <span class="who">FreeBSD 14 · 15</span>
+<pre>sudo sysrc breeze_core_enable=YES
+sudo service breeze_core start
+sudo service breeze_core status</pre>
+    <p class="dim">Underscore, not hyphen: FreeBSD's rc system needs a name that
+      is a valid shell variable. On OPNsense the GUI does this for you —
+      <b>Services &gt; Breeze Core</b>.</p>
+
+    <h3>rc.d — NetBSD</h3>
+<pre>echo 'breeze_core=YES' | sudo tee -a /etc/rc.conf
+sudo service breeze_core start</pre>
+
+    <h3>rcctl — OpenBSD</h3>
+<pre>doas rcctl enable breeze_core
+doas rcctl start breeze_core
+doas rcctl check breeze_core</pre>
+    <p class="dim">OpenBSD has no <code>service(8)</code> at all;
+      <code>rcctl</code> is the whole interface.</p>
+
+    <h3>launchd</h3>
+    <span class="who">macOS — a LaunchDaemon, not an Agent</span>
+<pre>sudo cp deploy/init/com.breeze.core.plist /Library/LaunchDaemons/
+sudo chown root:wheel /Library/LaunchDaemons/com.breeze.core.plist
+sudo launchctl load /Library/LaunchDaemons/com.breeze.core.plist</pre>
+    <p class="dim">A daemon rather than an agent, because an agent only runs
+      while its user is logged in — the wrong lifetime for something a phone
+      talks to. The plist creates no account; the header comments carry the
+      three <code>dscl</code> lines.</p>
+
+    <h3>supervisord</h3>
+    <span class="who">Anywhere, and the usual answer inside a container that runs more than one thing</span>
+<pre>sudo cp deploy/init/supervisor-breeze-core.conf \
+  /etc/supervisor/conf.d/breeze-core.conf
+sudo supervisorctl reread &amp;&amp; sudo supervisorctl update</pre>
+
+    <h3>Windows service</h3>
+    <span class="who">Registered by the installer, supervised by NSSM</span>
+<pre>Get-Service BreezeCore
+Restart-Service BreezeCore
+Get-Content "$env:ProgramData\breeze-core\logs\service.log" -Tail 40 -Wait</pre>
+
+    <h3>Containers</h3>
+<pre>docker compose up -d
+docker logs -f breeze-core</pre>
+
+    <p class="dim"><b>Writing your own?</b> Three things matter. Pass
+      <code>serve</code> explicitly — a bare <code>breeze-core</code> prints its
+      usage and exits 0, which as a start command looks like success and leaves
+      you with no server. Run it in the foreground and let your supervisor own
+      it; there is no <code>--daemonize</code>. And stop it with a plain
+      <code>TERM</code>: every store is written to a temporary file and renamed
+      into place, so no signal can catch one half-written.</p>
     <p>Then open <code>http://&lt;that address&gt;:8420</code>. The panel asks for
       the API key once per device — it is in
       <code>/etc/breeze-core/config.json</code>, which <code>pair</code> wrote —
@@ -120,6 +217,15 @@ breeze-core control 'back room' none none none none none 30m</pre>
         talks to the same API</td></tr>
       <tr><td>architectures</td><td>x86-64, arm64, armv7, riscv64, ppc64le,
         s390x — and routers, which the previous line could not fit on</td></tr>
+      <tr><td>package managers</td><td><code>apt</code> · <code>dnf</code> ·
+        <code>zypper</code> · <code>pacman</code> · <code>apk</code> ·
+        <code>xbps</code> (Void, glibc <i>and</i> musl) · <code>emerge</code>
+        (a Gentoo overlay) · <code>opkg</code> · <code>pkg</code> ·
+        <code>pkgin</code> · <code>pkg_add</code>, plus a Windows installer, an
+        OPNsense plugin and container images</td></tr>
+      <tr><td>init systems</td><td>systemd, OpenRC, runit, s6, SysV, procd, the
+        three BSD <code>rc</code> flavours, launchd, supervisord and a Windows
+        service — templates for every one of them</td></tr>
     </table>
   </section>
 
