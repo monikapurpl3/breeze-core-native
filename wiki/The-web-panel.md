@@ -38,8 +38,16 @@ Every control returns the unit's own state after the change, so a setting the
 firmware quietly ignored shows as ignored rather than as applied. That is why a
 slider can spring back: the unit disagreed, and the panel is telling you.
 
-**Controls the firmware does not support are hidden**, not shown greyed out.
-The server reports each unit's capabilities and the panel asks before drawing.
+**The panel draws every control, whatever your unit supports.** It does not
+consult `/api/units/{id}/capabilities` — the Android app does, and hides what
+the firmware does not admit to, but the web panel offers everything and lets
+the reconciliation above tell you the answer. Sending a swing mode a unit has
+no flap for is silently ignored by the firmware, so the control returns and the
+card shows it unchanged.
+
+If you want to know what a unit actually admits to, ask the server:
+`GET /api/units/{id}/capabilities`, or read it off the Nerd panel, which lists
+each unit's cached capabilities.
 
 ### The climate bar
 

@@ -25,12 +25,16 @@ sudo dnf install breeze-core        <span class="c"># Fedora / RHEL family</span
 sudo zypper install breeze-core     <span class="c"># openSUSE</span>
 sudo pacman -S breeze-core          <span class="c"># Arch family</span>
 sudo apk add breeze-core            <span class="c"># Alpine</span>
+sudo xbps-install -S breeze-core    <span class="c"># Void</span>
+sudo emerge -av app-misc/breeze-core-bin   <span class="c"># Gentoo (the -bin ebuild)</span>
 opkg install breeze-core            <span class="c"># OpenWrt</span>
 pkgin -y install breeze-core        <span class="c"># NetBSD</span>
 pkg install breeze-core             <span class="c"># FreeBSD</span></pre>
     <p class="dim">OpenBSD and OPNsense install one named file rather than a
       package by name — the <a href="/#openbsd">OpenBSD</a> and
-      <a href="/#opnsense">OPNsense</a> sections on the index have the command.</p>
+      <a href="/#opnsense">OPNsense</a> sections on the index have the command.
+      Gentoo needs its <a href="/#gentoo">overlay added</a> rather than the
+      package repository, since ebuilds are not packages.</p>
   </div>
 
   <section id="after" class="s-native">

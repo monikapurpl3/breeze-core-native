@@ -235,15 +235,16 @@ export PKG_PATH="https://aspic.salataputarica.hr.eu.org/openbsd/%c/packages/%a/:
     <h2>Void Linux</h2>
     <span class="who">xbps, glibc and musl alike</span>
 <pre>echo "repository=https://aspic.salataputarica.hr.eu.org/xbps"   | sudo tee /etc/xbps.d/20-aspic.conf
-sudo xbps-install -S breeze-core
-
-<span class="c"># enable it (Void is runit; the package ships the service, disabled)</span>
-sudo ln -s /etc/sv/breeze-core /var/service/</pre>
+sudo xbps-install -S breeze-core</pre>
     <p class="dim">x86_64 · aarch64 · armv7l · riscv64 · ppc64le, each in both
       <b>glibc and musl</b> flavours — ten packages holding the same bytes,
       because the binary is static and does not care which libc you run, but
       xbps keeps separate repodata per architecture and would otherwise show
       the package to only half of Void. No dependencies at all.</p>
+    <p class="dim">The package ships the runit service <b>disabled</b>, which is
+      what Void expects. Enabling it is one symlink, and
+      <a href="/breeze-core/#after">the breeze-core page</a> has that plus the
+      other twelve init systems.</p>
     <div class="note"><b>xbps asks about the key the first time.</b> Unlike apt,
       apk and opkg there is nothing to install beforehand: the public key
       travels inside the signed index, and xbps shows you its fingerprint and
@@ -257,12 +258,10 @@ sudo ln -s /etc/sv/breeze-core /var/service/</pre>
     <h2>Gentoo</h2>
     <span class="who">An overlay, <code>app-misc/breeze-core-bin</code></span>
 <pre><span class="c"># needs app-eselect/eselect-repository</span>
-sudo eselect repository add aspic git   https://aspic.salataputarica.hr.eu.org/portage/breeze.git
+sudo eselect repository add aspic git \
+  https://aspic.salataputarica.hr.eu.org/portage/breeze.git
 sudo emerge --sync aspic
-sudo emerge -av app-misc/breeze-core-bin
-
-<span class="c"># OpenRC; configure in /etc/conf.d/breeze-core</span>
-sudo rc-update add breeze-core default &amp;&amp; sudo rc-service breeze-core start</pre>
+sudo emerge -av app-misc/breeze-core-bin</pre>
     <p class="dim">A <code>-bin</code> package, which on Gentoo usually needs an
       apology and here does not: the binary is statically linked, so it is
       independent of your USE flags, your CHOST and your libc, and there is
@@ -270,6 +269,10 @@ sudo rc-update add breeze-core default &amp;&amp; sudo rc-service breeze-core st
       a systemd unit, plus <code>acct-user/breeze</code> and
       <code>acct-group/breeze</code> so the account is managed the Gentoo way
       rather than by a script.</p>
+    <p class="dim">On Gentoo the settings live in
+      <code>/etc/conf.d/breeze-core</code>, not in <code>breeze-core.env</code>.
+      Enabling and starting it:
+      <a href="/breeze-core/#after">the breeze-core page</a>.</p>
     <div class="note"><b>Without eselect-repository</b>, add it by hand:
       drop a file at <code>/etc/portage/repos.conf/aspic.conf</code> holding
       <code>[aspic]</code>, <code>location&nbsp;=&nbsp;/var/db/repos/aspic</code>,

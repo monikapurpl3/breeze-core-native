@@ -14,6 +14,8 @@ native Android app that talk to your units over your own LAN.
 
 </div>
 
+![The Breeze Core web panel: six air conditioners, each in a different mode](docs/img/web-ui.png)
+
 ## Why
 
 The vendor app sends "make it 23°" to a datacentre and back, to reach a machine
