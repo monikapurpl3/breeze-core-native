@@ -174,6 +174,25 @@ If you have many units, one poll pass can outlast the tick: at roughly a second
 per unit, more than about five means each tick starts later than the last. Raise
 `BREEZE_BG_WORKERS` — see [Configuration](Configuration).
 
+## Controls are slow, or the temperature jumps back after tapping
+
+On **4.0.2**, a burst of taps on + or − queued one command per tap on the unit,
+answered each one long after the tap, and held up every other unit meanwhile —
+so the number walked back through values already tapped past. 4.1.0 merges
+controls that arrive while a unit is busy and answers them together; upgrade
+the server, and the Breeze app to 2.2.8, which also stops showing a reply that
+a newer tap has overtaken.
+
+If one unit is still slower than the others, open the Nerd panel and look at
+that unit's `link`:
+
+- **`resends`** climbing means the unit keeps ignoring requests and being asked
+  again. Every unit does this occasionally; one that does it often usually has
+  a weak WiFi signal.
+- **`connects`** climbing faster than you open the app means its connection
+  keeps being dropped. With keep-warm on (the default) it should stay at one
+  per unit for as long as you are using it.
+
 ## Pairing fails with a 500, or nothing is saved
 
 The service could not write its state directory. It runs as `breeze` and needs

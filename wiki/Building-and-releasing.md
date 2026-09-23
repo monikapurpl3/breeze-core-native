@@ -11,7 +11,7 @@ For building it to *use*, see
 Everything runs from one workstation, in containers, with no CI:
 
 ```
-cargo test --workspace                       480 tests, 18 suites
+cargo test --workspace                       502 tests, 18 suites
 packaging/build-binaries.sh                  one static executable per target
 packaging/nfpm/build-packages.sh             deb, rpm, pacman, apk, ipk
 packaging/xbps/build-xbps.sh                 Void
@@ -162,7 +162,7 @@ powershell -File packaging/windows/build-installer.ps1 -OutDir packaging/out/win
 ./packaging/repo/verify-repo.sh
 
 # 4. publish
-gh release create v4.0.2 --notes-file NOTES.md packaging/out/release/*
+gh release create v4.1.0 --notes-file NOTES.md packaging/out/release/*
 ./packaging/container/build-images.sh --push
 ./site/publish.sh --tree packaging/out/aspic
 ./packaging/repo/verify-repo.sh --live

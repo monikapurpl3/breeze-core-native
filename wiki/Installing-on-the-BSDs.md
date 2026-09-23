@@ -60,7 +60,7 @@ pkgin -y update && pkgin -y install breeze-core
 Or without pkgin:
 
 ```sh
-pkg_add https://aspic.salataputarica.hr.eu.org/netbsd/All/breeze-core-4.0.2.tgz
+pkg_add https://aspic.salataputarica.hr.eu.org/netbsd/All/breeze-core-4.1.0.tgz
 ```
 
 > **This is the one feed here that is not signed.** pkgin has no signature
@@ -85,7 +85,7 @@ A **signify**-signed package, built and verified on OpenBSD 7.9.
 doas ftp -o /etc/signify/aspic-pkg.pub \
   https://aspic.salataputarica.hr.eu.org/openbsd/aspic-pkg.pub
 
-doas pkg_add https://aspic.salataputarica.hr.eu.org/openbsd/7.9/packages/amd64/breeze-core-4.0.2.tgz
+doas pkg_add https://aspic.salataputarica.hr.eu.org/openbsd/7.9/packages/amd64/breeze-core-4.1.0.tgz
 doas rcctl enable breeze_core && doas rcctl start breeze_core
 ```
 

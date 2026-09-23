@@ -53,8 +53,9 @@ admin approval restricted to the LAN, proxy headers distrusted.
 | `AC_TIMERS` | `<dir>/timers.json` | one-shot timers ([Timers](Timers)) |
 | `BREEZE_HOST` | `127.0.0.1` | address to bind |
 | `BREEZE_PORT` | `8420` | port to bind |
-| `BREEZE_WORKERS` | `8` | HTTP worker threads. A control blocks ~1.8 s on a unit, so this is how many slow requests fit in flight — but each unit is locked while its own request runs, so the useful ceiling is roughly the number of units you own |
+| `BREEZE_WORKERS` | `8` | HTTP worker threads. A request waits on its unit for a round-trip, about 0.75 s, so this is how many fit in flight at once — but requests to one unit are merged or share an answer, so the useful ceiling is roughly the number of units you own |
 | `BREEZE_BG_WORKERS` | `1` | how many units the background state poller contacts **at once**. `1` is a sequential walk. Raise it when the walk stops fitting inside `AC_STREAM_TICK`. Not a count of background threads — see below |
+| `BREEZE_KEEP_WARM` | `30m` | how long to keep connections to the units open after the server was last used. A bare number is seconds, or `90s`, `30m`, `2h`; `0`/`off` never; `always` from startup. See [Keeping connections warm](#keeping-connections-warm) |
 | `AC_SCHED_TICK` | `30` | seconds between scheduler passes |
 | `AC_TIMER_TICK` | `15` | seconds between timer due-checks |
 | `AC_STREAM_TICK` | `5` | seconds between state polls **while at least one client is streaming** |
@@ -113,15 +114,37 @@ Breeze Core serves requests on a **fixed pool of threads** — `BREEZE_WORKERS`,
 default 8 — fed from a queue, plus exactly three background threads: the timer
 runner, the scheduler and the state poller.
 
-A pool rather than a thread per request, because a control call blocks for
-around 1.8 seconds waiting on a unit, so some concurrency is essential — and a
-thread per request would let anyone who can reach the port exhaust memory.
+A pool rather than a thread per request, because a request waits on a unit for
+a round-trip — about 0.75 s, whatever it asks — so some concurrency is
+essential, and a thread per request would let anyone who can reach the port
+exhaust memory.
 
 **Eight is more than it sounds.** Every operation is a LAN round-trip to one
 *specific* unit, and each unit is locked while its own request runs. Two
 requests for the living room serialise however many workers exist, so the
 parallelism that helps is bounded by **how many units you own**, not by this
 number. Three units cannot keep eight workers busy.
+
+**Requests to a busy unit do not queue one behind another.** Tapping + ten
+times sends ten requests, and in 4.0.2 they ran one after another — the last
+one finished half a minute after the tapping stopped, each answered with a
+temperature already tapped past, and every waiting request held a worker, so
+the other units stalled too. From 4.1.0:
+
+- **controls merge**: a control that arrives while the unit is busy folds into
+  the next command, which carries every change that arrived meanwhile and
+  answers all of them. Ten taps take a handful of commands and are all answered
+  within about a second and a half of the last tap;
+- **reads share**: a read that waited behind another read — or behind a
+  control — takes that answer instead of asking the unit again;
+- **nothing that only needs a name waits on a unit**: `GET /api/units` and the
+  diagnostics screen read copies kept beside each unit.
+
+A control is also **one round-trip** where it was two. It is built on the
+state the unit reported in the last ten seconds — the panel's own poll, or the
+previous command's reply — and only reads the unit first when nothing that
+recent is on hand. The ten seconds bound the one trade-off: a setting changed
+with the IR remote since that report would be put back.
 
 **`BREEZE_BG_WORKERS` is not a count of background threads.** Those three
 threads are singleton roles and have to stay that way — a second scheduler
@@ -144,6 +167,33 @@ A streaming client never occupies a worker at all — each Server-Sent Events
 connection gets its own thread, specifically so a watching browser cannot sit
 in the pool. There is a ceiling of 64 simultaneous streams, and the 65th gets a
 refusal rather than a dropped socket.
+
+## Keeping connections warm
+
+A unit closes its connection **30 seconds after the last request** it
+received, and the next request then pays for a new one: connect, handshake, and
+the one-second pause the protocol requires before the unit will listen — about
+a second in all. Opening the app a minute after closing it paid that on every
+unit.
+
+So after the server was last used — an authenticated request, or an app or
+panel with its live stream open — Breeze Core keeps each unit's connection
+alive by reading it once it has been quiet for 20 seconds. That is one small
+request per unit every 20–25 seconds, and only inside the window:
+
+| `BREEZE_KEEP_WARM` | Behaviour |
+|---|---|
+| unset, or `30m` | warm for half an hour after the last use, then quiet |
+| `2h`, `90s`, `1800` | the same, for that long. A bare number is seconds |
+| `0` or `off` | never: no traffic to a unit unless a client asks for something |
+| `always` | warm from startup, whether or not anyone has connected |
+
+A unit that is busy is never read for this — whoever is using it is keeping it
+warm — and one that has just failed to answer is left alone for five minutes,
+so a unit that is off the network is not asked every 20 seconds.
+
+The setting and whether it is active at this moment are on the Nerd panel,
+under `settings.keep_warm` and `settings.keep_warm_active`.
 
 ## Timezone
 

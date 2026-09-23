@@ -4,6 +4,76 @@ The 4.x line. For 3.x and earlier, see the Python project's own
 [version history](https://github.com/monikapurpl3/breeze-core/wiki/Version-history) —
 everything published for it stays where it is and keeps installing.
 
+## 4.1.0
+
+Responsiveness. Tapping + or − repeatedly no longer queues up behind the unit,
+a request a unit ignores is asked again in two seconds rather than ten, and
+opening the app again no longer waits for a reconnect.
+
+**Why 4.0.2 felt slower than 3.2.0**, from two days of a real server's request
+log and a probe watching a unit's connection packet by packet:
+
+- **every control was two round-trips** — read the unit, then write it —
+  1.47 s where 3.2.0 took one;
+- **controls to a busy unit ran one after another**, each holding a server
+  thread while it waited. Ten taps finished 32 s after the tapping stopped,
+  each answered with a temperature already tapped past, and the other units
+  and even the plain unit list (11.7 s) waited behind them;
+- **a request the unit ignored cost 12.5 s**: a ten-second timeout, then a
+  reconnect. Units do ignore the odd request — about one in thirty — while the
+  connection itself stays perfectly usable.
+
+**What changed**
+
+- **Controls merge.** One that arrives while the unit is busy folds into the
+  next command, which carries every change and answers all of them.
+- **One round-trip per control**, built on what the unit reported in the last
+  ten seconds; the unit is read first only when nothing that recent is on hand.
+- **Reads share.** A read that waited behind another read or a control takes
+  its answer, so opening the app — a batch read and the live stream at once —
+  reads each unit once, not twice.
+- **Nothing that only needs a name waits on a unit**: `GET /api/units` and the
+  Nerd panel read copies kept beside each unit.
+- **An ignored request is resent after 2 s on the same connection.** A reply
+  that turns up late after all is discarded rather than taken as the answer to
+  the next command, and a connection the unit has closed is noticed before a
+  request is written into it.
+- **Keeping connections warm**, `BREEZE_KEEP_WARM`: for 30 minutes after the
+  server was last used, each quiet unit is read every 20–25 s so its
+  connection outlives the unit's 30-second idle timer. Any duration, `off`, or
+  `always`. See [Configuration](Configuration#keeping-connections-warm).
+- **The Nerd panel** shows `keep_warm`, whether it is active right now, and for
+  each unit a `link` block — connections opened, requests resent, stale replies
+  discarded. A unit with a weak signal shows up there first.
+
+Measured on a real unit, same server and network:
+
+| | 4.0.2 | 4.1.0 |
+|---|---|---|
+| ten taps 0.25 s apart: last reply | 32 s after the tapping stopped | **1.5 s** after the last tap |
+| commands sent for those ten taps | 10, two round-trips each | **5, one round-trip each** |
+| `GET /api/units` while a unit is busy | up to 11.7 s | **2 ms** |
+| a read after 45 s idle | ~1.8 s, reconnecting | **0.73 s** |
+
+**Windows installer**
+
+Installing over an existing copy **upgrades it in place**. Before, it
+re-registered the service from defaults — back to the LAN address and port
+8420, `--behind-proxy` dropped, the environment replaced (anything added with
+`nssm edit`, `BREEZE_WORKERS` included) and the inbound LAN firewall rule
+reopened on a machine set up proxy-only. Now it stops the service, replaces the
+files, changes only which executable the service runs, and starts it again if
+it was running. It also finds a previous install directory again — it had
+been looking in the 32-bit registry view, where it never writes — and a service
+left over from the Python line is still configured from scratch, as it has to
+be.
+
+**The Breeze app, 2.2.8**, pairs with this: it shows only the newest tap's
+reply, reverts a failed control to what the server last reported rather than
+to "before this tap", and does not let a push or poll overwrite a unit while a
+control for it is in flight. With both, the temperature no longer walks back
+through values already tapped past.
+
 ## 4.0.2
 
 Settings that had quietly become constants are settings again, two new package

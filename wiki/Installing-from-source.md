@@ -35,7 +35,7 @@ unit, `panic = "abort"`, stripped — which is what gets a whole daemon into
 about two megabytes. A `cargo build` without `--release` produces something
 much larger and slower, and is only for development.
 
-Run the tests if you like: `cargo test --workspace`, 480 of them across 18
+Run the tests if you like: `cargo test --workspace`, 502 of them across 18
 suites, no hardware or network needed.
 
 ## Set it up

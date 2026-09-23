@@ -67,8 +67,9 @@ rustup component add clippy rustfmt --toolchain stable
 
 ## Testing
 
-480 tests across 18 suites, none of which need hardware or a network — the
-protocol layer is pure codec, bytes in and bytes out.
+502 tests across 18 suites, none of which need hardware or anything beyond
+loopback — the protocol layer is pure codec, bytes in and bytes out, and the
+connection layer is tested against a fake unit listening on `127.0.0.1`.
 
 Two kinds are worth knowing about:
 
@@ -82,6 +83,12 @@ Two kinds are worth knowing about:
   by side against the same configuration and diffs every endpoint. It catches a
   *misunderstanding* of the contract, which no unit test can, because a unit
   test agrees with whatever the code does.
+
+When a real unit misbehaves, `crates/breeze-device/examples/wire.rs` watches
+one unit's connection packet by packet — reply times, anything it sends
+unasked, how an idle connection dies. It is what found that units ignore the
+occasional request and close a connection exactly 30 s after the last one.
+Read-only unless given `--write`.
 
 `breeze-core diag` is the end-to-end check and it needs real units. Note its
 last check POSTs an out-of-range temperature expecting a `422` — nothing

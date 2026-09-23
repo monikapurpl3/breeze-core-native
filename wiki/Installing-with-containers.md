@@ -4,8 +4,8 @@ Two images. One to run, one to debug.
 
 | Tag | Base | Download | For |
 |---|---|---|---|
-| `4.0.2` | `scratch` | **1.6 MB** | everyone |
-| `4.0.2-debug` | `busybox:musl` | 2.5 MB | working out why something is wrong |
+| `4.1.0` | `scratch` | **1.6 MB** | everyone |
+| `4.1.0-debug` | `busybox:musl` | 2.5 MB | working out why something is wrong |
 
 Those are download sizes. On disk they are **4.3 MB** and **5.9 MB**,
 measured rather than estimated. Most of the gap is the timezone database: some
@@ -38,14 +38,14 @@ docker volume create breeze-config
 # Pair first. This needs the host's network -- see below.
 docker run --rm -it --network host \
   -v breeze-config:/etc/breeze-core \
-  ghcr.io/monikapurpl3/breeze-core-native:4.0.2 pair
+  ghcr.io/monikapurpl3/breeze-core-native:4.1.0 pair
 
 docker run -d --name breeze-core --restart unless-stopped \
   -e TZ=Europe/Zagreb \
   -p 192.168.1.10:8420:8420 \
   -v breeze-config:/etc/breeze-core \
   --read-only --cap-drop ALL --security-opt no-new-privileges:true \
-  ghcr.io/monikapurpl3/breeze-core-native:4.0.2
+  ghcr.io/monikapurpl3/breeze-core-native:4.1.0
 ```
 
 Or use the compose files in `packaging/container/` — `docker-compose.yml` for
@@ -107,7 +107,7 @@ That is the point of a distroless image, and it changes two things.
 
 ```sh
 docker run --rm -it --network host -v breeze-config:/etc/breeze-core \
-  ghcr.io/monikapurpl3/breeze-core-native:4.0.2 pair
+  ghcr.io/monikapurpl3/breeze-core-native:4.1.0 pair
 
 docker exec breeze-core breeze-core devices
 docker exec breeze-core breeze-core approve BONG-W3GN
@@ -222,7 +222,7 @@ docker stop breeze-core && docker rm breeze-core
 docker run -d --name breeze-core --restart unless-stopped \
   -e TZ=Europe/Zagreb -p 192.168.1.10:8420:8420 \
   -v breeze-config:/etc/breeze-core \
-  ghcr.io/monikapurpl3/breeze-core-native:4.0.2
+  ghcr.io/monikapurpl3/breeze-core-native:4.1.0
 ```
 
 Check, in this order:
