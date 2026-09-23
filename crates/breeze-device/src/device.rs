@@ -5,6 +5,13 @@
 //! session until it expires or the unit drops it. Every read and every write is
 //! still a live round-trip — there is no push in this protocol — so per-call
 //! latency of a few hundred milliseconds is inherent, not a bug to optimise away.
+//!
+//! What *is* worth avoiding is paying for more round-trips than a request needs,
+//! and waiting longer than necessary when a unit ignores one. The first is the
+//! manager's job (it merges controls and shares reads); the second is the
+//! session's (it resends on the same connection). This type keeps the facts
+//! both of those decisions need: when the unit last answered, what it said, and
+//! when it last failed.
 
 use breeze_proto::ac::capabilities::Capabilities;
 use breeze_proto::ac::command::{self, Setpoint};
@@ -12,17 +19,24 @@ use breeze_proto::ac::response::State;
 use breeze_proto::ac::types::TemperatureType;
 use breeze_proto::{frame, packet};
 use std::net::{IpAddr, SocketAddr, TcpStream};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::error::DeviceError;
-use crate::session::Session;
+use crate::session::{LinkStats, Session, Timing};
 
-/// Attempts per operation, matching msmart's retry count. A unit that has dropped
-/// an idle connection needs exactly one reconnect, so three is generous.
-const ATTEMPTS: u32 = 3;
+/// Connections per operation. The session already resends on the connection it
+/// has, so the only thing a further attempt adds is a *fresh* connection: one is
+/// enough, and a unit that ignores three sends and a reconnect is not there.
+const ATTEMPTS: u32 = 2;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const IO_TIMEOUT: Duration = Duration::from_secs(10);
+/// Writes are a couple of hundred bytes into an idle socket; this only bounds
+/// a unit that has stopped reading entirely.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long keep-warm leaves a unit alone after it failed. A unit that is off
+/// the network costs a connect timeout per attempt, and nobody is waiting.
+const WARM_BACKOFF: Duration = Duration::from_secs(300);
 
 /// A unit as configured: identity and credentials, no connection.
 #[derive(Debug, Clone)]
@@ -46,6 +60,17 @@ impl UnitConfig {
     }
 }
 
+/// Counts for a diagnostics screen, cumulative since start.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DeviceStats {
+    /// Connections opened, the first one included.
+    pub connects: u64,
+    /// Requests the unit ignored and was asked again.
+    pub resends: u64,
+    /// Replies thrown away because no request was waiting for them.
+    pub discarded: u64,
+}
+
 pub struct Device {
     config: UnitConfig,
     session: Option<Session<TcpStream>>,
@@ -55,9 +80,18 @@ pub struct Device {
     /// Last successfully decoded state, kept so a caller can answer "what was it
     /// last doing?" without a round-trip and without inventing values.
     last_state: Option<State>,
+    /// When `last_state` arrived. What lets a request that waited behind
+    /// another one reuse its answer instead of asking again.
+    last_state_at: Option<Instant>,
+    /// When the unit last answered anything. The unit's own idle timer counts
+    /// from the last request it received, which is within a round-trip of this.
+    last_exchange_at: Option<Instant>,
+    /// The most recent failure, so requests queued behind it can share it
+    /// instead of each spending another full timeout on a unit that is gone.
+    last_failure: Option<(Instant, DeviceError)>,
     online: bool,
-    /// Overrides the post-handshake wait. Tests only.
-    settle: Option<Duration>,
+    timing: Timing,
+    stats: DeviceStats,
 }
 
 impl Device {
@@ -67,14 +101,19 @@ impl Device {
             session: None,
             capabilities: None,
             last_state: None,
+            last_state_at: None,
+            last_exchange_at: None,
+            last_failure: None,
             online: false,
-            settle: None,
+            timing: Timing::default(),
+            stats: DeviceStats::default(),
         }
     }
 
-    #[cfg(test)]
-    pub fn with_settle(mut self, settle: Duration) -> Self {
-        self.settle = Some(settle);
+    /// Override how sessions wait on the unit. Tests only in practice: real
+    /// units want the protocol's own timings.
+    pub fn with_timing(mut self, timing: Timing) -> Self {
+        self.timing = timing;
         self
     }
 
@@ -91,8 +130,6 @@ impl Device {
         self.config.name = name.into();
     }
 
-    /// Whether the last exchange succeeded. This is a record of the past, not a
-    /// probe: it says nothing about whether the unit would answer right now.
     /// Whether a session is currently open.
     ///
     /// Distinct from [`Device::online`], which records whether the last exchange
@@ -110,6 +147,8 @@ impl Device {
         self.capabilities.as_ref()
     }
 
+    /// Whether the last exchange succeeded. This is a record of the past, not a
+    /// probe: it says nothing about whether the unit would answer right now.
     pub fn online(&self) -> bool {
         self.online
     }
@@ -118,17 +157,74 @@ impl Device {
         self.last_state.as_ref()
     }
 
+    /// The last state, if it arrived at or after `since`.
+    pub fn state_since(&self, since: Instant) -> Option<&State> {
+        match self.last_state_at {
+            Some(at) if at >= since => self.last_state.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// The last state, if it is no older than `max_age`.
+    pub fn fresh_state(&self, max_age: Duration) -> Option<&State> {
+        match self.last_state_at {
+            Some(at) if at.elapsed() <= max_age => self.last_state.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// The last failure, if it happened at or after `since` and nothing has
+    /// succeeded since.
+    pub fn failure_since(&self, since: Instant) -> Option<&DeviceError> {
+        match &self.last_failure {
+            Some((at, e)) if *at >= since => Some(e),
+            _ => None,
+        }
+    }
+
+    /// How long since the unit last answered anything, or `None` if it never has.
+    pub fn idle_for(&self) -> Option<Duration> {
+        self.last_exchange_at.map(|at| at.elapsed())
+    }
+
+    /// Whether keep-warm should read this unit now: it has been quiet for at
+    /// least `max_idle` (or never spoken), and it has not failed recently.
+    pub fn needs_warming(&self, max_idle: Duration) -> bool {
+        if let Some((at, _)) = &self.last_failure {
+            if at.elapsed() < WARM_BACKOFF {
+                return false;
+            }
+        }
+        if self.config.credentials().is_err() {
+            return false;
+        }
+        self.idle_for().is_none_or(|idle| idle >= max_idle)
+    }
+
+    pub fn stats(&self) -> DeviceStats {
+        let live = self
+            .session
+            .as_ref()
+            .map(Session::stats)
+            .unwrap_or_default();
+        DeviceStats {
+            connects: self.stats.connects,
+            resends: self.stats.resends + live.resends,
+            discarded: self.stats.discarded + live.discarded,
+        }
+    }
+
     /// Drop any cached connection. Used when configuration changes underneath us.
     pub fn forget(&mut self) {
-        self.session = None;
+        self.drop_session();
         self.online = false;
     }
 
     /// Read current state from the unit.
     pub fn refresh(&mut self) -> Result<State, DeviceError> {
         let frame = command::get_state(self.next_message_id(), TemperatureType::Indoor);
-        let state = self.exchange(&frame)?;
-        Ok(state)
+        self.exchange(&frame, |payload| Ok(State::parse(payload)?))
+            .inspect(|state| self.remember(state))
     }
 
     /// What the unit says it can do, fetched once and cached.
@@ -146,12 +242,12 @@ impl Device {
             return Ok(cached.clone());
         }
         let frame = command::get_capabilities(self.next_message_id());
-        let mut caps = Capabilities::parse(&self.exchange_raw(&frame)?);
+        let mut caps = self.exchange(&frame, |payload| Ok(Capabilities::parse(payload)))?;
 
         if caps.additional {
             let frame = command::get_more_capabilities(self.next_message_id());
-            if let Ok(payload) = self.exchange_raw(&frame) {
-                caps.merge(&Capabilities::parse(&payload));
+            if let Ok(more) = self.exchange(&frame, |payload| Ok(Capabilities::parse(payload))) {
+                caps.merge(&more);
             }
         }
         self.capabilities = Some(caps.clone());
@@ -165,7 +261,8 @@ impl Device {
     /// what it asked for.
     pub fn apply(&mut self, setpoint: &Setpoint) -> Result<State, DeviceError> {
         let frame = command::set_state(self.next_message_id(), setpoint);
-        self.exchange(&frame)
+        self.exchange(&frame, |payload| Ok(State::parse(payload)?))
+            .inspect(|state| self.remember(state))
     }
 
     /// Convenience for the common case: read, change one or more fields, write.
@@ -176,75 +273,66 @@ impl Device {
         self.apply(&setpoint)
     }
 
-    /// Send a framed command and return its raw appliance payload.
+    /// Make the last report look old, as if nobody had asked for a while.
+    #[cfg(test)]
+    pub(crate) fn age_last_state(&mut self) {
+        self.last_state_at = self
+            .last_state_at
+            .map(|_| Instant::now() - Duration::from_secs(3600));
+    }
+
+    fn remember(&mut self, state: &State) {
+        self.last_state = Some(state.clone());
+        self.last_state_at = Some(Instant::now());
+    }
+
+    /// Send a framed command and decode its reply with `decode`, reconnecting
+    /// once if the connection turns out to be dead.
     ///
-    /// Separate from [`Device::exchange`] because a capability reply is not a
-    /// state report: decoding it as one would fail, and retrying that failure
-    /// three times would just take longer to be wrong.
-    fn exchange_raw(&mut self, command_frame: &[u8]) -> Result<Vec<u8>, DeviceError> {
-        let mut last: Option<DeviceError> = None;
-        for attempt in 1..=ATTEMPTS {
-            match self.try_exchange_raw(command_frame) {
-                Ok(payload) => {
+    /// `decode` is separate from the transport because a capability reply is
+    /// not a state report: reading one as the other would fail, and retrying
+    /// that failure would only take longer to be wrong.
+    fn exchange<T>(
+        &mut self,
+        command_frame: &[u8],
+        decode: impl Fn(&[u8]) -> Result<T, DeviceError>,
+    ) -> Result<T, DeviceError> {
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            let result = self
+                .try_exchange(command_frame)
+                .and_then(|payload| decode(&payload));
+            match result {
+                Ok(value) => {
                     self.online = true;
-                    return Ok(payload);
-                }
-                Err(e) if e.is_retryable() && attempt < ATTEMPTS => {
-                    self.session = None;
-                    last = Some(e);
+                    self.last_exchange_at = Some(Instant::now());
+                    self.last_failure = None;
+                    return Ok(value);
                 }
                 Err(e) => {
+                    // Any failure retires the connection, not only the ones
+                    // worth retrying: a session that returned something it
+                    // could not parse may be mid-packet, and reusing it would
+                    // make every later request fail the same way.
+                    self.drop_session();
+                    if e.is_retryable() && attempt < ATTEMPTS {
+                        continue;
+                    }
                     self.online = false;
+                    self.last_failure = Some((Instant::now(), e.clone()));
                     return Err(e);
                 }
             }
         }
-        self.online = false;
-        Err(last.unwrap_or(DeviceError::Unreachable { attempts: ATTEMPTS }))
     }
 
-    fn try_exchange_raw(&mut self, command_frame: &[u8]) -> Result<Vec<u8>, DeviceError> {
+    fn try_exchange(&mut self, command_frame: &[u8]) -> Result<Vec<u8>, DeviceError> {
         self.ensure_session()?;
         let session = self.session.as_mut().expect("ensure_session succeeded");
         let reply = session.request(&packet::encode(self.config.id, command_frame))?;
         let inner = packet::decode(&reply)?;
         Ok(frame::parse(&inner, frame::DeviceType::AirConditioner)?.to_vec())
-    }
-
-    /// Send a framed command and decode the state report it produces, retrying
-    /// on transient failures with a fresh connection.
-    fn exchange(&mut self, command_frame: &[u8]) -> Result<State, DeviceError> {
-        let mut last: Option<DeviceError> = None;
-        for attempt in 1..=ATTEMPTS {
-            match self.try_exchange(command_frame) {
-                Ok(state) => {
-                    self.online = true;
-                    self.last_state = Some(state.clone());
-                    return Ok(state);
-                }
-                Err(e) if e.is_retryable() && attempt < ATTEMPTS => {
-                    // The cached session is the most likely culprit; a stale one
-                    // produces exactly these errors.
-                    self.session = None;
-                    last = Some(e);
-                }
-                Err(e) => {
-                    self.online = false;
-                    return Err(e);
-                }
-            }
-        }
-        self.online = false;
-        Err(last.unwrap_or(DeviceError::Unreachable { attempts: ATTEMPTS }))
-    }
-
-    fn try_exchange(&mut self, command_frame: &[u8]) -> Result<State, DeviceError> {
-        self.ensure_session()?;
-        let session = self.session.as_mut().expect("ensure_session succeeded");
-        let reply = session.request(&packet::encode(self.config.id, command_frame))?;
-        let inner = packet::decode(&reply)?;
-        let payload = frame::parse(&inner, frame::DeviceType::AirConditioner)?;
-        Ok(State::parse(payload)?)
     }
 
     /// Connect and authenticate if there is no usable session.
@@ -255,19 +343,25 @@ impl Device {
         let (token, key) = self.config.credentials()?;
         let addr = SocketAddr::new(self.config.ip, self.config.port);
         let stream = TcpStream::connect_timeout(&addr, CONNECT_TIMEOUT)?;
-        stream.set_read_timeout(Some(IO_TIMEOUT))?;
-        stream.set_write_timeout(Some(IO_TIMEOUT))?;
+        stream.set_write_timeout(Some(WRITE_TIMEOUT))?;
         // Nagle would batch our small packets against a device that answers one
         // request at a time; there is nothing to coalesce.
         stream.set_nodelay(true)?;
+        self.stats.connects += 1;
 
-        let mut session = Session::new(stream);
-        if let Some(settle) = self.settle {
-            session = session.with_settle(settle);
-        }
+        let mut session = Session::new(stream).with_timing(self.timing);
         session.authenticate(token, key)?;
         self.session = Some(session);
         Ok(())
+    }
+
+    /// Close the connection, keeping its counts.
+    fn drop_session(&mut self) {
+        if let Some(s) = self.session.take() {
+            let live: LinkStats = s.stats();
+            self.stats.resends += live.resends;
+            self.stats.discarded += live.discarded;
+        }
     }
 
     /// Message ids only need to vary; nothing correlates replies by them.
@@ -281,7 +375,10 @@ impl Device {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::testing::FakeServer;
     use std::net::Ipv4Addr;
+
+    const KEY: [u8; 32] = [0x42; 32];
 
     fn config(token: Option<Vec<u8>>, key: Option<[u8; 32]>) -> UnitConfig {
         UnitConfig {
@@ -293,6 +390,28 @@ mod tests {
             token,
             key,
         }
+    }
+
+    /// Fast timings, so an ignored request costs milliseconds.
+    pub(crate) fn quick() -> Timing {
+        Timing {
+            settle: Duration::ZERO,
+            reply_timeout: Duration::from_millis(150),
+            sends: 3,
+            linger: Duration::from_millis(250),
+        }
+    }
+
+    fn device_for(server: &FakeServer) -> Device {
+        Device::new(UnitConfig {
+            id: 7,
+            name: "Fake".into(),
+            ip: server.addr.ip(),
+            port: server.addr.port(),
+            token: Some(vec![0xAA; 64]),
+            key: Some(KEY),
+        })
+        .with_timing(quick())
     }
 
     #[test]
@@ -319,7 +438,7 @@ mod tests {
 
     #[test]
     fn a_fatal_error_does_not_burn_retries() {
-        // Missing credentials can never succeed, so exchange must not try thrice.
+        // Missing credentials can never succeed, so exchange must not try again.
         let mut d = Device::new(config(None, None));
         let before = std::time::Instant::now();
         let _ = d.refresh();
@@ -351,5 +470,101 @@ mod tests {
         let a = d.next_message_id();
         let b = d.next_message_id();
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn an_ignored_request_is_resent_on_the_same_connection() {
+        // What a real unit does now and then. 4.0.2 answered it with a 10 s
+        // timeout and a reconnect; the connection was fine all along.
+        let server = FakeServer::start(KEY, 7);
+        let mut d = device_for(&server);
+        d.refresh().unwrap();
+        server.behave(|b| b.ignore = 1);
+
+        let started = Instant::now();
+        d.refresh().expect("the resend should be answered");
+        assert_eq!(server.connections(), 1, "must not have reconnected");
+        assert_eq!(d.stats().resends, 1);
+        // One reply timeout, not the old ten seconds.
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "{:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn a_late_reply_is_not_mistaken_for_the_next_one() {
+        // The hazard resending creates: the first send is answered after all,
+        // so two replies are on their way. The second must not become the echo
+        // of the next command -- that is precisely a slider springing back.
+        let server = FakeServer::start(KEY, 7);
+        let mut d = device_for(&server);
+        let before = d.refresh().unwrap();
+        assert_eq!(before.target_temperature, 24.0);
+
+        // Answer the next request after the client has already resent it.
+        server.behave(|b| b.delay_next = Some(Duration::from_millis(200)));
+        d.refresh().unwrap();
+
+        let mut sp = Setpoint::from_state(&before);
+        sp.target_temperature = 27.5;
+        let echoed = d.apply(&sp).unwrap();
+        assert_eq!(
+            echoed.target_temperature, 27.5,
+            "the echo must be the reply to this command, not a leftover read"
+        );
+        assert!(
+            d.stats().discarded >= 1,
+            "the duplicate should have been discarded"
+        );
+    }
+
+    #[test]
+    fn a_connection_the_unit_closed_is_replaced_before_it_is_used() {
+        // A real unit closes a connection exactly 30 s after the last request.
+        let server = FakeServer::start(KEY, 7);
+        server.behave(|b| b.idle_close = Some(Duration::from_millis(100)));
+        let mut d = device_for(&server);
+        d.refresh().unwrap();
+        std::thread::sleep(Duration::from_millis(250));
+
+        let started = Instant::now();
+        d.refresh().expect("a closed connection should be reopened");
+        assert_eq!(server.connections(), 2);
+        // Noticed from the FIN, not by waiting for a reply that cannot come.
+        assert!(
+            started.elapsed() < quick().reply_timeout,
+            "took {:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn state_bookkeeping_tracks_what_arrived_and_when() {
+        let server = FakeServer::start(KEY, 7);
+        let mut d = device_for(&server);
+        let t0 = Instant::now();
+        assert!(d.state_since(t0).is_none());
+        d.refresh().unwrap();
+        assert!(d.state_since(t0).is_some());
+        assert!(d.fresh_state(Duration::from_secs(5)).is_some());
+        assert!(d.idle_for().unwrap() < Duration::from_secs(1));
+        assert!(!d.needs_warming(Duration::from_secs(20)));
+        assert!(d.needs_warming(Duration::ZERO));
+    }
+
+    #[test]
+    fn a_unit_that_just_failed_is_left_alone_by_keep_warm() {
+        // Off the network, every attempt costs a connect timeout, and nobody is
+        // waiting on the answer. Back off rather than hammer it.
+        let server = FakeServer::start(KEY, 7);
+        let mut d = device_for(&server);
+        server.behave(|b| b.ignore = 100);
+        assert!(d.refresh().is_err());
+        assert!(!d.needs_warming(Duration::ZERO));
+        assert!(d
+            .failure_since(Instant::now() - Duration::from_secs(5))
+            .is_some());
     }
 }

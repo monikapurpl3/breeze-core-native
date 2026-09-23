@@ -15,6 +15,9 @@ use breeze_proto::{frame, packet, security};
 use sha2::Digest as _;
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 /// The plaintext a real unit would pick at random for the handshake. Fixed here
 /// so a failing test is reproducible.
@@ -40,6 +43,9 @@ pub struct FakeUnit {
     misbehaviour: Misbehaviour,
     /// The state the unit currently holds, mutated by control commands.
     setpoint: Setpoint,
+    /// Queries and control commands answered, for tests that count round-trips.
+    pub queries: usize,
+    pub controls: usize,
 }
 
 impl FakeUnit {
@@ -68,7 +74,14 @@ impl FakeUnit {
                 target_humidity: 40,
                 beep: false,
             },
+            queries: 0,
+            controls: 0,
         }
+    }
+
+    /// The setpoint the fake currently holds.
+    pub fn target(&self) -> f32 {
+        self.setpoint.target_temperature
     }
 
     pub fn dribbling(mut self) -> Self {
@@ -156,9 +169,12 @@ impl FakeUnit {
 
                 match payload[0] {
                     // Query: report current state.
-                    0x41 => {}
+                    0x41 => self.queries += 1,
                     // Control: adopt the setpoint, then report it back.
-                    0x40 => self.adopt(payload),
+                    0x40 => {
+                        self.controls += 1;
+                        self.adopt(payload)
+                    }
                     other => return Err(io::Error::other(format!("unknown opcode 0x{other:02X}"))),
                 }
 
@@ -234,5 +250,148 @@ impl Read for FakeUnit {
             *slot = self.outbox.pop_front().expect("checked non-empty");
         }
         Ok(n)
+    }
+}
+
+/// The in-process fake answers the instant it is written to, so there is never
+/// anything to wait for: a bounded read is a plain read, and "nothing has
+/// arrived yet" is simply an empty outbox.
+impl crate::session::Link for FakeUnit {
+    fn set_read_deadline(&mut self, _timeout: Duration) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn read_now(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.outbox.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::WouldBlock, "nothing waiting"));
+        }
+        self.read(buf)
+    }
+}
+
+/// How a [`FakeServer`] misbehaves. Shared with the test, so it can be changed
+/// between requests. Every knob is something measured on a real unit.
+#[derive(Debug, Default)]
+pub struct Behaviour {
+    /// Swallow this many requests without processing or answering them -- a
+    /// real unit does this now and then, and the connection stays usable.
+    pub ignore: usize,
+    /// Answer every request after this long. A real unit takes ~0.72 s.
+    pub delay: Duration,
+    /// Answer the next request after this long instead: set it past the
+    /// client's reply timeout and the client resends, so two replies arrive.
+    pub delay_next: Option<Duration>,
+    /// Hang up after this long without a request. A real unit does at 30 s.
+    pub idle_close: Option<Duration>,
+}
+
+/// A fake unit behind a real loopback socket, so the device layer runs against
+/// it completely unchanged -- real connects, real timeouts, real hang-ups.
+///
+/// One unit, whatever the number of connections: its setpoint survives a
+/// reconnect, as a real unit's does.
+pub struct FakeServer {
+    pub addr: SocketAddr,
+    pub unit: Arc<Mutex<FakeUnit>>,
+    pub behaviour: Arc<Mutex<Behaviour>>,
+    /// Connections accepted, to tell a reused session from a reconnect.
+    pub connections: Arc<Mutex<usize>>,
+}
+
+impl FakeServer {
+    pub fn start(key: [u8; 32], device_id: u64) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let addr = listener.local_addr().expect("local addr");
+        let unit = Arc::new(Mutex::new(FakeUnit::new(key, device_id)));
+        let behaviour = Arc::new(Mutex::new(Behaviour::default()));
+        let connections = Arc::new(Mutex::new(0usize));
+        {
+            let (unit, behaviour, connections) = (
+                Arc::clone(&unit),
+                Arc::clone(&behaviour),
+                Arc::clone(&connections),
+            );
+            std::thread::spawn(move || {
+                for stream in listener.incoming().flatten() {
+                    *connections.lock().unwrap() += 1;
+                    let (unit, behaviour) = (Arc::clone(&unit), Arc::clone(&behaviour));
+                    std::thread::spawn(move || serve(stream, &unit, &behaviour));
+                }
+            });
+        }
+        Self {
+            addr,
+            unit,
+            behaviour,
+            connections,
+        }
+    }
+
+    pub fn behave(&self, f: impl FnOnce(&mut Behaviour)) {
+        f(&mut self.behaviour.lock().unwrap());
+    }
+
+    pub fn controls(&self) -> usize {
+        self.unit.lock().unwrap().controls
+    }
+
+    pub fn queries(&self) -> usize {
+        self.unit.lock().unwrap().queries
+    }
+
+    pub fn target(&self) -> f32 {
+        self.unit.lock().unwrap().target()
+    }
+
+    pub fn connections(&self) -> usize {
+        *self.connections.lock().unwrap()
+    }
+}
+
+/// One connection: read whole packets, answer them as the behaviour says.
+fn serve(mut stream: TcpStream, unit: &Mutex<FakeUnit>, behaviour: &Mutex<Behaviour>) {
+    let mut rx: Vec<u8> = Vec::new();
+    let mut buf = [0u8; 1024];
+    loop {
+        let idle = behaviour.lock().unwrap().idle_close;
+        let _ = stream.set_read_timeout(idle);
+        match stream.read(&mut buf) {
+            // The client hung up, or the idle timer ran out: close, as a real
+            // unit does, with a clean FIN.
+            Ok(0) | Err(_) => return,
+            Ok(n) => rx.extend_from_slice(&buf[..n]),
+        }
+        while let Some(total) = lan::packet_len(&rx) {
+            if rx.len() < total {
+                break;
+            }
+            let packet: Vec<u8> = rx.drain(..total).collect();
+            let is_request = packet[5] & 0xF == PacketType::EncryptedRequest as u8;
+            let wait = {
+                let mut b = behaviour.lock().unwrap();
+                if is_request && b.ignore > 0 {
+                    b.ignore -= 1;
+                    continue;
+                }
+                if is_request {
+                    b.delay_next.take().unwrap_or(b.delay)
+                } else {
+                    Duration::ZERO
+                }
+            };
+            let reply: Vec<u8> = {
+                let mut u = unit.lock().unwrap();
+                if u.handle(&packet).is_err() {
+                    return;
+                }
+                u.outbox.drain(..).collect()
+            };
+            if !wait.is_zero() {
+                std::thread::sleep(wait);
+            }
+            if stream.write_all(&reply).is_err() {
+                return;
+            }
+        }
     }
 }

@@ -37,7 +37,7 @@ pub const SESSION_LIFETIME_SECS: u64 = 12 * 60 * 60;
 /// briefly before requesting more data".
 pub const POST_HANDSHAKE_SETTLE_MS: u64 = 1000;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LanError {
     TooShort(usize),
     NotAPacket([u8; 2]),

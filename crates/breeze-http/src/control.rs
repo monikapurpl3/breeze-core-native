@@ -1,13 +1,15 @@
 //! Applying a partial control request to a unit.
 //!
 //! A control command restates the whole configuration — the protocol has no
-//! notion of "change only the fan speed" — so a partial request has to be read,
-//! merged and written. The unit then echoes its resulting state, which is what
-//! makes an optimistic UI honest: the client reconciles against what actually
-//! happened rather than what it asked for.
+//! notion of "change only the fan speed" — so a partial request is laid over the
+//! unit's last report and the result sent. The unit then echoes its resulting
+//! state, which is what makes an optimistic UI honest: the client reconciles
+//! against what actually happened rather than what it asked for.
+//!
+//! Requests that arrive while the unit is busy are merged by the device layer
+//! and answered together; see `breeze_device::DeviceManager::control`.
 
-use breeze_device::DeviceManager;
-use breeze_proto::ac::command::Setpoint;
+use breeze_device::{Change, DeviceManager};
 use breeze_proto::ac::types::{FanSpeed, Mode, SwingMode};
 use breeze_store::ControlRequest;
 
@@ -23,75 +25,79 @@ fn debug_control() -> bool {
     )
 }
 
-/// Merge `request` into the unit's current state and apply it.
+/// The device layer's view of a request: typed, and only what it sets.
+///
+/// Unknown enum names are rejected earlier, by validation, so one reaching here
+/// is dropped rather than guessed at.
+pub fn change_from(request: &ControlRequest) -> Change {
+    Change {
+        power_on: request.power_state,
+        mode: request.operational_mode.as_deref().and_then(mode_from_name),
+        target_temperature: request.target_temperature.map(|v| v as f32),
+        fan_speed: request.fan_speed.map(|v| FanSpeed(v as u8)),
+        swing_mode: request.swing_mode.as_deref().and_then(swing_from_name),
+        eco: request.eco,
+        turbo: request.turbo,
+        // Absent means silent. Older clients never send `beep`, and a
+        // schedule firing at 2 a.m. should not chirp.
+        beep: request.beep,
+    }
+}
+
+/// Apply `request` to a unit and return the state it reports back.
 pub fn apply(
     manager: &DeviceManager,
     id: u64,
     request: &ControlRequest,
 ) -> Result<serde_json::Value, String> {
-    manager
-        .with_unit(id, |device| {
-            let current = device.refresh()?;
-            let mut setpoint = Setpoint::from_state(&current);
-
-            if let Some(v) = request.power_state {
-                setpoint.power_on = v;
-            }
-            if let Some(v) = request.target_temperature {
-                setpoint.target_temperature = v as f32;
-            }
-            if let Some(v) = request.fan_speed {
-                setpoint.fan_speed = FanSpeed(v as u8);
-            }
-            if let Some(v) = &request.operational_mode {
-                if let Some(m) = mode_from_name(v) {
-                    setpoint.mode = m;
-                }
-            }
-            if let Some(v) = &request.swing_mode {
-                if let Some(s) = swing_from_name(v) {
-                    setpoint.swing_mode = s;
-                }
-            }
-            if let Some(v) = request.eco {
-                setpoint.eco = v;
-            }
-            if let Some(v) = request.turbo {
-                setpoint.turbo = v;
-            }
-            // Absent means silent. Older clients never send `beep`, and a
-            // schedule firing at 2 a.m. should not chirp.
-            setpoint.beep = request.beep.unwrap_or(false);
-
-            if debug_control() {
-                eprintln!(
-                    "  control {id}: requested {}",
-                    serde_json::to_string(request).unwrap_or_default()
-                );
-                eprintln!(
-                    "  control {id}: unit reported mode={:?} temp={} fan={:?} power={}",
-                    current.mode, current.target_temperature, current.fan_speed, current.power_on
-                );
-                eprintln!(
-                    "  control {id}: sending mode={:?} temp={} fan={:?} power={} swing={:?}",
-                    setpoint.mode,
-                    setpoint.target_temperature,
-                    setpoint.fan_speed,
-                    setpoint.power_on,
-                    setpoint.swing_mode
-                );
-            }
-            let applied = device.apply(&setpoint)?;
-            if debug_control() {
-                eprintln!(
-                    "  control {id}: unit echoed mode={:?} temp={} fan={:?} power={}",
-                    applied.mode, applied.target_temperature, applied.fan_speed, applied.power_on
-                );
-            }
-            let state = UnitState::from_device(device, &applied);
-            Ok(serde_json::to_value(state).unwrap_or_else(|_| serde_json::json!({})))
-        })
-        .map_err(|e| e.to_string())
+    let info = manager
+        .info(id)
+        .ok_or_else(|| "unit has no V3 token and key configured".to_string())?;
+    if debug_control() {
+        eprintln!(
+            "  control {id}: requested {}",
+            serde_json::to_string(request).unwrap_or_default()
+        );
+    }
+    let outcome = manager
+        .control(id, change_from(request))
+        .map_err(|e| e.to_string())?;
+    if debug_control() && !outcome.sent_by_this_request {
+        eprintln!(
+            "  control {id}: folded into a command carrying {} requests; unit echoed temp={}",
+            outcome.merged, outcome.state.target_temperature
+        );
+    } else if debug_control() {
+        let (base, sent, echoed) = (&outcome.base, &outcome.sent, &outcome.state);
+        eprintln!(
+            "  control {id}: built on {} report mode={:?} temp={} fan={:?} power={}",
+            if outcome.base_was_cached {
+                "the last"
+            } else {
+                "a fresh"
+            },
+            base.mode,
+            base.target_temperature,
+            base.fan_speed,
+            base.power_on
+        );
+        eprintln!(
+            "  control {id}: sent mode={:?} temp={} fan={:?} power={} swing={:?} ({} request{} merged)",
+            sent.mode,
+            sent.target_temperature,
+            sent.fan_speed,
+            sent.power_on,
+            sent.swing_mode,
+            outcome.merged,
+            if outcome.merged == 1 { "" } else { "s" }
+        );
+        eprintln!(
+            "  control {id}: unit echoed mode={:?} temp={} fan={:?} power={}",
+            echoed.mode, echoed.target_temperature, echoed.fan_speed, echoed.power_on
+        );
+    }
+    let state = UnitState::from_info(&info, &outcome.state);
+    Ok(serde_json::to_value(state).unwrap_or_else(|_| serde_json::json!({})))
 }
 
 /// Names as the REST API publishes them. Unknown values are rejected earlier,
@@ -120,6 +126,21 @@ pub fn swing_from_name(name: &str) -> Option<SwingMode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_request_becomes_a_change_with_only_what_it_sets() {
+        let request: ControlRequest =
+            serde_json::from_str(r#"{"target_temperature": 23.5, "operational_mode": "heat"}"#)
+                .unwrap();
+        let c = change_from(&request);
+        assert_eq!(c.target_temperature, Some(23.5));
+        assert_eq!(c.mode, Some(Mode::Heat), "names are case-insensitive");
+        assert_eq!(
+            c.power_on, None,
+            "an absent field must stay absent, or merging breaks"
+        );
+        assert_eq!(c.beep, None, "absent beep is silent, decided at send time");
+    }
 
     #[test]
     fn mode_names_round_trip_through_the_api_spelling() {

@@ -31,6 +31,31 @@ pub enum DeviceError {
     Unreachable { attempts: u32 },
 }
 
+/// Cloneable so that one outcome can answer every request that shared it.
+///
+/// When controls to a unit are merged into one command, or reads share one
+/// round-trip, a single failure is the answer to all of them. `std::io::Error`
+/// is not `Clone`, so it is rebuilt from its kind and message -- the kind is
+/// what [`DeviceError::is_retryable`] reads, and the message is what a caller
+/// shows, so nothing a caller can observe is lost.
+impl Clone for DeviceError {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Io(e) => Self::Io(std::io::Error::new(e.kind(), e.to_string())),
+            Self::Protocol(e) => Self::Protocol(e.clone()),
+            Self::Packet(e) => Self::Packet(e.clone()),
+            Self::Frame(e) => Self::Frame(e.clone()),
+            Self::Response(e) => Self::Response(e.clone()),
+            Self::NotAuthenticated => Self::NotAuthenticated,
+            Self::PacketTooLarge(n) => Self::PacketTooLarge(*n),
+            Self::MissingCredentials => Self::MissingCredentials,
+            Self::Unreachable { attempts } => Self::Unreachable {
+                attempts: *attempts,
+            },
+        }
+    }
+}
+
 impl DeviceError {
     /// Whether another attempt could plausibly succeed.
     ///
@@ -107,6 +132,18 @@ impl From<ResponseError> for DeviceError {
 mod tests {
     use super::*;
     use std::io::ErrorKind;
+
+    #[test]
+    fn a_cloned_error_keeps_its_retry_decision_and_message() {
+        // A shared outcome is cloned once per waiting request; if the clone lost
+        // the kind, a timeout would stop being retried the moment two requests
+        // shared it.
+        let e = DeviceError::Io(std::io::Error::new(ErrorKind::TimedOut, "no reply"));
+        let c = e.clone();
+        assert!(c.is_retryable());
+        assert_eq!(c.to_string(), e.to_string());
+        assert!(!DeviceError::MissingCredentials.clone().is_retryable());
+    }
 
     #[test]
     fn transient_network_failures_are_retryable() {

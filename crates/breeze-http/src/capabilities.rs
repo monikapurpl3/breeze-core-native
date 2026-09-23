@@ -75,7 +75,7 @@ pub fn view(unit_id: &str, caps: &Capabilities) -> serde_json::Value {
 
 /// `GET /api/units/{id}/capabilities`
 pub fn get(state: &AppState, id: u64) -> Reply {
-    let result = state.manager.with_unit(id, |device| device.capabilities());
+    let result = state.manager.capabilities(id);
     match result {
         Ok(caps) => Reply::json(200, &view(&id.to_string(), &caps)),
         // The same 503 a state read gives for the same reason: a unit that will

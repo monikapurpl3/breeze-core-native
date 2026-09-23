@@ -176,6 +176,10 @@ pub fn spawn_poller(state: Arc<AppState>) -> std::thread::JoinHandle<()> {
             continue;
         }
         poll_once(&state);
+        // Somebody is watching, so the server is in use. Counted each tick
+        // rather than when the stream opened, so the keep-warm window runs
+        // from when the app was closed, not from when it was opened.
+        state.activity.touch();
         std::thread::sleep(state.stream.tick);
     })
 }
@@ -274,15 +278,20 @@ fn poll_one(state: &AppState, id: u64) {
 /// straight into a card, so it has to be a complete state either way. A unit
 /// never seen at all gets the reference's synthetic defaults.
 fn read_unit(state: &AppState, id: u64) -> serde_json::Value {
-    let live = state.manager.with_unit(id, |device| {
-        let s = device.refresh()?;
-        Ok(serde_json::to_value(UnitState::from_device(device, &s))
-            .unwrap_or_else(|_| serde_json::json!({})))
+    // Shared with any read or control that reached the unit first: when the app
+    // opens it starts a batch read and this stream together, and each unit
+    // should be read once, not twice.
+    let live = state.manager.info(id).and_then(|info| {
+        let s = state.manager.read_state(id).ok()?;
+        Some(
+            serde_json::to_value(UnitState::from_info(&info, &s))
+                .unwrap_or_else(|_| serde_json::json!({})),
+        )
     });
     match live {
-        Ok(value) => value,
+        Some(value) => value,
         // Unreachable, or the manager could not give us the unit at all.
-        Err(_) => offline_value(state, id),
+        None => offline_value(state, id),
     }
 }
 

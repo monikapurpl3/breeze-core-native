@@ -27,8 +27,8 @@ mod session;
 #[cfg(test)]
 mod testing;
 
-pub use device::{Device, UnitConfig};
+pub use device::{Device, DeviceStats, UnitConfig};
 pub use error::DeviceError;
-pub use manager::DeviceManager;
+pub use manager::{Change, ControlOutcome, DeviceManager, UnitInfo, UnitStatus};
 pub use scan::{scan, scan_subnet, ScanError, ScanReport};
-pub use session::Session;
+pub use session::{Link, LinkStats, Session, Timing};

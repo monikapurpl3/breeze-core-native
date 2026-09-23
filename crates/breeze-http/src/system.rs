@@ -389,6 +389,14 @@ pub fn snapshot(state: &AppState, connection: serde_json::Value) -> serde_json::
             // Both pools, because "it is slow" is answered by different
             // numbers depending on which one is saturated.
             "bg_workers": state.settings.bg_workers,
+            // As written back (`30m`, `off`, `always`), and whether it is
+            // keeping units warm at this moment -- the window runs from the
+            // last use, so the setting alone does not say.
+            "keep_warm": state.settings.keep_warm.describe(),
+            "keep_warm_active": state
+                .settings
+                .keep_warm
+                .active(state.activity.since_last()),
             "scheduler_tick_seconds": state.settings.sched_tick_seconds,
             "stream_tick_seconds": state.settings.stream_tick_seconds,
             "timer_tick_seconds": state.settings.timer_tick_seconds,
@@ -478,6 +486,18 @@ fn units_facts(state: &AppState) -> serde_json::Value {
                     .unwrap_or(serde_json::Value::Null),
                 "samples": state.history.samples(&id).len(),
                 "last_seen": state.history.latest(&id).map(|s| s.t),
+                // How the connection to this unit has been behaving since start.
+                // A unit that keeps ignoring requests shows up here as resends
+                // long before anyone thinks to call it slow.
+                "link": u64::try_from(unit.id)
+                    .ok()
+                    .and_then(|n| state.manager.status(n))
+                    .map(|st| serde_json::json!({
+                        "connects": st.stats.connects,
+                        "resends": st.stats.resends,
+                        "discarded_replies": st.stats.discarded,
+                    }))
+                    .unwrap_or(serde_json::Value::Null),
             })
         })
         .collect();

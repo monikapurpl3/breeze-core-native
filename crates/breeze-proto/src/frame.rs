@@ -31,7 +31,7 @@ pub enum FrameType {
     AbnormalReport = 0x06,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FrameError {
     /// Shorter than a header, so nothing can be read from it.
     TooShort(usize),

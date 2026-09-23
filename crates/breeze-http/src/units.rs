@@ -6,7 +6,7 @@
 //! 48-bit and clients use them in URLs. Emitting a number here would be valid
 //! JSON and would break every client.
 
-use breeze_device::{Device, DeviceManager};
+use breeze_device::{DeviceManager, UnitInfo};
 use breeze_proto::ac::response::State;
 use serde::Serialize;
 
@@ -71,12 +71,11 @@ fn swing_name(state: &State) -> String {
 }
 
 impl UnitState {
-    pub fn from_device(device: &Device, state: &State) -> Self {
-        let config = device.config();
+    pub fn from_info(info: &UnitInfo, state: &State) -> Self {
         Self {
-            id: config.id.to_string(),
-            name: config.name.clone(),
-            ip: config.ip.to_string(),
+            id: info.id.to_string(),
+            name: info.name.clone(),
+            ip: info.ip.to_string(),
             online: true,
             power_state: state.power_on,
             operational_mode: mode_name(state),
@@ -91,22 +90,15 @@ impl UnitState {
     }
 }
 
-/// `GET /api/units` — identity only, no round-trips.
+/// `GET /api/units` — identity only, no round-trips, and no waiting on a unit.
 pub fn list_units(manager: &DeviceManager) -> Vec<UnitSummary> {
     manager
-        .known_units()
+        .list()
         .into_iter()
-        .filter_map(|id| {
-            manager
-                .with_unit(id, |d| {
-                    let c = d.config();
-                    Ok(UnitSummary {
-                        id: c.id.to_string(),
-                        name: c.name.clone(),
-                        ip: c.ip.to_string(),
-                    })
-                })
-                .ok()
+        .map(|u| UnitSummary {
+            id: u.id.to_string(),
+            name: u.name,
+            ip: u.ip.to_string(),
         })
         .collect()
 }
@@ -116,29 +108,26 @@ pub fn list_units(manager: &DeviceManager) -> Vec<UnitSummary> {
 /// Never an error: a unit that will not answer is a fact about the unit, not a
 /// failure of the request. Breeze Core made the same choice in 2.4.0 so a batch
 /// read does not 503 because one air conditioner is unplugged.
+///
+/// Shares its round-trip with any read or control that reached the unit first,
+/// so the batch and the live stream starting together read each unit once.
 pub fn unit_state(manager: &DeviceManager, id: u64) -> Result<serde_json::Value, String> {
-    // One lock acquisition for one logical read. Taking it three times -- once
-    // for identity, once to refresh, once to serialise -- would let the unit's
-    // state change underneath us between them, and would triple the contention
-    // on a lock already held for a ~1.8s round-trip.
-    manager
-        .with_unit(id, |device| {
-            let config = device.config().clone();
-            let value = match device.refresh() {
-                Ok(state) => serde_json::to_value(UnitState::from_device(device, &state)),
-                Err(e) => serde_json::to_value(UnitOffline {
-                    id: config.id.to_string(),
-                    name: config.name,
-                    ip: config.ip.to_string(),
-                    online: false,
-                    error: e.to_string(),
-                }),
-            };
-            // Serialising our own structs cannot fail; an empty object is a
-            // better outcome than a panic in a request thread if it ever does.
-            Ok(value.unwrap_or_else(|_| serde_json::json!({})))
-        })
-        .map_err(|e| e.to_string())
+    let info = manager
+        .info(id)
+        .ok_or_else(|| "unit has no V3 token and key configured".to_string())?;
+    let value = match manager.read_state(id) {
+        Ok(state) => serde_json::to_value(UnitState::from_info(&info, &state)),
+        Err(e) => serde_json::to_value(UnitOffline {
+            id: info.id.to_string(),
+            name: info.name,
+            ip: info.ip.to_string(),
+            online: false,
+            error: e.to_string(),
+        }),
+    };
+    // Serialising our own structs cannot fail; an empty object is a better
+    // outcome than a panic in a request thread if it ever does.
+    Ok(value.unwrap_or_else(|_| serde_json::json!({})))
 }
 
 /// `GET /api/units/state` — every unit in one call.
@@ -204,7 +193,6 @@ pub fn all_states(manager: &DeviceManager) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use breeze_device::UnitConfig;
     use breeze_proto::ac::types::{FanSpeed, Mode, SwingMode};
     use std::net::{IpAddr, Ipv4Addr};
 
@@ -220,20 +208,17 @@ mod tests {
         State::parse(&p).unwrap()
     }
 
-    fn device() -> Device {
-        Device::new(UnitConfig {
+    fn device() -> UnitInfo {
+        UnitInfo {
             id: 153_931_628_470_980,
             name: "Living Room".into(),
             ip: IpAddr::V4(Ipv4Addr::new(192, 168, 1, 73)),
-            port: 6444,
-            token: None,
-            key: None,
-        })
+        }
     }
 
     #[test]
     fn the_id_is_a_string_because_clients_put_it_in_urls() {
-        let json = serde_json::to_value(UnitState::from_device(&device(), &state())).unwrap();
+        let json = serde_json::to_value(UnitState::from_info(&device(), &state())).unwrap();
         assert!(
             json["id"].is_string(),
             "id must be a string, got {}",
@@ -249,7 +234,7 @@ mod tests {
 
     #[test]
     fn field_names_match_the_python_serializer() {
-        let json = serde_json::to_value(UnitState::from_device(&device(), &state())).unwrap();
+        let json = serde_json::to_value(UnitState::from_info(&device(), &state())).unwrap();
         let obj = json.as_object().unwrap();
         let expected = [
             "id",
@@ -280,14 +265,14 @@ mod tests {
     fn enums_are_names_not_numbers() {
         // Python 3.11 changed IntEnum.__str__ to render a bare int, which bit
         // this project once. The names are the contract.
-        let json = serde_json::to_value(UnitState::from_device(&device(), &state())).unwrap();
+        let json = serde_json::to_value(UnitState::from_info(&device(), &state())).unwrap();
         assert_eq!(json["operational_mode"], "COOL");
         assert_eq!(json["swing_mode"], "BOTH");
     }
 
     #[test]
     fn an_absent_sensor_is_null_not_a_number() {
-        let json = serde_json::to_value(UnitState::from_device(&device(), &state())).unwrap();
+        let json = serde_json::to_value(UnitState::from_info(&device(), &state())).unwrap();
         assert!(json["indoor_temperature"].is_null());
         assert!(json["outdoor_temperature"].is_null());
     }
@@ -299,14 +284,14 @@ mod tests {
         p[2] = 0x7 << 5; // undocumented
         p[7] = 0x7; // undocumented
         let s = State::parse(&p).unwrap();
-        let json = serde_json::to_value(UnitState::from_device(&device(), &s)).unwrap();
+        let json = serde_json::to_value(UnitState::from_info(&device(), &s)).unwrap();
         assert_eq!(json["operational_mode"], "UNKNOWN");
         assert_eq!(json["swing_mode"], "UNKNOWN");
     }
 
     #[test]
     fn fan_speed_is_a_number_and_keeps_the_auto_sentinel() {
-        let json = serde_json::to_value(UnitState::from_device(&device(), &state())).unwrap();
+        let json = serde_json::to_value(UnitState::from_info(&device(), &state())).unwrap();
         assert_eq!(json["fan_speed"], 102);
         assert!(json["fan_speed"].is_number());
         assert_eq!(FanSpeed::AUTO.0, 102);

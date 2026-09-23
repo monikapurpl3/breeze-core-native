@@ -14,7 +14,7 @@ use crate::security::{self, CryptoError};
 pub const HEADER_LEN: usize = 40;
 pub const TAIL_LEN: usize = 16;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PacketError {
     TooShort(usize),
     NotAPacket([u8; 2]),

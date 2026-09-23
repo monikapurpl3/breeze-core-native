@@ -28,6 +28,7 @@ pub mod stream;
 pub mod system;
 pub mod timer_routes;
 pub mod units;
+pub mod warm;
 
 pub use respond::Reply;
 pub use server::serve;

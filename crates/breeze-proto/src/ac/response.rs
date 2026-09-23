@@ -38,7 +38,7 @@ pub struct State {
     pub freeze_protection: Option<bool>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResponseError {
     /// Not enough bytes to read the mandatory fields.
     TooShort(usize),

@@ -105,6 +105,9 @@ fn serve(host: Option<String>, port: Option<u16>, behind_proxy: bool) {
     // Idles until a client subscribes, so a server nobody is watching makes no
     // LAN traffic at all.
     let _poller = breeze_http::stream::spawn_poller(Arc::clone(&state));
+    // Keeps unit connections open for a while after the server was last used
+    // (BREEZE_KEEP_WARM), so opening the app again does not pay a reconnect.
+    let _warm = breeze_http::warm::spawn_keep_warm(Arc::clone(&state));
 
     if let Err(e) = breeze_http::serve(state) {
         eprintln!("breeze-core: {e}");

@@ -21,7 +21,7 @@ pub const SIGN_KEY: &[u8] = b"xhdiwjnchekd4d512chdjx5d8e4c394D2D7S";
 
 /// Errors from the crypto layer. Deliberately coarse: a caller can only ever
 /// react by dropping the packet.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CryptoError {
     /// Input was not a whole number of AES blocks.
     Misaligned(usize),

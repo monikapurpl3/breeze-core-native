@@ -43,6 +43,9 @@ pub struct Settings {
     /// Seconds between central state polls, while at least one client is
     /// streaming. Matches the cadence clients used to poll at themselves.
     pub stream_tick_seconds: u64,
+    /// How long unit connections are kept open after the server was last used.
+    /// `BREEZE_KEEP_WARM`; see [`KeepWarm`].
+    pub keep_warm: KeepWarm,
     /// Samples kept per unit for the history endpoint and /metrics.
     pub history_size: usize,
     /// How long a pairing code lives. Seconds.
@@ -138,6 +141,20 @@ impl Settings {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(5),
+            keep_warm: match std::env::var("BREEZE_KEEP_WARM") {
+                Err(_) => KeepWarm::DEFAULT,
+                Ok(raw) => KeepWarm::parse(&raw).unwrap_or_else(|| {
+                    // Said out loud rather than guessed at: "30" read as minutes
+                    // when it means seconds, or the reverse, is a setting that
+                    // silently does something else.
+                    eprintln!(
+                        "breeze-core: BREEZE_KEEP_WARM={raw:?} is not a duration; using {}. \
+                         Give seconds, or a number with s, m or h, or off, or always.",
+                        KeepWarm::DEFAULT.describe()
+                    );
+                    KeepWarm::DEFAULT
+                }),
+            },
             sched_tick_seconds: std::env::var("AC_SCHED_TICK")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -156,6 +173,100 @@ impl Settings {
 
 fn env_path(key: &str, fallback: PathBuf) -> PathBuf {
     std::env::var(key).map(PathBuf::from).unwrap_or(fallback)
+}
+
+/// How long unit connections are kept open after the server was last used.
+///
+/// A unit closes a connection 30 s after its last request, and the next request
+/// then pays for a new one: a handshake plus the one-second pause the protocol
+/// demands after it. Opening the app a minute after closing it paid that on
+/// every unit. Keeping connections warm is one tiny read per unit every ~20 s,
+/// for as long as this says, after the last request or the last open stream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeepWarm {
+    /// Never: no traffic to a unit unless a client asks for something.
+    Off,
+    /// For this long after the server was last used.
+    For(std::time::Duration),
+    /// Always, from startup, whether or not anyone has ever connected.
+    Always,
+}
+
+impl KeepWarm {
+    pub const DEFAULT: KeepWarm = KeepWarm::For(std::time::Duration::from_secs(30 * 60));
+
+    /// `1800`, `90s`, `30m`, `2h`; `0` or `off` to disable; `always` for ever.
+    ///
+    /// A bare number is seconds, as every other interval setting here is.
+    pub fn parse(raw: &str) -> Option<KeepWarm> {
+        let v = raw.trim().to_ascii_lowercase();
+        match v.as_str() {
+            "off" | "no" | "false" | "never" | "none" | "disabled" => return Some(KeepWarm::Off),
+            "always" | "forever" | "indefinite" | "indefinitely" | "infinite" | "inf" | "-1" => {
+                return Some(KeepWarm::Always)
+            }
+            _ => {}
+        }
+        let split = v.find(|c: char| !c.is_ascii_digit()).unwrap_or(v.len());
+        let (digits, unit) = v.split_at(split);
+        let n: u64 = digits.parse().ok()?;
+        let scale = match unit.trim() {
+            "" | "s" | "sec" | "secs" | "second" | "seconds" => 1,
+            "m" | "min" | "mins" | "minute" | "minutes" => 60,
+            "h" | "hr" | "hrs" | "hour" | "hours" => 3600,
+            _ => return None,
+        };
+        Some(match n.checked_mul(scale)? {
+            0 => KeepWarm::Off,
+            secs => KeepWarm::For(std::time::Duration::from_secs(secs)),
+        })
+    }
+
+    /// The setting as a person would write it back: `off`, `30m`, `always`.
+    pub fn describe(&self) -> String {
+        match self {
+            KeepWarm::Off => "off".into(),
+            KeepWarm::Always => "always".into(),
+            KeepWarm::For(d) => {
+                let s = d.as_secs();
+                if s % 3600 == 0 {
+                    format!("{}h", s / 3600)
+                } else if s % 60 == 0 {
+                    format!("{}m", s / 60)
+                } else {
+                    format!("{s}s")
+                }
+            }
+        }
+    }
+
+    /// Whether to keep units warm now, given how long ago the server was last
+    /// used (`None`: never).
+    pub fn active(&self, since_last_use: Option<std::time::Duration>) -> bool {
+        match self {
+            KeepWarm::Off => false,
+            KeepWarm::Always => true,
+            KeepWarm::For(window) => since_last_use.is_some_and(|d| d <= *window),
+        }
+    }
+}
+
+/// When the server was last used: an authenticated request, or a stream that
+/// was still open. What the keep-warm window counts from.
+#[derive(Debug, Default)]
+pub struct Activity(Mutex<Option<std::time::Instant>>);
+
+impl Activity {
+    pub fn touch(&self) {
+        *self.0.lock().unwrap_or_else(|p| p.into_inner()) = Some(std::time::Instant::now());
+    }
+
+    pub fn since_last(&self) -> Option<std::time::Duration> {
+        self.0
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .map(|at| at.elapsed())
+    }
 }
 
 pub struct AppState {
@@ -194,6 +305,8 @@ pub struct AppState {
     /// Recent readings, filled by whatever happens to read a state.
     pub history: crate::history::History,
     pub started_at: std::time::SystemTime,
+    /// When the server was last used, for keep-warm.
+    pub activity: Activity,
 }
 
 #[derive(Debug)]
@@ -294,6 +407,7 @@ impl AppState {
             scanning: Mutex::new(()),
             history,
             started_at: std::time::SystemTime::now(),
+            activity: Activity::default(),
         })
     }
 
@@ -409,6 +523,7 @@ mod tests {
             timer_tick_seconds: 15,
             sched_tick_seconds: 30,
             stream_tick_seconds: 5,
+            keep_warm: KeepWarm::DEFAULT,
             history_size: 720,
             code_ttl_seconds: 60,
             token_ttl_days: 3650,
@@ -428,5 +543,57 @@ mod tests {
             !s.behind_proxy,
             "must not trust X-Forwarded-For unless told to"
         );
+    }
+
+    #[test]
+    fn keep_warm_reads_the_ways_people_write_a_duration() {
+        use std::time::Duration;
+        let mins = |m: u64| Some(KeepWarm::For(Duration::from_secs(m * 60)));
+        assert_eq!(KeepWarm::parse("30m"), mins(30));
+        assert_eq!(KeepWarm::parse(" 30 min "), mins(30));
+        assert_eq!(KeepWarm::parse("2h"), mins(120));
+        assert_eq!(
+            KeepWarm::parse("1800"),
+            mins(30),
+            "a bare number is seconds"
+        );
+        assert_eq!(
+            KeepWarm::parse("90s"),
+            Some(KeepWarm::For(Duration::from_secs(90)))
+        );
+        for off in ["0", "off", "OFF", "never", "0m"] {
+            assert_eq!(KeepWarm::parse(off), Some(KeepWarm::Off), "{off}");
+        }
+        for always in ["always", "forever", "Indefinite", "-1"] {
+            assert_eq!(KeepWarm::parse(always), Some(KeepWarm::Always), "{always}");
+        }
+        for nonsense in ["", "soon", "30 fortnights", "m30", "-5"] {
+            assert_eq!(
+                KeepWarm::parse(nonsense),
+                None,
+                "{nonsense:?} must not be guessed at"
+            );
+        }
+    }
+
+    #[test]
+    fn keep_warm_describes_itself_the_way_it_would_be_written() {
+        use std::time::Duration;
+        assert_eq!(KeepWarm::DEFAULT.describe(), "30m");
+        assert_eq!(KeepWarm::For(Duration::from_secs(7200)).describe(), "2h");
+        assert_eq!(KeepWarm::For(Duration::from_secs(90)).describe(), "90s");
+        assert_eq!(KeepWarm::Off.describe(), "off");
+        assert_eq!(KeepWarm::Always.describe(), "always");
+    }
+
+    #[test]
+    fn the_keep_warm_window_counts_from_the_last_use() {
+        use std::time::Duration;
+        let w = KeepWarm::For(Duration::from_secs(60));
+        assert!(!w.active(None), "a window with no use yet has not started");
+        assert!(w.active(Some(Duration::from_secs(10))));
+        assert!(!w.active(Some(Duration::from_secs(61))));
+        assert!(KeepWarm::Always.active(None), "always means from startup");
+        assert!(!KeepWarm::Off.active(Some(Duration::ZERO)));
     }
 }

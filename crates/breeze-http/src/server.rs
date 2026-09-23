@@ -339,6 +339,9 @@ fn handle(state: &AppState, request: &mut tiny_http::Request) -> Outcome {
         Resolved::Route(guard, route) => match authorise(state, &incoming, &guard) {
             Err(reply) => Outcome::Reply(compressed(reply, &incoming)),
             Ok(who) => {
+                // Only a request that got past the guard counts as use: a scanner
+                // hammering the proxy must not keep every unit awake.
+                state.activity.touch();
                 // Handed to the route rather than left for it to work out again:
                 // a second verification would spend the v2 nonce twice.
                 incoming.device_token_id = who;
@@ -351,7 +354,10 @@ fn handle(state: &AppState, request: &mut tiny_http::Request) -> Outcome {
         // is written here; the caller passes the connection on.
         Resolved::Stream(guard) => match authorise(state, &incoming, &guard) {
             Err(reply) => Outcome::Reply(reply),
-            Ok(_) => Outcome::Stream,
+            Ok(_) => {
+                state.activity.touch();
+                Outcome::Stream
+            }
         },
     }
 }
