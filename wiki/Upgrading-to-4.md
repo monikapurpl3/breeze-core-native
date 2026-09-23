@@ -34,7 +34,7 @@ sudo sh migrate.sh --yes   # does it
 ```
 
 **Read it first.** It is a script from the internet that runs as root, and the
-[published checksum](https://aspic.salataputarica.hr.eu.org/migrate.sh.sha256)
+[published checksum](https://aspic.salataputarica.hr.eu.org/migrate.sh.sha256) (or go to the bottom of the page for all hashes)
 only proves the download was not corrupted — it comes from the same server, so
 it is no evidence about intent. Run with no arguments and it prints exactly what
 it found and what it would change, then stops.
@@ -166,3 +166,25 @@ sudo -u breeze BREEZE_DEBUG=1 /usr/bin/breeze-core serve --host 127.0.0.1 --port
 
 That logs every request with its status, and traces every control command from
 what the client asked for through to what the unit sent back.
+
+# Hashes of migrate.sh
+
+**CRC32**: cf81bf6c
+
+**MD2**: 3f7d5e72ef90847d21fb8d6718ac0084
+
+**MD4**: 6e8c0cdfca77ab4de6a2e589d88bca59
+
+**MD5**: a53aec704f47861db3971ec689d6ad59
+
+**SHA1**: caed20994a829b929230ff7f525819a2ff480612
+
+**SHA256**: 75470ec3621edb1cce46a7aad261d050a881cac57217ff2a9b0c3fc7c88d6024
+
+**SHA512**: 6c2332058fedfb99db4c824e98de0418f0452bc08dd20e423c06a2524715d1fc6ce7a0375b66240c53cb410f9810262a818247db09ede549d0c5efa629210458
+
+**RipeMD128**: c29eb4dba8492547858658be13c391ba
+
+**RipeMD160**: 10ee797047778ced3b29932de8b6eb64d2e2c322
+
+**ED2K**: 6e8c0cdfca77ab4de6a2e589d88bca59
