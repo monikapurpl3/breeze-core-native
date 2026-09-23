@@ -287,5 +287,5 @@ Section "Uninstall"
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\BreezeCore"
   DeleteRegKey HKLM "Software\BreezeCore"
 
-  MessageBox MB_OK "Breeze Core removed.$\n$\nYour configuration and device tokens were kept in:$\n    %ProgramData%\breeze-core$\n$\nA paired V3 unit's token and key cannot be obtained from Midea again, so that folder is worth keeping. Delete it by hand if you are sure."
+  MessageBox MB_OK "Breeze Core removed.$\n$\nYour configuration and device tokens were kept in:$\n    %ProgramData%\breeze-core$\n$\nA paired V3 unit's token and key cannot be obtained from Midea again, so that folder is worth keeping. Delete it by hand if you are sure." /SD IDOK
 SectionEnd
