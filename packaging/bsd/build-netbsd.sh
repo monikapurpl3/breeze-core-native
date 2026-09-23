@@ -31,7 +31,9 @@ echo "=== $TARGET: $(ssh "$TARGET" 'uname -srm')"
 
 echo "=== sending the source"
 # No target/, no packaging/out, no .git — a few hundred KB.
-tar --exclude='./target' --exclude='./packaging/out' --exclude='./.git' -czf /tmp/bcn-src.tgz .
+# git archive, not a tar of the working tree: that copied every private
+# signing key in packaging/repo/keys/ to this machine. See ship-source.sh.
+./packaging/bsd/ship-source.sh /tmp/bcn-src.tgz
 ssh "$TARGET" "rm -rf ~/$WORK && mkdir -p ~/$WORK"
 scp -q /tmp/bcn-src.tgz "$TARGET:~/$WORK/"
 ssh "$TARGET" "cd ~/$WORK && tar -xzf bcn-src.tgz && rm bcn-src.tgz"
