@@ -52,7 +52,10 @@ if (-not (Test-Path $nssm)) {
     throw "vendor\nssm.exe missing - run .\packaging\windows\fetch-vendor.ps1 first"
 }
 
-& $Makensis "/DVERSION=$version" (Join-Path $here "breeze-core-setup.nsi")
+# Decimal megabytes with a decimal point whatever the machine's locale: a
+# Croatian Windows would otherwise write 2,3.
+$exeMb = ([math]::Round((Get-Item $exe).Length / 1e6, 1)).ToString([Globalization.CultureInfo]::InvariantCulture)
+& $Makensis "/DVERSION=$version" "/DEXE_MB=$exeMb" (Join-Path $here "breeze-core-setup.nsi")
 if ($LASTEXITCODE -ne 0) { throw "makensis failed ($LASTEXITCODE)" }
 
 $out = Join-Path $here "Breeze-Core-Setup.exe"

@@ -29,7 +29,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Install', 'Uninstall', 'Reconfigure')]
+    [ValidateSet('Install', 'Uninstall', 'Reconfigure', 'Stop', 'Upgrade')]
     [string]$Action = 'Install',
 
     [string]$InstallDir = "$env:ProgramFiles\Breeze Core",
@@ -44,7 +44,9 @@ param(
     [switch]$NoFirewall,
     [switch]$Purge,              # on uninstall, also delete the data dir (config, tokens, programs)
 
-    [string]$Nssm = ''           # path to nssm.exe; auto-resolved if empty
+    [string]$Nssm = '',          # path to nssm.exe; auto-resolved if empty
+
+    [switch]$Start               # Upgrade only: start the service afterwards
 )
 
 $ErrorActionPreference = 'Stop'
@@ -252,8 +254,75 @@ function Do-Install {
     Info "Done. Manage with: nssm start/stop/restart/edit $ServiceName  |  logs: $logs\service.log"
 }
 
+# --- Upgrading in place ------------------------------------------------------
+#
+# Re-running the installer used to run Do-Install, which rewrites the service
+# from defaults: it put the bind address back to the LAN IP, dropped
+# --behind-proxy, reset the port, replaced AppEnvironmentExtra (losing anything
+# added with `nssm edit`, BREEZE_WORKERS included) and reopened the inbound LAN
+# firewall rule on a machine that had deliberately been set up proxy-only. So
+# every upgrade quietly undid the hardening. An upgrade now leaves all of that
+# alone and changes only what a new version actually needs: which executable
+# to run.
+
+# Exit codes the installer reads. Anything else is a failure.
+$ExitStopped    = 0    # installed, and now not running
+$ExitWasRunning = 10   # installed and running: stopped, start it again after
+$ExitNotThere   = 20   # no service yet: this is a first install
+
+function Do-Stop {
+    Assert-Admin
+    $svc = Get-Service $ServiceName -ErrorAction SilentlyContinue
+    if (-not $svc) { exit $ExitNotThere }
+    if ($svc.Status -eq 'Stopped') { exit $ExitStopped }
+    # Before any file is replaced: NSSM and breeze-core.exe are both locked
+    # while the service runs, and an installer that cannot overwrite them
+    # either stops with a retry dialog or, silent, leaves half an upgrade.
+    Info "Stopping service '$ServiceName' for the upgrade"
+    Stop-Service $ServiceName -Force -ErrorAction Stop
+    $svc.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+    exit $ExitWasRunning
+}
+
+function Do-Upgrade {
+    Assert-Admin
+    $nssm = Resolve-Nssm $Nssm
+    $exe = Join-Path $InstallDir 'breeze-core.exe'
+    if (-not (Test-Path $exe)) {
+        Die "breeze-core.exe not found in $InstallDir. Point -InstallDir at the installed tree."
+    }
+
+    # Read what the service runs straight from NSSM's registry key: `nssm get`
+    # writes UTF-16, which PowerShell 5.1 does not reliably decode.
+    $key = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName\Parameters"
+    $params = Get-ItemProperty $key -ErrorAction SilentlyContinue
+    $current = if ($params) { [string]$params.Application } else { '' }
+    if ([IO.Path]::GetFileName($current) -ne 'breeze-core.exe') {
+        # Not this server: most likely a Python-era install, whose arguments
+        # and environment mean nothing to breeze-core.exe. That one really
+        # does need configuring from scratch.
+        Warn "The existing service runs '$current', not breeze-core.exe - configuring it from scratch"
+        Do-Install
+        return
+    }
+
+    Info "Upgrading in place: bind address, port, proxy mode, environment and firewall rules are kept"
+    # Only where the program lives, in case the install moved.
+    & $nssm set $ServiceName Application $exe | Out-Null
+    & $nssm set $ServiceName AppDirectory $InstallDir | Out-Null
+
+    if ($Start) {
+        & $nssm start $ServiceName | Out-Null
+        Info "Service '$ServiceName' started again"
+    } else {
+        Info "Service '$ServiceName' was not running before the upgrade, so it is left stopped"
+    }
+}
+
 switch ($Action) {
     'Install'     { Do-Install }
     'Reconfigure' { Do-Install }
     'Uninstall'   { Do-Uninstall }
+    'Stop'        { Do-Stop }
+    'Upgrade'     { Do-Upgrade }
 }

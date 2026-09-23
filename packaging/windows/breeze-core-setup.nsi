@@ -28,6 +28,13 @@ Unicode true
   !define VERSION "0.0.0-UNSET"
 !endif
 
+; The executable's size for the component description, measured by
+; build-installer.ps1 from the binary it wraps. It used to be typed in, and
+; said 2.2 MB for a while after it stopped being true.
+!ifndef EXE_MB
+  !error "EXE_MB is not defined - build with build-installer.ps1, which measures it"
+!endif
+
 ; Where build-installer.ps1 stages breeze-core.exe. Overridable so a build from
 ; a different output directory does not need this file edited.
 !ifndef BINDIR
@@ -42,13 +49,21 @@ SetCompressor /SOLID lzma
 Name "Breeze Core ${VERSION}"
 OutFile "Breeze-Core-Setup.exe"
 InstallDir "$PROGRAMFILES64\Breeze Core"
-InstallDirRegKey HKLM "Software\BreezeCore" "InstallDir"
+; No InstallDirRegKey: it is read before .onInit, in the 32-bit registry view,
+; and this installer writes its keys in the 64-bit one -- so it never found an
+; earlier install, and every upgrade defaulted back to Program Files. .onInit
+; reads the key itself, after SetRegView 64.
 RequestExecutionLevel admin
 ShowInstDetails show
 ShowUnInstDetails show
 
 Var RunWizard
 Var PS
+; "1" when a BreezeCore service already exists: this run is an upgrade.
+Var Upgrading
+; What install-service.ps1 -Action Stop reported: 20 no service yet, 0 it was
+; stopped, 10 it was running (stopped now, started again afterwards).
+Var ServiceState
 
 ; ----- MUI -----
 !define MUI_ABORTWARNING
@@ -58,6 +73,9 @@ Var PS
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "..\..\LICENSE"
 !insertmacro MUI_PAGE_COMPONENTS
+; Skipped on an upgrade: the service already runs from somewhere, and a second
+; copy elsewhere would leave it running the old one.
+!define MUI_PAGE_CUSTOMFUNCTION_PRE dirPre
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 
@@ -69,7 +87,7 @@ Var PS
 !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
 !define MUI_FINISHPAGE_SHOWREADME_FUNCTION RunCaddyWizard
 !define MUI_FINISHPAGE_LINK "Breeze Core on GitHub"
-!define MUI_FINISHPAGE_LINK_LOCATION "https://github.com/monikapurpl3/breeze-core"
+!define MUI_FINISHPAGE_LINK_LOCATION "https://github.com/monikapurpl3/breeze-core-native"
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW finishShow
 !insertmacro MUI_PAGE_FINISH
 
@@ -81,6 +99,23 @@ Var PS
 ; ---------------------------------------------------------------- Sections
 Section "Breeze Core server (Windows service)" SEC_SERVER
   SectionIn RO
+
+  ; An existing service is stopped before anything is replaced: NSSM and
+  ; breeze-core.exe are both locked while it runs. The helper comes from this
+  ; installer, not the installed copy -- an older install-service.ps1 has no
+  ; Stop action.
+  InitPluginsDir
+  SetOutPath "$PLUGINSDIR"
+  File "install-service.ps1"
+  nsExec::ExecToLog '"$PS" -NoProfile -ExecutionPolicy Bypass -File "$PLUGINSDIR\install-service.ps1" -Action Stop'
+  Pop $ServiceState
+  ${If} $ServiceState != "0"
+  ${AndIf} $ServiceState != "10"
+  ${AndIf} $ServiceState != "20"
+    MessageBox MB_ICONSTOP "The BreezeCore service could not be stopped (result: $ServiceState), so its files cannot be replaced.$\n$\nStop it from Services, then run this installer again. Nothing has been changed." /SD IDOK
+    Abort
+  ${EndIf}
+
   SetOutPath "$INSTDIR"
 
   ; The server: one file, panel included.
@@ -99,16 +134,28 @@ Section "Breeze Core server (Windows service)" SEC_SERVER
   WriteRegStr HKLM "Software\BreezeCore" "InstallDir" "$INSTDIR"
   WriteRegStr HKLM "Software\BreezeCore" "Version" "${VERSION}"
 
-  ; Register the hardened service (LAN-first bind, LOCAL SERVICE, locked-down
-  ; %ProgramData%\breeze-core). No network access required.
-  DetailPrint "Registering the BreezeCore service..."
-  nsExec::ExecToLog '"$PS" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\install-service.ps1" -Action Install -InstallDir "$INSTDIR" -Nssm "$INSTDIR\nssm.exe"'
+  ${If} $ServiceState == "20"
+    ; First install: register the hardened service (LAN-first bind, LOCAL
+    ; SERVICE, locked-down %ProgramData%\breeze-core). No network needed.
+    DetailPrint "Registering the BreezeCore service..."
+    nsExec::ExecToLog '"$PS" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\install-service.ps1" -Action Install -InstallDir "$INSTDIR" -Nssm "$INSTDIR\nssm.exe"'
+  ${Else}
+    ; Upgrade: keep the bind address, port, proxy mode, environment and
+    ; firewall rules exactly as they were -- re-registering from defaults used
+    ; to undo all of them -- and start it again only if it was running.
+    DetailPrint "Upgrading the BreezeCore service in place..."
+    StrCpy $1 ""
+    ${If} $ServiceState == "10"
+      StrCpy $1 "-Start"
+    ${EndIf}
+    nsExec::ExecToLog '"$PS" -NoProfile -ExecutionPolicy Bypass -File "$INSTDIR\install-service.ps1" -Action Upgrade -InstallDir "$INSTDIR" -Nssm "$INSTDIR\nssm.exe" $1'
+  ${EndIf}
   Pop $0
   ${If} $0 != 0
     ; $\" is how NSIS escapes a quote inside a string. A backtick does NOT
     ; escape anything here -- it opens a third kind of quoted string, which is
     ; how this line first turned into eleven arguments.
-    MessageBox MB_ICONEXCLAMATION "Service setup returned code $0.$\n$\nThe files are installed; only the service registration failed. Run this from an elevated PowerShell to see why:$\n$\n    powershell -ExecutionPolicy Bypass -File $\"$INSTDIR\install-service.ps1$\" -Action Install$\n$\nDetails are in the install log above."
+    MessageBox MB_ICONEXCLAMATION "Service setup returned code $0.$\n$\nThe files are installed; only the service registration failed. Run this from an elevated PowerShell to see why:$\n$\n    powershell -ExecutionPolicy Bypass -File $\"$INSTDIR\install-service.ps1$\" -Action Install$\n$\nDetails are in the install log above." /SD IDOK
   ${EndIf}
 
   ; Start-menu shortcuts.
@@ -141,7 +188,7 @@ SectionEnd
 
 ; Component descriptions.
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
-  !insertmacro MUI_DESCRIPTION_TEXT ${SEC_SERVER} "The Breeze Core server - one 2.2 MB executable with the web panel compiled in - run as a hardened Windows service (bundled NSSM, low-privilege account, LAN-locked firewall). Required."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SEC_SERVER} "The Breeze Core server - one ${EXE_MB} MB executable with the web panel compiled in - run as a hardened Windows service (bundled NSSM, low-privilege account, LAN-locked firewall). Required."
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC_CADDY} "Optional: run the guided Caddy reverse-proxy wizard at the end for public HTTPS (automatic TLS, hardened headers, LAN-only admin, fail2ban-style banning). You can also run it later from the Start menu."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
@@ -160,6 +207,26 @@ Function .onInit
   ; run the installer. This is a service in Program Files; the shortcuts belong
   ; to all users.
   SetShellVarContext all
+
+  ; Where an earlier install put itself, now that the view is right.
+  ReadRegStr $0 HKLM "Software\BreezeCore" "InstallDir"
+  ${If} $0 != ""
+    StrCpy $INSTDIR $0
+  ${EndIf}
+
+  ; An upgrade is decided by the service, not by our own keys: a service is
+  ; what an upgrade must not break.
+  StrCpy $Upgrading ""
+  ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Services\BreezeCore" "ImagePath"
+  ${If} $0 != ""
+    StrCpy $Upgrading "1"
+  ${EndIf}
+FunctionEnd
+
+Function dirPre
+  ${If} $Upgrading == "1"
+    Abort
+  ${EndIf}
 FunctionEnd
 
 ; Same two settings for the uninstaller, which is a separate process: without
@@ -174,6 +241,11 @@ FunctionEnd
 Function finishShow
   ${If} $RunWizard == 1
     SendMessage $mui.FinishPage.ShowReadme ${BM_SETCHECK} ${BST_CHECKED} 0
+  ${EndIf}
+  ; An upgrade keeps its pairing: offering to pair again by default would
+  ; invite overwriting a working config.json.
+  ${If} $Upgrading == "1"
+    SendMessage $mui.FinishPage.Run ${BM_SETCHECK} ${BST_UNCHECKED} 0
   ${EndIf}
 FunctionEnd
 
