@@ -193,6 +193,38 @@ that unit's `link`:
   keeps being dropped. With keep-warm on (the default) it should stay at one
   per unit for as long as you are using it.
 
+## The unit won't take a change — flaps, eco or turbo
+
+Some changes are refused by the **air conditioner itself**. It still answers the
+command, with its state unchanged, so the control looks as if it sprang back.
+From 4.1.1 the web panel and the Breeze app (2.2.9) say so outright — *"The air
+conditioner didn't accept the flap change — the unit refused it, not Breeze
+Core"* — with the likely reason.
+
+Measured on real units, one flap change each, straight after switching into the
+mode:
+
+| | Do the flaps change? |
+|---|---|
+| switched off, any mode | **no** |
+| fan, dry, cool, auto | yes, at once |
+| heating, just switched on or into heating | **no** — held still |
+| heating, once warm air is coming out (a few minutes) | yes |
+
+- **Flaps while heating.** When a unit starts heating it holds its louvres still
+  until the coil is warm, so it does not blow cold air at anyone, and it ignores
+  flap changes until then — in cooling there is no such wait. This is firmware:
+  Breeze Core 4.0.2 and msmart, the library the Python version used, were
+  refused identically. Wait until warm air is coming out, then try again.
+- **Eco, and sometimes turbo, only in some modes.** Many units offer eco only
+  while cooling.
+- **Nothing moves while switched off.** Mode and temperature are still taken
+  and stored for next time; flaps are not.
+
+A change that is refused where it should work — flaps in cooling, say — is
+worth a report with the unit's model; the reply's `not_applied` field (see
+[REST API](REST-API)) says exactly which fields the unit turned down.
+
 ## Pairing fails with a 500, or nothing is saved
 
 The service could not write its state directory. It runs as `breeze` and needs

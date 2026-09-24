@@ -10,6 +10,8 @@
 //! and answered together; see `breeze_device::DeviceManager::control`.
 
 use breeze_device::{Change, DeviceManager};
+use breeze_proto::ac::command::Setpoint;
+use breeze_proto::ac::response::State;
 use breeze_proto::ac::types::{FanSpeed, Mode, SwingMode};
 use breeze_store::ControlRequest;
 
@@ -96,8 +98,63 @@ pub fn apply(
             echoed.mode, echoed.target_temperature, echoed.fan_speed, echoed.power_on
         );
     }
-    let state = UnitState::from_info(&info, &outcome.state);
-    Ok(serde_json::to_value(state).unwrap_or_else(|_| serde_json::json!({})))
+    let refused = not_applied(request, &outcome.sent, &outcome.state);
+    if debug_control() && !refused.is_empty() {
+        eprintln!("  control {id}: the unit did not take {refused:?}");
+    }
+    let mut value = serde_json::to_value(UnitState::from_info(&info, &outcome.state))
+        .unwrap_or_else(|_| serde_json::json!({}));
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert("not_applied".into(), serde_json::json!(refused));
+    }
+    Ok(value)
+}
+
+/// The fields of `request` the unit did not take: sent one value, reported
+/// another.
+///
+/// Why it exists: a unit that ignores part of a command still answers it, with
+/// its state unchanged, so a client saw its change "spring back" and could not
+/// tell a refusal from a bug. Units do refuse, and not rarely -- none will
+/// move its flaps while switched off, most hold them still while heating until
+/// warm air is coming out (flaps change instantly in fan, dry, cool and auto),
+/// and many offer eco only while cooling. The reply says which fields, and the
+/// clients say why in words.
+///
+/// Compared against what was *sent*, not what this request asked for. A
+/// request merged with later ones may have been superseded -- 24.5 overtaken by
+/// a tap to 25 -- and a superseded value is not the unit refusing anything.
+/// Only fields this request set are reported: nobody asked about the rest.
+///
+/// Reported in the control reply only, as `not_applied`, always present (empty
+/// when everything was taken), and advertised as the `control_feedback`
+/// feature. Additive: a client that does not know the key ignores it.
+pub fn not_applied(request: &ControlRequest, sent: &Setpoint, echoed: &State) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    if request.power_state.is_some() && sent.power_on != echoed.power_on {
+        out.push("power_state");
+    }
+    if request.operational_mode.is_some() && Some(sent.mode) != echoed.mode {
+        out.push("operational_mode");
+    }
+    if request.target_temperature.is_some()
+        && (sent.target_temperature - echoed.target_temperature).abs() > 0.01
+    {
+        out.push("target_temperature");
+    }
+    if request.fan_speed.is_some() && sent.fan_speed != echoed.fan_speed {
+        out.push("fan_speed");
+    }
+    if request.swing_mode.is_some() && Some(sent.swing_mode) != echoed.swing_mode {
+        out.push("swing_mode");
+    }
+    if request.eco.is_some() && sent.eco != echoed.eco {
+        out.push("eco");
+    }
+    if request.turbo.is_some() && sent.turbo != echoed.turbo {
+        out.push("turbo");
+    }
+    out
 }
 
 /// Names as the REST API publishes them. Unknown values are rejected earlier,
@@ -126,6 +183,82 @@ pub fn swing_from_name(name: &str) -> Option<SwingMode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A state report with the given flaps, eco and target -- the fields these
+    /// tests look at -- and nothing surprising elsewhere.
+    fn report(swing: SwingMode, eco: bool, target: f32) -> State {
+        let mut p = vec![0u8; 24];
+        p[0] = 0xC0;
+        p[1] = 0x01;
+        let whole = target.trunc() as u8;
+        p[2] = ((Mode::Heat as u8) << 5)
+            | ((whole - 16) & 0xF)
+            | if target.fract() > 0.0 { 0x10 } else { 0 };
+        p[3] = 102;
+        p[7] = swing as u8;
+        if eco {
+            p[9] |= 0x10;
+        }
+        p[11] = 0xFF;
+        p[12] = 0xFF;
+        State::parse(&p).unwrap()
+    }
+
+    fn request(json: &str) -> ControlRequest {
+        serde_json::from_str(json).unwrap()
+    }
+
+    #[test]
+    fn a_flap_change_the_unit_ignored_is_reported() {
+        // The heating warm-up case, measured: flaps sent VERTICAL, the unit
+        // answered HORIZONTAL.
+        let before = report(SwingMode::Horizontal, false, 24.0);
+        let req = request(r#"{"swing_mode": "VERTICAL"}"#);
+        let mut sent = Setpoint::from_state(&before);
+        change_from(&req).apply_to(&mut sent);
+        assert_eq!(not_applied(&req, &sent, &before), ["swing_mode"]);
+    }
+
+    #[test]
+    fn a_change_the_unit_took_is_not_reported() {
+        let req = request(r#"{"swing_mode": "VERTICAL"}"#);
+        let mut sent = Setpoint::from_state(&report(SwingMode::Horizontal, false, 24.0));
+        change_from(&req).apply_to(&mut sent);
+        let after = report(SwingMode::Vertical, false, 24.0);
+        assert!(not_applied(&req, &sent, &after).is_empty());
+    }
+
+    #[test]
+    fn only_the_fields_this_request_set_are_reported() {
+        // The unit refused eco; a request that only moved the temperature was
+        // not about eco and must not be told it failed.
+        let req = request(r#"{"target_temperature": 22.5}"#);
+        let mut sent = Setpoint::from_state(&report(SwingMode::Off, false, 24.0));
+        change_from(&req).apply_to(&mut sent);
+        sent.eco = true; // as if a merged request had asked for eco
+        let after = report(SwingMode::Off, false, 22.5);
+        assert!(not_applied(&req, &sent, &after).is_empty());
+    }
+
+    #[test]
+    fn a_value_overtaken_by_a_merged_tap_is_not_a_refusal() {
+        // Tapped 24.5, then 25 before the command left: 25 was sent, and the
+        // unit took it. The 24.5 request was superseded, not refused.
+        let req = request(r#"{"target_temperature": 24.5}"#);
+        let mut sent = Setpoint::from_state(&report(SwingMode::Off, false, 24.0));
+        sent.target_temperature = 25.0;
+        let after = report(SwingMode::Off, false, 25.0);
+        assert!(not_applied(&req, &sent, &after).is_empty());
+    }
+
+    #[test]
+    fn eco_refused_while_heating_is_reported_with_the_flaps() {
+        let before = report(SwingMode::Horizontal, false, 24.0);
+        let req = request(r#"{"eco": true, "swing_mode": "BOTH"}"#);
+        let mut sent = Setpoint::from_state(&before);
+        change_from(&req).apply_to(&mut sent);
+        assert_eq!(not_applied(&req, &sent, &before), ["swing_mode", "eco"]);
+    }
 
     #[test]
     fn a_request_becomes_a_change_with_only_what_it_sets() {

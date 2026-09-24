@@ -13,6 +13,7 @@
   --text: #e7eaee;
   --muted: #8b93a0;
   --bad: #e25c5c;
+  --warn: #e0a33c;
   --radius: 18px;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
@@ -337,6 +338,15 @@ body{
   margin-top: 10px;
   font-size: 11px;
   color: var(--bad);
+  text-align: center;
+  display:none;
+}
+/* A change the unit itself refused: not an error of ours, so not red. */
+.notice{
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--warn);
   text-align: center;
   display:none;
 }

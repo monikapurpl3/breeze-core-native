@@ -27,6 +27,7 @@ const FEATURES: &[&str] = &[
     "beep_control",
     "compression",
     "config_api",
+    "control_feedback",
     "delete_unit",
     "device_pairing",
     "ed25519_auth",
@@ -1224,12 +1225,30 @@ mod tests {
             "system_info",
             "sleep_timer",
         ];
+        // Features the reference never had. Each is additive -- a client that
+        // does not know one ignores it -- and each is named here on purpose, so
+        // one cannot be advertised by accident.
+        //
+        // control_feedback (4.1.1): the control reply says which fields the
+        // unit did not take, as `not_applied`.
+        let native_only = ["control_feedback"];
+        let mut expected: Vec<&str> = reference
+            .iter()
+            .chain(native_only.iter())
+            .copied()
+            .collect();
+        expected.sort_unstable();
         reference.sort_unstable();
         assert_eq!(
-            mine,
-            reference.to_vec(),
-            "the advertised set must match the reference exactly"
+            mine, expected,
+            "the advertised set must be the reference's plus the named native additions"
         );
+        for f in reference {
+            assert!(
+                FEATURES.contains(&f),
+                "{f} is the reference's and must stay advertised"
+            );
+        }
     }
 
     #[test]

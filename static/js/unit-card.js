@@ -103,6 +103,21 @@ export function setError(p, msg){
   else{ box.style.display = "none"; }
 }
 
+// A change the unit refused. Clears itself: it is about one tap, and a notice
+// that outlives the situation it describes is noise on the next look.
+const NOTICE_MS = 15000;
+export function setNotice(p, msg){
+  const box = p.refs.noticeBox;
+  clearTimeout(p.noticeTimer);
+  if(msg){
+    box.textContent = msg;
+    box.style.display = "block";
+    p.noticeTimer = setTimeout(() => { box.style.display = "none"; }, NOTICE_MS);
+  }else{
+    box.style.display = "none";
+  }
+}
+
 export function render(p, s){
   p.state = s;
   const r = p.refs;

@@ -4,7 +4,8 @@
 // (enroll.js), and rendering (unit-card.js).
 
 import { apiFetch, apiStream, clearDeviceToken, forgetSigner } from "./api.js";
-import { buildPanel, render, setError, setName } from "./unit-card.js";
+import { buildPanel, render, setError, setName, setNotice } from "./unit-card.js";
+import { notAppliedMessage } from "./feedback.js";
 import { enroll } from "./enroll.js";
 import {
   addUnitDialog, renameDialog, confirmDialog, addSourceDialog, scanDialog,
@@ -64,8 +65,12 @@ async function control(p, body){
     });
     if(res.status === 401){ setError(p, "session expired — re-pairing…"); reauth(); return; }
     if(!res.ok) throw new Error(await res.text());
-    render(p, await res.json());
+    const s = await res.json();
+    render(p, s);
     setError(p, null);
+    // The unit answered, but may have refused part of it; say so, and whose
+    // doing it was, rather than let the control silently spring back.
+    setNotice(p, notAppliedMessage(s));
   }catch(e){
     setError(p, "control failed — " + e.message);
   }finally{

@@ -5,7 +5,7 @@ Used identically by the API, the web panel, the app and the diagnostic CLI.
 | Field | Values |
 |---|---|
 | `operational_mode` | `AUTO` `COOL` `DRY` `HEAT` `FAN_ONLY` |
-| `swing_mode` | `OFF` `VERTICAL` `HORIZONTAL` `BOTH` — two physical flaps; an unsupported one is silently ignored by firmware |
+| `swing_mode` | `OFF` `VERTICAL` `HORIZONTAL` `BOTH` — two physical flaps. The firmware ignores an unsupported one, and any flap change while the unit is off or warming up to heat; the control reply's `not_applied` says when |
 | `target_temperature` | `16.0`–`30.0` in `0.5°` steps (Celsius on the wire; clients may display °F) |
 | `fan_speed` | `20` / `40` / `60` / `80` / `100`, plus `102` = auto |
 | `beep` | optional `bool` on `POST /control` only — whether the unit chirps on accept. Omitted ⇒ silent. Not part of the returned state. |

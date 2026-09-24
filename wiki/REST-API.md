@@ -120,6 +120,20 @@ The response is the unit's own state after the change — its echo, not what you
 asked for. That is what lets an optimistic UI be honest: the client reconciles
 against what happened.
 
+Since 4.1.1 it also carries **`not_applied`**: the fields of *this* request that
+the unit did not take — one value sent, another reported back. It is always
+present, empty when everything was taken, and lists only fields the request
+set. Units refuse more than you might expect: no flaps while switched off, none
+while warming up to heat, eco only in some modes — see
+[Troubleshooting](Troubleshooting). It is compared against what was actually
+sent, so a tap overtaken by a later one before the command went out is not
+reported as refused. Advertised as the `control_feedback` feature.
+
+```json
+{"id": "153931628470980", "operational_mode": "HEAT", "swing_mode": "HORIZONTAL",
+ "not_applied": ["swing_mode"], "...": "..."}
+```
+
 Fields, bounds and the `beep` rule: [Control schema](Control-schema).
 
 ## Status codes
