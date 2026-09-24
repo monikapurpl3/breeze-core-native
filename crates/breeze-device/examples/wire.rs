@@ -406,8 +406,11 @@ fn main() {
     // `--quick`: one read and its aftermath, nothing else. For comparing what
     // the unit says on a fresh connection with what the server is reporting.
     if args.iter().any(|a| a == "--quick") {
-        println!("
-{} done (quick)", clock.stamp());
+        println!(
+            "
+{} done (quick)",
+            clock.stamp()
+        );
         return;
     }
 
