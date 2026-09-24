@@ -835,6 +835,27 @@ mod tests {
     }
 
     #[test]
+    fn every_field_a_control_can_set_reaches_the_unit() {
+        // Flaps broke in 4.1.0 while mode, temperature, fan, eco and turbo kept
+        // working, and nothing tested flaps at all. One field per control, each
+        // checked against what the unit then holds.
+        let (server, m) = fake(Duration::ZERO);
+        m.read_state(7).unwrap();
+        for swing in [SwingMode::Vertical, SwingMode::Both, SwingMode::Horizontal, SwingMode::Off] {
+            let o = m
+                .control(7, Change { swing_mode: Some(swing), ..Change::default() })
+                .unwrap();
+            assert_eq!(o.sent.swing_mode, swing, "the command must carry the flaps");
+            assert_eq!(o.state.swing_mode, Some(swing), "and the unit must report them");
+        }
+        let o = m.control(7, Change { mode: Some(Mode::Heat), ..Change::default() }).unwrap();
+        assert_eq!(o.state.mode, Some(Mode::Heat));
+        let o = m.control(7, target(21.5)).unwrap();
+        assert_eq!(o.state.target_temperature, 21.5);
+        assert_eq!(server.target(), 21.5);
+    }
+
+    #[test]
     fn a_stale_report_is_re_read_before_building_on_it() {
         let (server, m) = fake(Duration::ZERO);
         m.read_state(7).unwrap();

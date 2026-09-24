@@ -272,10 +272,12 @@ impl Conn {
                     .as_ref()
                     .map(|s| {
                         format!(
-                            "power {} mode {:?} target {} indoor {:?}",
+                            "power {} mode {:?} target {} swing {:?} (raw {:#x}) indoor {:?}",
                             if s.power_on { "on " } else { "off" },
                             s.mode,
                             s.target_temperature,
+                            s.swing_mode,
+                            s.swing_raw,
                             s.indoor_temperature
                         )
                     })
@@ -400,6 +402,14 @@ fn main() {
     println!("\n== one read, then 3 s for extras");
     get(&mut conn, &unit, &clock);
     conn.watch(Duration::from_secs(3), &clock);
+
+    // `--quick`: one read and its aftermath, nothing else. For comparing what
+    // the unit says on a fresh connection with what the server is reporting.
+    if args.iter().any(|a| a == "--quick") {
+        println!("
+{} done (quick)", clock.stamp());
+        return;
+    }
 
     // --- 3. back to back: is a request right after a reply answered? --------
     println!("\n== back-to-back reads: a second read N ms after the first reply");
