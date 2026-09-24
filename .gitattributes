@@ -44,3 +44,12 @@ packaging/portage/**    text eol=lf
 # GitHub parses these itself, and a CRLF checkout of a YAML issue form is the
 # kind of thing that fails in the form editor rather than anywhere useful.
 .github/**              text eol=lf
+
+# The opposite case: a patch against WinGup, whose sources are CRLF, so the
+# patch's own lines carry CRs that must survive exactly. Stored and checked out
+# byte for byte; any conversion and `git apply` refuses every hunk.
+packaging/windows/wingup/breeze.patch -text
+
+# Checked with `sha256sum -c` on Linux, where a CR would become part of the
+# file name it looks for.
+packaging/windows/wingup/SHA256SUMS text eol=lf

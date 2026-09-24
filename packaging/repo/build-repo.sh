@@ -563,6 +563,42 @@ else
   echo "     build it on Windows: .\\packaging\\windows\\build-installer.ps1"
 fi
 
+# --- Windows updater and the NSSM mirror ------------------------------------
+# The installer downloads both rather than carrying them, and refuses anything
+# that does not match its pins. They have to be in every tree: publish.sh
+# replaces the whole site, and its vanish guard only compares the top level, so
+# a rebuild without /windows/updater would drop every installer's updater
+# without a word.
+echo "=== Windows updater + NSSM mirror ==="
+mkdir -p "$OUT/windows/updater" "$OUT/windows/vendor" packaging/out/gup packaging/out/vendor
+# GUP: the binary and its source, as pinned by wingup/SHA256SUMS (committed,
+# written by build-gup.ps1). A build is not byte-reproducible, so a missing
+# local copy is fetched back from aspic rather than rebuilt: a rebuild would be
+# new bytes under a name installers have already pinned.
+tr -d '\r' < packaging/windows/wingup/SHA256SUMS > "$OUT/windows/updater/SHA256SUMS"
+while read -r _ name; do
+  [ -f "packaging/out/gup/$name" ] ||
+    curl -fsS --max-time 120 -o "packaging/out/gup/$name" \
+      "https://aspic.salataputarica.hr.eu.org/windows/updater/$name"
+  cp "packaging/out/gup/$name" "$OUT/windows/updater/"
+done < "$OUT/windows/updater/SHA256SUMS"
+( cd "$OUT/windows/updater" && sha256sum -c --quiet SHA256SUMS ) ||
+  { echo "  !! the updater does not match packaging/windows/wingup/SHA256SUMS"; exit 1; }
+# The LGPL's texts and the notices of what is compiled in, beside the binary.
+cp packaging/windows/wingup/notices/LGPL-3.0.txt packaging/windows/wingup/notices/GPL-3.0.txt \
+   packaging/windows/wingup/notices/THIRD-PARTY-NOTICES.txt "$OUT/windows/updater/"
+# NSSM: the fallback when nssm.cc is down. Same pin as install-service.ps1's
+# $NssmZipSha256 - change both together.
+NSSM_ZIP_SHA256=727d1e42275c605e0f04aba98095c38a8e1e46def453cdffce42869428aa6743
+[ -f packaging/out/vendor/nssm-2.24.zip ] ||
+  curl -fsS --max-time 120 -o packaging/out/vendor/nssm-2.24.zip https://nssm.cc/release/nssm-2.24.zip
+echo "$NSSM_ZIP_SHA256  packaging/out/vendor/nssm-2.24.zip" | sha256sum -c --quiet ||
+  { echo "  !! nssm-2.24.zip does not match its pin"; exit 1; }
+cp packaging/out/vendor/nssm-2.24.zip "$OUT/windows/vendor/"
+# Two spaces, as on Linux: Git Bash's sha256sum marks the name with a `*`.
+( cd "$OUT/windows/vendor" && sha256sum nssm-2.24.zip | sed 's/ \*/  /' > nssm-2.24.zip.sha256 )
+ls -1 "$OUT/windows/updater" "$OUT/windows/vendor" | sed 's/^/  /'
+
 # --- FreeBSD (pkg) ----------------------------------------------------------
 # Built AND signed on a real FreeBSD machine by packaging/bsd/build-freebsd.sh:
 # `pkg repo` signs locally, so unlike every other repository here this one is

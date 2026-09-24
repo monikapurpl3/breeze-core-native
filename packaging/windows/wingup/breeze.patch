@@ -1,0 +1,134 @@
+diff --git a/src/gup.rc b/src/gup.rc
+index 6938093..d912e99 100644
+--- a/src/gup.rc
++++ b/src/gup.rc
+@@ -38,12 +38,12 @@ BEGIN
+ 		BLOCK "040904b0"
+ 		BEGIN
+ 			VALUE	"CompanyName",	"Don HO don.h@free.fr\0"
+-			VALUE	"FileDescription",	"WinGup for Notepad++\0"
++			VALUE	"FileDescription",	"WinGup, modified for Breeze Core\0"
+ 			VALUE	"FileVersion",	VERSION_VALUE
+ 			VALUE	"InternalName",	"gup.exe\0"
+ 			VALUE	"LegalCopyright",	"Copyright 2018 by Don HO\0"
+ 			VALUE	"OriginalFilename",	"gup.exe\0"
+-			VALUE	"ProductName",	"WinGup for Notepad++\0"
++			VALUE	"ProductName",	"WinGup, modified for Breeze Core\0"
+ 			VALUE	"ProductVersion",	VERSION_VALUE
+ 		END
+ 	END
+@@ -72,7 +72,7 @@ END
+ IDD_YESNONEVERDLG DIALOGEX 0, 0, 304, 94
+ STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+ EXSTYLE WS_EX_TOOLWINDOW | WS_EX_WINDOWEDGE
+-CAPTION "Notepad++ Update Available"
++CAPTION "Update Available"
+ FONT 8, "MS Shell Dlg", 0, 0, 0x1
+ BEGIN
+     LTEXT           "An update package is available, do you want to download and install it?",IDC_YESNONEVERMSG,15,15,273,50
+@@ -87,7 +87,7 @@ STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_CAPTION
+ CAPTION "No update"
+ FONT 8, "MS Shell Dlg", 0, 0, 0x1
+ BEGIN
+-    CONTROL         "No update is available\ror the newest version is not triggered yet for updating (<a id=""id_moreinfo"">more info</a>).\r\r<a id=""id_download"">Go to the download page</a> to update Notepad++ manually.",IDC_DOWNLOAD_LINK,"SysLink",WS_TABSTOP,10,10,150,70
++    CONTROL         "No update is available\ror the newest version is not triggered yet for updating (<a id=""id_moreinfo"">more info</a>).\r\r<a id=""id_download"">Go to the download page</a> to update manually.",IDC_DOWNLOAD_LINK,"SysLink",WS_TABSTOP,10,10,150,70
+     DEFPUSHBUTTON   "Close",IDOK,68,90,50,14
+ END
+ 
+diff --git a/src/winmain.cpp b/src/winmain.cpp
+index 34d0fab..b17a247 100644
+--- a/src/winmain.cpp
++++ b/src/winmain.cpp
+@@ -71,7 +71,9 @@ static wstring dlFileName;
+ static wstring appIconFile;
+ static wstring nsisSilentInstallParam;
+ 
+-wstring FLAG_NSIS_SILENT_INSTALL_PARAM = L"/closeRunningNpp /S /runNppAfterSilentInstall";
++// Breeze Core: its installer takes plain NSIS /S; the other two switches were
++// Notepad++'s own.
++wstring FLAG_NSIS_SILENT_INSTALL_PARAM = L"/S";
+ 
+ 
+ static constexpr wchar_t MSGID_UPDATEAVAILABLE[] = L"An update package is available, do you want to download and install it?";
+@@ -846,8 +848,11 @@ LRESULT CALLBACK yesNoNeverDlgProc(HWND hWndDlg, UINT message, WPARAM wParam, LP
+ 
+ 				if (!g_hAppWnd)
+ 				{
+-					::EnableWindow(::GetDlgItem(hWndDlg, IDCANCEL), FALSE); // no app-wnd to sent the updates disabling message signal
+-					FLAG_NSIS_SILENT_INSTALL_PARAM = L"/closeRunningNpp /S";
++					// Breeze Core: no app window to tell, so "Never" could only ever be
++					// a dead button. Hidden rather than greyed out; the sign-in check
++					// is turned off from the installer instead.
++					::ShowWindow(::GetDlgItem(hWndDlg, IDCANCEL), SW_HIDE);
++					FLAG_NSIS_SILENT_INSTALL_PARAM = L"/S";
+ 				}
+ 			}
+ 
+@@ -981,12 +986,14 @@ LRESULT CALLBACK updateCheckDlgProc(HWND hWndDlg, UINT message, WPARAM wParam, L
+ 					LITEM item = pNMLink->item;
+ 					if (lstrcmpW(item.szID, L"id_download") == 0)
+ 					{
+-						::ShellExecute(NULL, TEXT("open"), TEXT("https://notepad-plus-plus.org/downloads/"), NULL, NULL, SW_SHOWNORMAL);
++						// Breeze Core: its own download page, not Notepad++'s.
++						::ShellExecute(NULL, TEXT("open"), TEXT("https://aspic.salataputarica.hr.eu.org/breeze-core/"), NULL, NULL, SW_SHOWNORMAL);
+ 						EndDialog(hWndDlg, wParam);
+ 					}
+ 					else if (lstrcmpW(item.szID, L"id_moreinfo") == 0)
+ 					{
+-						::ShellExecute(NULL, TEXT("open"), TEXT("https://npp-user-manual.org/docs/upgrading/#new-version-available-but-auto-updater-find-nothing"), NULL, NULL, SW_SHOWNORMAL);
++						// Breeze Core: how its updates work, not Notepad++'s manual.
++						::ShellExecute(NULL, TEXT("open"), TEXT("https://github.com/monikapurpl3/breeze-core-native/wiki/Installing-on-Windows"), NULL, NULL, SW_SHOWNORMAL);
+ 						EndDialog(hWndDlg, wParam);
+ 					}
+ 					break;
+@@ -1326,7 +1333,7 @@ std::wstring getDestDir(const GupNativeLang& nativeLang, const GupParameters& gu
+ 	{
+ 		downloadFolder = getSpecialFolderLocation(CSIDL_APPDATA);
+ 	}
+-	downloadFolder += L"\\Notepad++";
++	downloadFolder += L"\\Breeze Core"; // Breeze Core: never Notepad++'s folder
+ 	if (::PathFileExists(downloadFolder.c_str()))
+ 		return downloadFolder;
+ 
+@@ -1395,7 +1402,11 @@ bool isAppProcess(const wchar_t* wszAppMutex)
+ // Definition from Notepad++
+ #define NPPMSG  (WM_USER + 1000)
+ #define NPPM_DISABLEAUTOUPDATE (NPPMSG + 95) // 2119 in decimal
+-#define APP_MUTEX L"nppInstance"
++// Breeze Core: nothing holds this, so GUP never waits. Upstream waits for
++// Notepad++'s own instance mutex, which stalled every check by 3 s whenever
++// Notepad++ happened to be open. breeze-core runs as a service and needs no
++// waiting for: its installer stops and restarts it.
++#define APP_MUTEX L"BreezeCoreUpdater.NoAppToWaitFor"
+ 
+ 
+ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpszCmdLine, int)
+@@ -1403,6 +1414,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpszCmdLine, int)
+ 	// Debug use - stop here so we can attach this process for debugging
+ 	//::MessageBox(NULL, L"And do something dirty to me ;)", L"Attach me!", MB_OK);
+ 
++	// Breeze Core: read gup.xml, nativeLang.xml and gupOptions.xml from beside
++	// this executable, wherever it was started from. Upstream reads them from
++	// the working directory, and a scheduled task starts in System32 -- where it
++	// would find none of them and fall back to Notepad++'s built-in strings.
++	{
++		wchar_t self[MAX_PATH]{};
++		if (::GetModuleFileNameW(NULL, self, MAX_PATH) && ::PathRemoveFileSpecW(self))
++			::SetCurrentDirectoryW(self);
++	}
++
+ 	bool isSilentMode = false;
+ 	FILE *pFile = NULL;
+ 	
+@@ -1917,7 +1938,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpszCmdLine, int)
+ 		wstring versionCurrent = nativeLang.getMessageString("MSGID_VERSIONCURRENT");
+ 		if (versionCurrent.empty())
+ 			versionCurrent = MSGID_VERSIONCURRENT;
+-		versionCurrent += L" " + productVersionToFileVersion(version);
++		// Breeze Core: the version as it is. productVersionToFileVersion assumes
++		// Notepad++'s single-digit scheme, and `version` is empty unless -v was
++		// passed; gup.xml carries it instead.
++		versionCurrent += L" " + (version.empty() ? gupParams.getCurrentVersion() : version);
+ 
+ 		wstring versionNew = nativeLang.getMessageString("MSGID_VERSIONNEW");
+ 		if (versionNew.empty())

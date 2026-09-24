@@ -1,0 +1,32 @@
+Breeze Core's updater
+=====================
+
+GUP.exe in this folder is WinGUp @GUPVER@, modified for Breeze Core. WinGUp
+is Notepad++'s updater (https://github.com/notepad-plus-plus/wingup); the
+modification removes the Notepad++ branding and behaviour. It is licensed
+under the GNU LGPL, version 3 (LGPL-3.0.txt, which is written as additional
+permissions on GPL-3.0.txt) - not under Breeze Core's AGPL.
+
+Its exact source, with the modification applied:
+    https://aspic.salataputarica.hr.eu.org/windows/updater/wingup-@GUPVER@-source.tar.gz
+The modification on its own, and how it is built:
+    https://github.com/monikapurpl3/breeze-core-native/tree/main/packaging/windows/wingup
+
+You may build it yourself from that source and put your build here in place
+of GUP.exe. The libraries compiled into it and their notices are in
+THIRD-PARTY-NOTICES.txt.
+
+What it does: a few minutes after an administrator signs in (if that was
+chosen during setup), and whenever "Check for updates" is run from the Start
+menu, it asks
+
+    https://aspic.salataputarica.hr.eu.org/windows/update/@VERSION@.xml
+
+whether there is a newer Breeze Core. If there is, it asks before downloading
+or installing anything, and it refuses any download that does not come from
+https://aspic.salataputarica.hr.eu.org/windows/. The sign-in check says
+nothing when there is no update.
+
+gup.xml records the installed version and is rewritten by every install. To
+stop the check at sign-in, run setup again and choose to change the settings,
+or disable "Breeze Core\Check for updates" in Task Scheduler.

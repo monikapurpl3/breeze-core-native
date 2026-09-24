@@ -46,16 +46,39 @@ if ($reported -ne "breeze-core $version") {
 }
 Write-Host "binary : $exe ($([math]::Round((Get-Item $exe).Length / 1KB)) KB, reports '$reported')"
 
-# --- NSSM is fetched, not committed -------------------------------------
-$nssm = Join-Path $here "vendor\nssm.exe"
-if (-not (Test-Path $nssm)) {
-    throw "vendor\nssm.exe missing - run .\packaging\windows\fetch-vendor.ps1 first"
+# --- The updater: pinned, not packed ------------------------------------
+# NSSM and GUP are both downloaded by the installer, not carried in it (see
+# the .nsi's header). NSSM's pins live in install-service.ps1; GUP's is the
+# committed wingup\SHA256SUMS that build-gup.ps1 wrote, and that build-repo.sh
+# holds the published copy to.
+$sums = Get-Content (Join-Path $here "wingup\SHA256SUMS")
+$gupLine = $sums | Where-Object { $_ -match '^([0-9a-f]{64})  (GUP-(.+)\.exe)$' } | Select-Object -First 1
+if (-not $gupLine) { throw "no GUP-*.exe line in wingup\SHA256SUMS - run wingup\build-gup.ps1" }
+$gupSha = $Matches[1]; $gupName = $Matches[2]; $gupVer = $Matches[3]
+$built = Join-Path $repo "packaging\out\gup\$gupName"
+if (Test-Path $built) {
+    if ((Get-FileHash $built -Algorithm SHA256).Hash.ToLower() -ne $gupSha) {
+        throw "$built does not match wingup\SHA256SUMS - the pin and the build have drifted apart"
+    }
+}
+Write-Host "updater: $gupName (sha256 $gupSha)"
+
+# The two files that carry this version into the updater's folder.
+$stage = Join-Path $repo "packaging\out\windows-stage"
+New-Item -ItemType Directory -Force -Path $stage | Out-Null
+foreach ($t in @(@('gup.xml.in', 'gup.xml'), @('README.txt.in', 'README.txt'))) {
+    $text = [IO.File]::ReadAllText((Join-Path $here "wingup\$($t[0])"))
+    $text = $text.Replace('@VERSION@', $version).Replace('@GUPVER@', $gupVer)
+    # CRLF: these are read by people in Notepad and by GUP, both on Windows.
+    $text = ($text -replace "`r?`n", "`r`n")
+    [IO.File]::WriteAllText((Join-Path $stage $t[1]), $text)
 }
 
 # Decimal megabytes with a decimal point whatever the machine's locale: a
 # Croatian Windows would otherwise write 2,3.
 $exeMb = ([math]::Round((Get-Item $exe).Length / 1e6, 1)).ToString([Globalization.CultureInfo]::InvariantCulture)
-& $Makensis "/DVERSION=$version" "/DEXE_MB=$exeMb" (Join-Path $here "breeze-core-setup.nsi")
+& $Makensis "/DVERSION=$version" "/DEXE_MB=$exeMb" "/DGUP_NAME=$gupName" "/DGUP_SHA256=$gupSha" `
+    "/DSTAGE=$stage" (Join-Path $here "breeze-core-setup.nsi")
 if ($LASTEXITCODE -ne 0) { throw "makensis failed ($LASTEXITCODE)" }
 
 $out = Join-Path $here "Breeze-Core-Setup.exe"

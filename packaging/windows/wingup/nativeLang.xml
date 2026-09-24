@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    SPDX-License-Identifier: LGPL-3.0-or-later
+
+    Breeze Core's wording for WinGup's dialogs. Derived from WinGup's own
+    english.xml (Copyright 2021 Don HO, LGPL-3.0-or-later), and licensed the
+    same way -- not under Breeze Core's AGPL. See README.md in this directory.
+
+    Installed beside GUP.exe; the patched GUP reads it from there whatever
+    directory it was started in.
+-->
+<GUP_NativeLangue name="English" version="5.1.3">
+	<PopupMessages>
+		<MSGID_UPDATETITLE content="Breeze Core update available" />
+		<MSGID_UPDATEAVAILABLE content="A new version of Breeze Core is available. Download and install it now?&#xD;&#xD;The server is stopped for the upgrade and started again afterwards; its settings and paired units are kept." />
+		<MSGID_VERSIONCURRENT content="Installed version :" />
+		<MSGID_VERSIONNEW content="New version       :" />
+		<MSGID_UPDATEYES content="Yes" />
+		<MSGID_UPDATEYESSILENT content="Yes, quietly" />
+		<MSGID_UPDATENo content="Not now" />
+		<MSGID_UPDATENEVER content="Never" />
+
+		<MSGID_DOWNLOADPAGE content="download page" />
+		<MSGID_MOREINFO content="how updates work" />
+		<!-- $MSGID_DOWNLOADPAGE$ and $MSGID_MOREINFO$ are placeholders -->
+		<MSGID_GOTODOWNLOADPAGETEXT content="Breeze Core is up to date.&#xD;&#xD;See $MSGID_MOREINFO$, or the $MSGID_DOWNLOADPAGE$ for every other platform." />
+
+		<MSGID_DOWNLOADSTOPPED content="The download was stopped, so nothing was updated." />
+		<MSGID_CLOSEAPP content=" is running.&#xD;The updater will close it to install the update.&#xD;Continue?" />
+		<MSGID_ABORTORNOT content="Stop downloading the update?" />
+		<MSGID_UNZIPFAILED content="Could not unpack the download." />
+		<MSGID_NODOWNLOADFOLDER content="There is nowhere to download the update to: none of %TEMP%, %TMP% or %APPDATA% is set." />
+	</PopupMessages>
+</GUP_NativeLangue>

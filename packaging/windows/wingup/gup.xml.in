@@ -1,0 +1,24 @@
+<?xml version="1.0" ?>
+<!--
+    WinGup's configuration for Breeze Core @VERSION@. Written by the installer;
+    replaced by the next one, which is what moves InfoUrl to the new version.
+
+    aspic is a static host, so there is no server-side version comparison:
+    each released version has its own feed file, and the file for an old
+    version is rewritten on every release to point at the new installer. GUP
+    appends ?version=... to the URL, which a static host simply ignores.
+-->
+<GUPInput>
+	<Version>@VERSION@</Version>
+	<InfoUrl>https://aspic.salataputarica.hr.eu.org/windows/update/@VERSION@.xml</InfoUrl>
+	<SoftwareName>Breeze Core</SoftwareName>
+	<!-- Nothing to close: breeze-core runs as a service, and its installer
+	     stops and restarts it itself. -->
+	<ClassName2Close></ClassName2Close>
+	<MessageBoxTitle isModal="no">Breeze Core</MessageBoxTitle>
+	<!-- Quiet unless there is an update: the sign-in check runs this as is.
+	     The Start-menu shortcut passes -verbose, which also reports
+	     "up to date". (Upstream's own comments call it "-isVerbose"; the
+	     switch it actually matches is "-verbose".) -->
+	<SilentMode>yes</SilentMode>
+</GUPInput>

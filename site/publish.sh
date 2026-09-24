@@ -200,7 +200,7 @@ paths="/ /aspic.css /favicon.svg /breeze-core/"
 # is a file git needs (info/refs) rather than one a browser would ever ask for.
 [ -n "$TREE" ] && paths="$paths /aspic.asc /deb/dists/stable/InRelease /rpm/aspic.repo
   /alpine/x86_64/APKINDEX.tar.gz /xbps/x86_64-repodata /aspic-xbps.fingerprint
-  /portage/breeze.git/info/refs"
+  /portage/breeze.git/info/refs /windows/updater/SHA256SUMS /windows/vendor/nssm-2.24.zip"
 for u in $paths; do
   printf '  %-34s ' "$u"
   curl -fsS --max-time 20 -o /dev/null -w '%{http_code}\n' "$URL$u" \

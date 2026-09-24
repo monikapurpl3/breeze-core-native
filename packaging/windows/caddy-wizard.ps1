@@ -57,10 +57,18 @@ function Resolve-Nssm {
     if ($cands) { return $cands[0] }
     $cmd = Get-Command nssm.exe -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
-    Die "nssm.exe not found. Pass -Nssm <path> or run fetch-vendor.ps1."
+    Die "nssm.exe not found. Pass -Nssm <path>, or fetch it: install-service.ps1 -Action FetchNssm"
 }
 
 if (-not $DryRun) { Assert-Admin }
+
+# The server's own port, when not told otherwise: the installer's advanced
+# setup can put it on any port, and a proxy pointed at 8420 regardless would
+# answer every request with a 502.
+if (-not $PSBoundParameters.ContainsKey('Upstream')) {
+    $svcArgs = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\BreezeCore\Parameters" -ErrorAction SilentlyContinue).AppParameters
+    if ($svcArgs -match '--port\s+(\d+)') { $Upstream = "127.0.0.1:$($Matches[1])" }
+}
 
 # --- Collect settings ------------------------------------------------------
 if (-not $Domain) { $Domain = Read-Host "Public domain for Breeze Core (e.g. breeze.example.com)" }
