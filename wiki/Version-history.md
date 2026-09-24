@@ -4,6 +4,43 @@ The 4.x line. For 3.x and earlier, see the Python project's own
 [version history](https://github.com/monikapurpl3/breeze-core/wiki/Version-history) —
 everything published for it stays where it is and keeps installing.
 
+## 4.1.1
+
+The air conditioner's refusals are visible. A unit that ignores part of a
+command still answers it, with its state unchanged, so a refused change looked
+like the control springing back — and was easy to take for a bug.
+
+**Flaps were not broken in 4.1.0.** They were reported as broken the week the
+weather turned, and it was the units: when one starts heating it holds its
+louvres still until warm air is coming out, and ignores flap changes until
+then. 4.0.2 and msmart — the library the Python version used — were refused in
+exactly the same way, and after five minutes of heating the same command
+worked. Measured one flap change at a time, straight after switching into each
+mode:
+
+| | Do the flaps change? |
+|---|---|
+| switched off, any mode | no |
+| fan, dry, cool, auto | yes, at once |
+| heating, just switched on or into heating | no — held still |
+| heating, once warm air is coming out | yes |
+
+**What changed**
+
+- **The control reply says what the unit refused**, as `not_applied`: the
+  fields of that request the unit did not take. Compared against what was
+  actually sent, so a tap overtaken by a later one is not counted as refused.
+  Always present, additive, advertised as `control_feedback` — the first feature
+  the Python version never had.
+- **The web panel says so, in words**, under the card and in amber rather than
+  red, since it is not an error: *"The air conditioner didn't accept the flap
+  change — the unit refused it, not Breeze Core"*, followed by why — switched
+  off; warming up to heat, try again shortly; eco only while cooling.
+- **The Breeze app, 2.2.9**, shows the same message.
+- A new [Troubleshooting](Troubleshooting) entry covers all of it.
+- Release tooling: the GitHub release assets are assembled by script, from the
+  signed repository tree.
+
 ## 4.1.0
 
 Responsiveness. Tapping + or − repeatedly no longer queues up behind the unit,

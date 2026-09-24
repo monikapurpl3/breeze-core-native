@@ -67,7 +67,7 @@ rustup component add clippy rustfmt --toolchain stable
 
 ## Testing
 
-502 tests across 18 suites, none of which need hardware or anything beyond
+508 tests across 18 suites, none of which need hardware or anything beyond
 loopback — the protocol layer is pure codec, bytes in and bytes out, and the
 connection layer is tested against a fake unit listening on `127.0.0.1`.
 

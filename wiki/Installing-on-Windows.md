@@ -3,8 +3,8 @@
 A guided installer that registers a hardened Windows service. About 1.2 MB, and
 it needs no internet connection.
 
-**[Breeze-Core-Setup-4.1.0.exe](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.1.0.exe)**
-· [sha256](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.1.0.exe.sha256)
+**[Breeze-Core-Setup-4.1.1.exe](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.1.1.exe)**
+· [sha256](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.1.1.exe.sha256)
 
 x86-64 only.
 
@@ -30,7 +30,7 @@ It is unsigned, so SmartScreen will object. The published SHA-256 is what you
 have to go on; check it before running:
 
 ```powershell
-Get-FileHash .\Breeze-Core-Setup-4.1.0.exe -Algorithm SHA256
+Get-FileHash .\Breeze-Core-Setup-4.1.1.exe -Algorithm SHA256
 ```
 
 ## After installing

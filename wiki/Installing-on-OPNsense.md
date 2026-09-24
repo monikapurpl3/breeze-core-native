@@ -20,7 +20,7 @@ page under **Services → Breeze Core**.
 ## Install
 
 ```sh
-pkg add https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.1.0.pkg
+pkg add https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.1.1.pkg
 ```
 
 Then: **Services → Breeze Core**, set the listen address, and enable it.
