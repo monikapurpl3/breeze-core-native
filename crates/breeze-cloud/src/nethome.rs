@@ -221,6 +221,12 @@ fn sign(path: &str, body: &BTreeMap<&str, String>) -> String {
 }
 
 /// `sha256(login_id + sha256(password) + app key)`.
+///
+/// This is Midea's login wire format, not password storage: the result is sent
+/// to their server, which computes the same thing and compares, and nothing
+/// here keeps it. So a slow password hash (argon2, bcrypt), which is what a
+/// scanner will recommend here, is not an option - the server would refuse
+/// every login. The password itself is never stored either; see `Credentials`.
 fn encrypt_password(login_id: &str, password: &str) -> String {
     let first = hex(&Sha256::digest(password.as_bytes()));
     hex(&Sha256::digest(

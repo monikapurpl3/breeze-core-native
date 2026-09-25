@@ -34,7 +34,9 @@ fn main() {
         std::process::exit(2);
     }
 
-    println!("unit {device_id}, region {region}, account {account}");
+    // Not the account: it is somebody's login, and it is already on the command
+    // line they typed. The output gets pasted into issues.
+    println!("unit {device_id}, region {region}");
     println!(
         "udpid little-endian: {}",
         breeze_cloud::udpid(device_id, false)
