@@ -22,4 +22,19 @@
         <type>text</type>
         <help>Default 8420.</help>
     </field>
+    <field>
+        <id>breezecore.general.environment</id>
+        <label>Environment variables</label>
+        <type>textbox</type>
+        <help>
+            Extra settings for the server, one NAME=value per line, for example
+            BREEZE_KEEP_WARM=2h or BREEZE_WORKERS=8. Lines starting with # are
+            ignored. The listen address, the port and the data folder are set
+            above and by the plugin, so AC_CONFIG, AC_CONFIG_DIR and the other
+            store paths, AC_BEHIND_PROXY, BREEZE_HOST and BREEZE_PORT are
+            refused. Every setting is listed on the wiki's Configuration page.
+            Not for secrets: this is saved in the firewall's config.xml, which
+            its backups copy.
+        </help>
+    </field>
 </form>

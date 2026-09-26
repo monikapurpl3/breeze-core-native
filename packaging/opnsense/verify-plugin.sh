@@ -98,6 +98,16 @@ else
   bad "+TARGETS does not render where load_rc_config() reads"
 fi
 
+head_ "secrets stay out of config.xml"
+# The model is config.xml, which OPNsense copies into backups, HA sync and
+# cloud backup. The API key and V3 credentials belong only in config.json.
+model_xml="$FILES/usr/local/opnsense/mvc/app/models/OPNsense/BreezeCore/BreezeCore.xml"
+if grep -v '^\s*<!--' "$model_xml" | grep -qiE '<(api_?key|token|key|secret|password)[ >]'; then
+  bad "the model has a field that looks like a credential - it would be in every config backup"
+else
+  ok "no credential-shaped field in the model"
+fi
+
 head_ "form wiring"
 # getAction() answers {<internalModelName>: whole model} and setAction() applies
 # POST[<internalModelName>] at the model's root, so every form id has to be

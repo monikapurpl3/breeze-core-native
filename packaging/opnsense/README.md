@@ -57,13 +57,52 @@ when OPNsense changes its Python.
 - the package's ABI is `FreeBSD:1[45]:amd64`, it declares no dependencies, and
   its plist has the whole MVC tree in it;
 - the binary runs inside the FreeBSD 14 root (OPNsense 26.1) **and** on the
-  builder's own FreeBSD 15 (26.7).
+  builder's own FreeBSD 15 (26.7);
+- `[status]` is `script_output` with `errors:no`, and the post-install restarts
+  configd;
+- every form id is `<model name>.<section>.<field>`, names a node that exists,
+  and is the id the page script reads;
+- the model has no credential-shaped field, since the model is `config.xml`.
 
-**It does not exercise the GUI, and it says so.** Nothing here renders the Volt
-template, saves a setting through the model, or watches configd drive the rc
-script. That needs OPNsense itself, and there is none here to test on — so the
-GUI page is the least exercised thing this project ships, and the landing page
-carries the same warning rather than implying parity with the other platforms.
+**It does not drive the GUI.** That was done by hand, on **OPNsense 26.7**
+(FreeBSD 15.1, `pkg` 2.3.1, a VM on a host-only network), through Chrome's
+DevTools: install and upgrade in place; the menu entry; loading and saving the
+settings, including a refused environment line; configd rendering
+`rc.conf.d/breeze_core` and `service.env`, and the running server receiving
+that environment; start, restart, stop and the status buttons; adding, editing
+and removing units, with a V3 unit's credentials surviving a rename and never
+appearing in a response; approving a real pairing code and revoking the client.
+The PHP and XML were linted with the firewall's own PHP 8.5. **OPNsense 26.1**
+(FreeBSD 14) has only the checks above: the binary runs on 14.3 and the ABI
+admits it, but its GUI has not been driven.
+
+That session found five bugs 4.1.1 shipped with, all fixed here: 26.7 refused
+the package; configd was never restarted, so every button failed until a
+reboot; the page could not tell running from stopped; Save saved nothing; and
+an upgrade left the service stopped.
+
+## The page
+
+Three tabs under **Services → Breeze Core**:
+
+- **Settings** — enable, listen address, port, and extra environment variables
+  (one `NAME=value` per line, validated by the model; the names the plugin sets
+  itself are refused). These are in the OPNsense model, so in `config.xml`.
+  configd renders them to `rc.conf.d/breeze_core` and
+  `/usr/local/etc/breeze-core/service.env`, which `serve.sh` reads line by line
+  and exports as data — it never sources it.
+- **Units** — Breeze Core's own `config.json`, edited in place by
+  `Api/UnitsController.php`. **Never through the model**: the API key and V3
+  tokens and keys would land in `config.xml`, and so in every config backup, HA
+  sync and cloud backup. **Never to the browser**: the page is told only whether
+  each secret is set, a new one is sent only when typed, and V3 credentials are
+  cleared only when asked. The server keeps `config.json` in memory and writes
+  it itself, so a save stops the service, writes the file (atomically,
+  `breeze:breeze` 640) and starts it again. Writing needs full admin.
+- **Devices** — enrolled clients, approve a pairing code, revoke: through the
+  running server's own admin API with the key from `config.json`, from the
+  firewall itself, as `breeze-core devices`/`approve`/`revoke` do. Pending codes
+  live only in the server's memory, so there is no other way to approve one.
 
 ## Traps
 
@@ -79,8 +118,22 @@ carries the same warning rather than implying parity with the other platforms.
   which records no POSIX execute bit. A non-executable `serve.sh` fails
   invisibly, because `daemon(8)` runs with `-f` and the permission error goes to
   `/dev/null`.
-- **OPNsense caches the MVC/volt tree**, so the menu and the page do not appear
-  until that cache is dropped. The post-install script drops it.
+- **The post-install must do what upstream's does.** opnsense/plugins'
+  `Mk/plugins.mk` appends to every plugin: restart configd (it reads
+  `actions.d` only at startup), run the model's migrations,
+  `rc.configure_plugins` (which also drops the MVC cache) and a template
+  reload. Without the configd restart every button answers "Action not
+  allowed or missing" until a reboot.
+- **`[status]` must be `script_output` with `errors:no`.** `statusAction()`
+  reads its text; `script` returns only "OK", and without `errors:no` a stopped
+  service returns "Execute error".
+- **`$internalModelName` names the whole model.** `getAction()` returns
+  `{name: model}` and `setAction()` applies `POST[name]` at the model's root,
+  so the form ids are `breezecore.general.*`. Named after a section, every save
+  reports success and sets nothing.
+- **API responses are HTML-escaped** by OPNsense's framework
+  (`Response.php`). The page inserts them as text, so it decodes once first, or
+  a unit called `A & B` would be saved back as `A &amp; B`.
 - **`${name}_user` is magic in `rc.subr`** — see `packaging/bsd/README.md`; the
   rc script here uses `breeze_core_runas` for the same reason.
 - **The config path is an argument, not an export.** `daemon -u` resets the

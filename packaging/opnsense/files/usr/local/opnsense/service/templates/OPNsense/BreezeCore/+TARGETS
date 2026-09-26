@@ -1,1 +1,2 @@
 breeze-core.conf:/usr/local/etc/rc.conf.d/breeze_core
+service.env:/usr/local/etc/breeze-core/service.env

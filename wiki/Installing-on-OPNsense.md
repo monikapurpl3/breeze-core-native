@@ -3,19 +3,18 @@
 A GUI plugin, `os-breeze-core`. One package, installed by hand, with a settings
 page under **Services → Breeze Core**.
 
-> ### Read this before installing
+> ### What has been tested
 >
-> **The GUI page has never run on a real firewall.** The plugin is built in a
-> FreeBSD 14 root; its PHP is syntax-checked, its XML parses, the configd
-> actions and the rc script are checked, and the binary is executed in that
-> root. But nothing has rendered the Volt page, saved a setting through the
-> model, or watched configd drive the service — that needs an actual OPNsense
-> box, and there is not one here to test on.
+> The plugin, GUI included, has been installed and driven on **OPNsense 26.7**
+> (FreeBSD 15.1): installing and upgrading, saving settings, starting and
+> stopping the service, editing units and approving and revoking clients. That
+> first real run found five bugs in the 4.1.1 plugin as first published — it
+> would not install on 26.7, and on 26.1 its buttons and its Save did nothing —
+> and the package now on aspic is the fixed one.
 >
-> Treat this as the least exercised thing in the project. The **binary** is the
-> same one every other platform gets and is well tested; it is the eighteen
-> files of GUI plumbing around it that are unproven. If you try it, a report
-> either way is genuinely useful.
+> On **OPNsense 26.1** (FreeBSD 14), only the binary and the package have been
+> checked: the binary runs on FreeBSD 14.3 and the package admits it, but the
+> GUI has not been driven there. A report either way is genuinely useful.
 
 ## Install
 
@@ -54,9 +53,31 @@ which the next release fixes.
 The plain FreeBSD package is not the plugin either way — it has no GUI page —
 and on 26.1 it will not even execute.
 
+## The page
+
+**Services → Breeze Core** has three tabs:
+
+- **Settings** — enable, listen address, port, and extra environment variables
+  for the server, one `NAME=value` per line (see
+  [Configuration](Configuration) for what they do). The address, the port and
+  the data folder are set by the page and the plugin, so `BREEZE_HOST`,
+  `BREEZE_PORT`, `AC_CONFIG` and the other store paths are refused there.
+- **Units** — the air conditioners in Breeze Core's own `config.json`: name,
+  address, port, id and, for V3 units, the token and key. Saving restarts the
+  server. The API key and the V3 credentials are **never sent to the page** — it
+  shows only whether each is set, and a new one is sent only when you type it —
+  and `config.json` is **not** copied into the firewall's configuration or its
+  backups.
+- **Devices** — the phones and browsers enrolled with the server: approve a
+  pairing code, see when each was last used, revoke one.
+
+Settings are ordinary OPNsense settings and are in `config.xml` and its
+backups. **Nothing secret goes there**, which is why the environment box says
+not to put secrets in it.
+
 ## What it puts on the firewall
 
-Eighteen files. The interesting ones:
+Nineteen files. The interesting ones:
 
 | Path | What |
 |---|---|
@@ -65,6 +86,7 @@ Eighteen files. The interesting ones:
 | `/usr/local/lib/breeze-core/serve.sh` | the wrapper configd starts |
 | `…/mvc/app/models/OPNsense/BreezeCore/` | the settings model and its ACL |
 | `…/mvc/app/views/OPNsense/BreezeCore/index.volt` | the page |
+| `…/mvc/app/controllers/OPNsense/BreezeCore/Api/` | its API: settings, service, units (`config.json`), devices |
 | `…/service/conf/actions.d/actions_breezecore.conf` | the configd actions |
 | `/usr/local/etc/breeze-core/` | your configuration and state |
 
@@ -74,8 +96,8 @@ this can be a reasonable thing to install on a router at all.
 
 ## Pairing
 
-The units still have to be found and paired, and the GUI does not do that part.
-From a shell on the firewall:
+Discovering new units, and fetching V3 credentials from the cloud, is not in
+the GUI. From a shell on the firewall:
 
 ```sh
 breeze-core pair
@@ -87,7 +109,8 @@ broadcast and will not cross them; use `breeze-core pair --ip 192.168.1.73` for
 each unit instead.
 
 Then pair a client as usual — see
-[First run and pairing](First-run-and-pairing).
+[First run and pairing](First-run-and-pairing) — and approve its code on the
+**Devices** tab instead of in a shell.
 
 ## Firewall rules
 
@@ -112,8 +135,7 @@ wipe.
 
 ## If the GUI page misbehaves
 
-Given the warning at the top, this is the likely path. The parts are separable,
-which helps:
+The parts are separable, which helps:
 
 ```sh
 # does the binary work at all, independent of the GUI?
@@ -134,6 +156,6 @@ problem is in the plugin's PHP/XML, and everything still works from the shell
 and the REST API in the meantime.
 
 The plugin's own verification script — `packaging/opnsense/verify-plugin.sh` in
-the repository — lists exactly which eighteen checks pass and states plainly
-which do not. It lints the PHP and XML in a `php:8.3-cli` container, because
-neither the FreeBSD host nor the build root has PHP on it.
+the repository — lists exactly which checks pass and states plainly which do
+not. It lints the PHP and XML in a `php:8.3-cli` container, because neither
+the FreeBSD host nor the build root has PHP on it.

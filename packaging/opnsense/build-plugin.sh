@@ -124,8 +124,11 @@ desc: <<EOD
 Breeze Core runs on this firewall and controls Midea air conditioners over the
 LAN: a REST API plus a web panel, with no cloud dependency after pairing.
 
-Adds Services > Breeze Core to the GUI for enable, bind address, port and
-service control. One static executable with the panel compiled into it - no
+Adds Services > Breeze Core to the GUI: enable, bind address, port, extra
+environment and service control; the paired units and the API key, edited in
+place in Breeze Core's own config.json with the secrets never sent to the
+browser; and enrolled clients, with approving a pairing code and revoking.
+One static executable with the panel compiled into it - no
 interpreter and no dependencies, so nothing is ever compiled on the firewall
 and nothing breaks when OPNsense changes its Python.
 

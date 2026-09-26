@@ -303,13 +303,11 @@ sudo emerge -av app-misc/breeze-core-bin</pre>
       backward. No dependencies, where the
       Python plugin vendored an entire interpreter, so nothing is ever compiled
       on the firewall and nothing breaks when OPNsense changes its Python.</p>
-    <div class="note warn"><b>The GUI page has never run on a real firewall.</b>
-      The plugin is built in a FreeBSD&nbsp;14 root, its PHP is syntax-checked,
-      its XML parses, the configd actions and the rc script are checked, and the
-      binary is run in that root — but rendering the page, saving a setting
-      through the model and watching configd drive the service needs OPNsense
-      itself, and there is none here to test on. Treat this section as the least
-      exercised thing on this page.</div>
+    <div class="note warn"><b>Tested on OPNsense 26.7; on 26.1, only the package.</b>
+      The GUI page — settings, the service buttons, the paired units and the
+      enrolled clients — has been installed and driven on OPNsense&nbsp;26.7
+      (FreeBSD&nbsp;15.1). On 26.1 (FreeBSD&nbsp;14) the binary runs and the
+      package installs, but the page itself has not been driven there.</div>
   </section>
 
   <section id="host" class="s-host">

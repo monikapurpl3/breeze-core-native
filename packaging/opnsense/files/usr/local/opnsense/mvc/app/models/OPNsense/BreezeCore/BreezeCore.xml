@@ -21,6 +21,12 @@
                 <MaximumValue>65535</MaximumValue>
                 <ValidationMessage>A port between 1 and 65535.</ValidationMessage>
             </port>
+            <!-- Extra NAME=value lines for the server's environment, checked by
+                 BreezeCore::performValidation and rendered to service.env.
+                 Not secrets: this is config.xml, which OPNsense backs up. -->
+            <environment type="TextField">
+                <Required>N</Required>
+            </environment>
         </general>
     </items>
 </model>
