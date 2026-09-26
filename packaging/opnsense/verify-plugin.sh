@@ -73,6 +73,22 @@ acts="$FILES/usr/local/opnsense/service/conf/actions.d/actions_breezecore.conf"
 for a in start stop restart reload status configure; do
   if grep -q "^\[$a\]" "$acts"; then ok "action [$a]"; else bad "missing action [$a]"; fi
 done
+# statusAction() reads the TEXT of [status] ("is running" / "not running"), so
+# it has to be script_output, and errors:no, or a stopped service comes back as
+# "Execute error". Both were wrong in 4.1.1; the page showed "unknown".
+status_block=$(awk '/^\[status\]/{s=1;next} /^\[/{s=0} s' "$acts")
+if printf '%s\n' "$status_block" | grep -q '^type:script_output$' &&
+   printf '%s\n' "$status_block" | grep -q '^errors:no$'; then
+  ok "[status] passes its text to the GUI (script_output, errors:no)"
+else
+  bad "[status] must be type:script_output with errors:no, or the GUI cannot tell running from stopped"
+fi
+# configd reads actions.d only at startup, so the package must restart it.
+if grep -q 'rc.d/configd restart' packaging/opnsense/build-plugin.sh; then
+  ok "post-install restarts configd, so the actions work without a reboot"
+else
+  bad "post-install does not restart configd - every button fails until a reboot"
+fi
 # The template's target path is the one load_rc_config() will source, and
 # nothing else works if it is 'tidier'.
 if grep -q '^breeze-core.conf:/usr/local/etc/rc.conf.d/breeze_core$' \

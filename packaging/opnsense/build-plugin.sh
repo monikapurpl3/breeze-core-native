@@ -149,9 +149,17 @@ install -d -o breeze -g breeze -m 750 /usr/local/etc/breeze-core
 # Where configd renders breeze_core - and the only place besides /etc that
 # load_rc_config() will source it from.
 install -d -m 755 /usr/local/etc/rc.conf.d
-# OPNsense caches the MVC/volt tree, so a new plugin's menu and page do not
-# appear until that cache is dropped.
-rm -rf /tmp/opnsense_cache_* /var/cache/opnsense-mvc 2>/dev/null || true
+# What opnsense/plugins' Mk/plugins.mk appends to every plugin's +POST_INSTALL,
+# in its order (Templates/actions.d, models, configure, templates). configd
+# reads actions.d only when it starts: without the restart, every Services >
+# Breeze Core button answers "Action not allowed or missing" until the
+# firewall reboots - which 4.1.1 did, found on a real OPNsense 26.7. The
+# configure step is also what drops the MVC/volt cache, so the new menu and
+# page appear at once.
+if [ -f /usr/local/etc/rc.d/configd ]; then /usr/local/etc/rc.d/configd restart; fi
+if [ -f /usr/local/opnsense/mvc/script/run_migrations.php ]; then /usr/local/opnsense/mvc/script/run_migrations.php OPNsense/BreezeCore; fi
+if [ -f /usr/local/etc/rc.configure_plugins ]; then echo "Reloading plugin configuration"; /usr/local/etc/rc.configure_plugins POST_INSTALL; fi
+if [ -f /usr/local/sbin/configctl ]; then echo -n "Reloading template OPNsense/BreezeCore: "; /usr/local/sbin/configctl template reload OPNsense/BreezeCore; fi
 echo "===> Breeze Core installed."
 echo "     1) Services > Breeze Core: set the listen address, then enable."
 echo "     2) breeze-core pair      - discover and pair the air conditioners."
@@ -159,6 +167,8 @@ echo "     3) breeze-core approve   - admit a phone or browser (LAN only)."
 EOS
   post-deinstall: <<EOS
 /usr/local/etc/rc.d/breeze_core onestop >/dev/null 2>&1 || true
+# Upstream's configure step again, so the menu entry goes with the plugin.
+if [ -f /usr/local/etc/rc.configure_plugins ]; then echo "Reloading plugin configuration"; /usr/local/etc/rc.configure_plugins POST_DEINSTALL; fi
 echo "===> config kept at /usr/local/etc/breeze-core (remove by hand if unwanted)"
 EOS
 }
