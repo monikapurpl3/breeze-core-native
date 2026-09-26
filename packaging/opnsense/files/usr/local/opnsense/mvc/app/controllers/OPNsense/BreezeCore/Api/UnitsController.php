@@ -15,9 +15,11 @@ use OPNsense\Core\Backend;
  * lands in config.xml - and so in every config backup, HA sync and cloud
  * backup of this firewall.
  *
- * And never back to the browser: get says whether each secret is set, never
+ * And not back to the browser: get says whether each secret is set, never
  * what it is. set takes a new one only when one is typed, keeps the old one
- * otherwise, and clears V3 credentials only when asked to.
+ * otherwise, and clears V3 credentials only when asked to. The one exception
+ * is the API key, which apikeyAction returns on an explicit click, because
+ * pairing a client needs it; V3 credentials never leave the firewall.
  *
  * The server keeps config.json in memory and writes it itself (its own panel
  * renames units), so a save here stops the service, writes the file, and
@@ -63,6 +65,27 @@ class UnitsController extends ApiControllerBase
             'api_key_set' => !empty($doc['api_key']),
             'units' => $units,
         ];
+    }
+
+    /**
+     * The API key itself, for the page's "Show API key" button - the one
+     * secret the page can ask for, because a new phone or browser cannot be
+     * paired without it, and without this the only way to read it would be a
+     * shell. Only on an explicit click, only by POST (so nothing prefetches or
+     * caches it), and only for full admins. V3 tokens and keys are never
+     * returned: nothing on the page needs them back.
+     */
+    public function apikeyAction()
+    {
+        if (!$this->request->isPost()) {
+            return ['result' => 'failed'];
+        }
+        $this->throwNotFullAdmin();
+        $doc = self::readConfig();
+        if (empty($doc['api_key'])) {
+            return ['result' => 'failed', 'message' => gettext('config.json has no API key yet.')];
+        }
+        return ['result' => 'ok', 'api_key' => (string)$doc['api_key']];
     }
 
     public function setAction()

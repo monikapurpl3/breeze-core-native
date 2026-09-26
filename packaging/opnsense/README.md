@@ -94,9 +94,11 @@ Three tabs under **Services → Breeze Core**:
 - **Units** — Breeze Core's own `config.json`, edited in place by
   `Api/UnitsController.php`. **Never through the model**: the API key and V3
   tokens and keys would land in `config.xml`, and so in every config backup, HA
-  sync and cloud backup. **Never to the browser**: the page is told only whether
+  sync and cloud backup. **Not to the browser**: the page is told only whether
   each secret is set, a new one is sent only when typed, and V3 credentials are
-  cleared only when asked. The server keeps `config.json` in memory and writes
+  cleared only when asked. The one exception is the API key, fetched only when
+  **Show API key** is pressed (POST, full admin), because pairing a new client
+  needs it; V3 tokens and keys never leave the firewall. The server keeps `config.json` in memory and writes
   it itself, so a save stops the service, writes the file (atomically,
   `breeze:breeze` 640) and starts it again. Writing needs full admin.
 - **Devices** — enrolled clients, approve a pairing code, revoke: through the

@@ -64,10 +64,11 @@ and on 26.1 it will not even execute.
   `BREEZE_PORT`, `AC_CONFIG` and the other store paths are refused there.
 - **Units** — the air conditioners in Breeze Core's own `config.json`: name,
   address, port, id and, for V3 units, the token and key. Saving restarts the
-  server. The API key and the V3 credentials are **never sent to the page** — it
-  shows only whether each is set, and a new one is sent only when you type it —
-  and `config.json` is **not** copied into the firewall's configuration or its
-  backups.
+  server. The V3 credentials are **never sent to the page** — it shows only
+  whether they are set, and new ones are sent only when you type them — and the
+  API key only when you press **Show API key**, since pairing a new phone or
+  browser needs it. `config.json` is **not** copied into the firewall's
+  configuration or its backups.
 - **Devices** — the phones and browsers enrolled with the server: approve a
   pairing code, see when each was last used, revoke one.
 

@@ -120,6 +120,8 @@
                 }
                 $.each(data.units, function(i, u) { body.append(unitRow(u)); });
                 $("#apiKeyState").text(data.api_key_set ? "{{ lang._('set') }}" : "{{ lang._('not set - the server will not start without one') }}");
+                hideKey();
+                $("#showKey").toggle(!!data.api_key_set);
                 if (!data.exists) {
                     say("#unitsMsg", "warning", ["{{ lang._('There is no config.json yet. Run breeze-core pair from a shell to discover and pair units, or add them here.') }}"]);
                 }
@@ -128,6 +130,29 @@
         // A real form, so the credential fields sit where browsers expect
         // them - but never submitted: Enter in a field must not reload the page.
         $("#unitsForm").on("submit", function(e) { e.preventDefault(); });
+
+        // The API key, only when asked for, and gone again on Hide, on a save
+        // and on leaving the tab: it is the one secret this page will fetch
+        // (pairing a client needs it), and it should not linger on screen.
+        function hideKey() {
+            $("#apiKeyShown").val("").hide();
+            $("#showKey").text("{{ lang._('Show API key') }}").data("shown", false);
+        }
+        $("#showKey").click(function() {
+            if ($(this).data("shown")) {
+                hideKey();
+                return;
+            }
+            ajaxCall("/api/breezecore/units/apikey", {}, function(data, status) {
+                if (data && data.result === "ok") {
+                    $("#apiKeyShown").val(plain(data.api_key)).show().select();
+                    $("#showKey").text("{{ lang._('Hide') }}").data("shown", true);
+                } else {
+                    say("#unitsMsg", "danger", [(data && data.message) || "{{ lang._('Could not read the API key.') }}"]);
+                }
+            });
+        });
+        $('a[href="#units"]').on("hide.bs.tab", hideKey);
         $("#addUnit").click(function() { $("#unitRows").append(unitRow(null)); });
         $("#saveUnits").click(function() {
             var units = [];
@@ -253,7 +278,7 @@ breeze-core approve &lt;CODE&gt;</pre>
 
     <div id="units" class="tab-pane fade in" style="padding: 1.5em;">
         <p>
-            {{ lang._("The units in Breeze Core's own config.json, edited in place on this firewall. It is not copied into the firewall's configuration or its backups, and the API key and V3 credentials are never sent to this page: it only shows whether each is set. Saving restarts Breeze Core if it is running.") }}
+            {{ lang._("The units in Breeze Core's own config.json, edited in place on this firewall. It is not copied into the firewall's configuration or its backups, and V3 credentials are never sent to this page: it only shows whether each is set. The API key is sent only when you press Show API key. Saving restarts Breeze Core if it is running.") }}
         </p>
         <div class="alert" id="unitsMsg" style="display: none;"></div>
         <form id="unitsForm" autocomplete="off">
@@ -262,6 +287,10 @@ breeze-core approve &lt;CODE&gt;</pre>
                 <td style="width: 12em;"><b>{{ lang._('API key') }}</b></td>
                 <td>
                     <span id="apiKeyState">...</span>
+                    <button class="btn btn-default btn-xs" id="showKey" type="button" style="display: none; margin-left: 1em;">{{ lang._('Show API key') }}</button>
+                    <input type="text" class="form-control" id="apiKeyShown" readonly="readonly" autocomplete="off"
+                           style="display: none; max-width: 30em; font-family: monospace;"/>
+                    <div class="text-muted">{{ lang._('The app and the panel ask for this key when they pair. Having it lets a client ask to pair; only an approval on the Devices tab lets it in.') }}</div>
                     <input type="password" class="form-control" id="apiKeyNew" autocomplete="new-password"
                            placeholder="{{ lang._('a new key, or leave empty to keep it') }}" style="max-width: 30em;"/>
                     <div class="text-muted">{{ lang._('Replacing it means every app and browser needs the new key.') }}</div>
