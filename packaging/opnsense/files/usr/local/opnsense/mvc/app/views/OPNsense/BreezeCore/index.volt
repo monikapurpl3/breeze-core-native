@@ -25,19 +25,19 @@
                 $("#saveAct_progress").addClass("fa fa-spinner fa-pulse");
                 ajaxCall(url="/api/breezecore/service/reconfigure", sendData={}, callback=function(data,status) {
                     $("#saveAct_progress").removeClass("fa fa-spinner fa-pulse");
-                    // No markup needed for this: layouts/default.volt already carries
-        // <li id="service_status_container"> beside the page title, and this
-        // helper fills it with the start/restart/stop buttons. It calls
-        // /api/breezecore/service/{status,start,restart,stop}.
-        updateServiceControlUI('breezecore');
+                    // The buttons beside the title again, now that it has
+                    // started or stopped.
+                    updateServiceControlUI('breezecore');
                     updatePanelLink();
                 });
             });
         });
 
+        // Field ids are the form's ids with the dots escaped: model name, then
+        // section, then field (see SettingsController).
         function updatePanelLink() {
-            var host = $("#general\\.listen").val();
-            var port = $("#general\\.port").val();
+            var host = $("#breezecore\\.general\\.listen").val();
+            var port = $("#breezecore\\.general\\.port").val();
             // 0.0.0.0 is a bind address, not a destination -- send the admin to
             // the host they are already talking to.
             if (host === "0.0.0.0" || host === "::" || host === "" || host === undefined) {

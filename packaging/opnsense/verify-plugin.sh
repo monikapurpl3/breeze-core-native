@@ -98,6 +98,34 @@ else
   bad "+TARGETS does not render where load_rc_config() reads"
 fi
 
+head_ "form wiring"
+# getAction() answers {<internalModelName>: whole model} and setAction() applies
+# POST[<internalModelName>] at the model's root, so every form id has to be
+# <internalModelName>.<section>.<field>. In 4.1.1 they did not line up, and
+# every save reported success while setting nothing.
+mvc="$FILES/usr/local/opnsense/mvc/app"
+mname=$(sed -n "s/.*internalModelName = '\([^']*\)'.*/\1/p" "$mvc/controllers/OPNsense/BreezeCore/Api/SettingsController.php")
+ids=$(sed -n 's#.*<id>\([^<]*\)</id>.*#\1#p' "$mvc/controllers/OPNsense/BreezeCore/forms/general.xml")
+wrong=""
+for id in $ids; do
+  sect=$(printf '%s' "$id" | cut -d. -f2); field=$(printf '%s' "$id" | cut -d. -f3)
+  case "$id" in "$mname".*.*) ;; *) wrong="$wrong $id"; continue ;; esac
+  # ...and <section>/<field> must exist in the model.
+  awk -v s="$sect" -v f="$field" '$0 ~ "<"s">"{ins=1} ins && $0 ~ "<"f" "{found=1} $0 ~ "</"s">"{ins=0} END{exit !found}' \
+    "$mvc/models/OPNsense/BreezeCore/BreezeCore.xml" || wrong="$wrong $id"
+done
+if [ -n "$mname" ] && [ -n "$ids" ] && [ -z "$wrong" ]; then
+  ok "form ids ($(echo $ids | tr ' ' ',')) match model '$mname' and its nodes"
+else
+  bad "form ids that the model cannot take:${wrong:- (none found)} (model name '${mname:-?}')"
+fi
+# The page's own JavaScript reads the fields by those ids too.
+if grep -q "#${mname}\\\\\\\\.general\\\\\\\\.listen" "$mvc/views/OPNsense/BreezeCore/index.volt"; then
+  ok "the page script reads the fields by the same ids"
+else
+  bad "index.volt does not read #${mname}.general.* - the panel link would be wrong"
+fi
+
 head_ "the package"
 if [ -f "$PKG" ]; then
   ok "$(basename "$PKG") exists ($(( $(wc -c < "$PKG") / 1024 )) KB)"

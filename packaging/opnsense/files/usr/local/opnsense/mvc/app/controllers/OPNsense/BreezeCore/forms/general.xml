@@ -1,12 +1,12 @@
 <form>
     <field>
-        <id>general.enabled</id>
+        <id>breezecore.general.enabled</id>
         <label>Enable</label>
         <type>checkbox</type>
         <help>Run Breeze Core on this firewall.</help>
     </field>
     <field>
-        <id>general.listen</id>
+        <id>breezecore.general.listen</id>
         <label>Listen address</label>
         <type>text</type>
         <help>
@@ -17,7 +17,7 @@
         </help>
     </field>
     <field>
-        <id>general.port</id>
+        <id>breezecore.general.port</id>
         <label>Port</label>
         <type>text</type>
         <help>Default 8420.</help>

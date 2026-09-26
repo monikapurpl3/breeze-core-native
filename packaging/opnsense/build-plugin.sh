@@ -160,6 +160,11 @@ if [ -f /usr/local/etc/rc.d/configd ]; then /usr/local/etc/rc.d/configd restart;
 if [ -f /usr/local/opnsense/mvc/script/run_migrations.php ]; then /usr/local/opnsense/mvc/script/run_migrations.php OPNsense/BreezeCore; fi
 if [ -f /usr/local/etc/rc.configure_plugins ]; then echo "Reloading plugin configuration"; /usr/local/etc/rc.configure_plugins POST_INSTALL; fi
 if [ -f /usr/local/sbin/configctl ]; then echo -n "Reloading template OPNsense/BreezeCore: "; /usr/local/sbin/configctl template reload OPNsense/BreezeCore; fi
+# Last, and ours rather than upstream's: an upgrade runs the old package's
+# post-deinstall, which stops the service, and nothing started it again - so
+# upgrading the plugin left Breeze Core down until someone pressed Start. The
+# configure action is what Save uses: it starts the service only if enabled.
+if [ -f /usr/local/sbin/configctl ]; then echo -n "Starting Breeze Core if enabled: "; /usr/local/sbin/configctl breezecore configure; fi
 echo "===> Breeze Core installed."
 echo "     1) Services > Breeze Core: set the listen address, then enable."
 echo "     2) breeze-core pair      - discover and pair the air conditioners."
