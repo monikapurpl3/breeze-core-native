@@ -11,10 +11,11 @@ Cargo.lock.bak
 # backed up out of band. See packaging/repo/README.md.
 /packaging/repo/keys/
 
-# Third-party binaries the Windows installer bundles, and the installer itself.
-# NSSM is public domain but not ours to redistribute from a git tree, and the
-# .exe is a build product -- packaging/windows/fetch-vendor.ps1 gets one and
-# build-installer.ps1 makes the other.
+# Third-party binaries, and the installer itself. The installer no longer
+# carries NSSM (it fetches it during setup), but vendor\nssm.exe is still where
+# install-service.ps1 looks when run straight from the repository - put one
+# there with `install-service.ps1 -Action FetchNssm -Dest vendor\nssm.exe`.
+# The .exe is a build product of build-installer.ps1.
 /packaging/windows/vendor/
 /packaging/windows/Breeze-Core-Setup.exe
 packaging/repo/portage-git/
