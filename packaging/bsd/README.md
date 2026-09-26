@@ -125,7 +125,7 @@ reads that release off the build machine rather than hardcoding it.
 
 ## OPNsense
 
-See `packaging/opnsense/`. It is FreeBSD **14**, not 15, so its binary is built
-in a FreeBSD 14 chroot on the FreeBSD builder — binaries run forward, not
-backward. `verify-plugin.sh` checks everything that can be checked from here and
+See `packaging/opnsense/`. OPNsense is FreeBSD 14 (26.1) or 15 (26.7), so its
+binary is built in a FreeBSD 14 chroot on the FreeBSD builder — binaries run
+forward, not backward — and the package admits both (`FreeBSD:1[45]:amd64`). `verify-plugin.sh` checks everything that can be checked from here and
 says plainly what cannot: the GUI page itself has never run on a real firewall.

@@ -19,11 +19,21 @@ bigger request than asking them to fetch one file, so this ships as one file.
 
 ## Why it is built separately from the FreeBSD package
 
-**OPNsense is FreeBSD 14**, and the ordinary FreeBSD package here is built on 15.
-FreeBSD binaries run forward, not backward, so a 15-built binary on a 14 firewall
-is a gamble with no upside. `build-plugin.sh` therefore compiles inside a
-FreeBSD 14 root on the builder and takes the package's ABI from that chroot, so
-`FreeBSD:14:amd64` is true by construction rather than a string that can drift.
+**OPNsense spans two FreeBSD majors**: 26.1 is FreeBSD 14.3 and 26.7 is
+FreeBSD 15.1. The ordinary FreeBSD package here is built on 15, and FreeBSD
+binaries run forward, not backward, so a 15-built binary on a 26.1 firewall is a
+gamble with no upside. `build-plugin.sh` therefore compiles inside a FreeBSD 14
+root on the builder - the oldest base it must run on - and that one binary
+serves both; it links only `libc`, `libthr`, `libgcc_s` and (on 15) `libsys`.
+
+The package's ABI is the pattern **`FreeBSD:1[45]:amd64`**, not the root's
+`FreeBSD:14:amd64`. `pkg` fnmatches a package's ABI against the host's, so the
+pattern installs on 14 and 15 and refuses 13 (where a 14 binary cannot run) and
+16 (where nobody has run it) with its ordinary "wrong architecture" message.
+4.1.1 was stamped with the root's own ABI, and every OPNsense 26.7 refused it:
+`wrong architecture: FreeBSD:14:amd64 instead of FreeBSD:15:amd64`. Widen the
+pattern only after running the binary on the new major. The build refuses a
+root that is not FreeBSD 14, since the binary has to run on the oldest one.
 
 That chroot is also why the Python line existed at all here: OPNsense ships
 neither rust nor pip nor any of the dependencies, so the Python plugin had to
@@ -44,9 +54,10 @@ when OPNsense changes its Python.
   the last step of saving a setting;
 - `+TARGETS` renders to `/usr/local/etc/rc.conf.d/breeze_core`, the path
   `load_rc_config()` actually sources;
-- the package's ABI is `FreeBSD:14:amd64`, it declares no dependencies, and its
-  plist has the whole MVC tree in it;
-- the binary runs inside the FreeBSD 14 root.
+- the package's ABI is `FreeBSD:1[45]:amd64`, it declares no dependencies, and
+  its plist has the whole MVC tree in it;
+- the binary runs inside the FreeBSD 14 root (OPNsense 26.1) **and** on the
+  builder's own FreeBSD 15 (26.7).
 
 **It does not exercise the GUI, and it says so.** Nothing here renders the Volt
 template, saves a setting through the model, or watches configd drive the rc

@@ -8,8 +8,9 @@
 # renders the form, saves a setting through the model, or watches configd call
 # the rc script. Those need OPNsense itself. The PHP is syntax-checked, the XML
 # is checked for well-formedness, the package is checked for the right ABI and
-# contents, and the binary is checked to run on a FreeBSD 14 userland - which is
-# the set of things that can fail silently and be caught from here.
+# contents, and the binary is checked to run on a FreeBSD 14 userland and on the
+# builder's own 15 - OPNsense 26.1 and 26.7 respectively - which is the set of
+# things that can fail silently and be caught from here.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -97,10 +98,14 @@ remote=$(ssh -o BatchMode=yes "$USER_AT" "
   echo \"DEPS=\$(pkg query -F \"\$P\" '%dn' | tr '\n' ' ')\"
   echo \"FILES=\$(pkg query -F \"\$P\" '%Fp' | wc -l | tr -d ' ')\"
   pkg query -F \"\$P\" '%Fp' | grep -c 'mvc/app' | sed 's/^/MVC=/'
-  # The point of the whole exercise: this binary has to run on FreeBSD 14.
+  # The point of the whole exercise: this one binary has to run on FreeBSD 14
+  # (OPNsense 26.1) and 15 (26.7). The builder itself is 15.
   doas chroot $ROOT /usr/bin/env sh -c 'ls /tmp/stage/usr/local/bin/breeze-core >/dev/null' 2>/dev/null \
     && doas chroot $ROOT /tmp/stage/usr/local/bin/breeze-core --version | head -1 | sed 's/^/RUNS=/' \
     || echo 'RUNS=no'
+  echo \"HOSTREL=\$(freebsd-version -u)\"
+  $ROOT/tmp/stage/usr/local/bin/breeze-core --version 2>/dev/null | head -1 | sed 's/^/RUNS15=/' \
+    || echo 'RUNS15=no'
 " 2>/dev/null || echo "")
 
 abi=$(printf '%s' "$remote" | sed -n 's/^ABI=//p')
@@ -108,14 +113,23 @@ deps=$(printf '%s' "$remote" | sed -n 's/^DEPS=//p' | tr -d ' ')
 nfiles=$(printf '%s' "$remote" | sed -n 's/^FILES=//p')
 nmvc=$(printf '%s' "$remote" | sed -n 's/^MVC=//p')
 runs=$(printf '%s' "$remote" | sed -n 's/^RUNS=//p')
+runs15=$(printf '%s' "$remote" | sed -n 's/^RUNS15=//p')
+hostrel=$(printf '%s' "$remote" | sed -n 's/^HOSTREL=//p')
 
-[ "$abi" = "FreeBSD:14:amd64" ] && ok "built for $abi, not the builder's 15" || bad "ABI is '$abi', expected FreeBSD:14:amd64"
+# A pattern, not the build root's ABI: pkg fnmatches it, so it admits 14 and 15
+# and nothing else. FreeBSD:14:amd64 alone was refused by OPNsense 26.7.
+[ "$abi" = "FreeBSD:1[45]:amd64" ] && ok "ABI $abi: installs on OPNsense 26.1 (14) and 26.7 (15)" || bad "ABI is '$abi', expected FreeBSD:1[45]:amd64"
 [ -z "$deps" ] && ok "no dependencies (the Python plugin needed python311)" || bad "it depends on: $deps"
 [ "${nfiles:-0}" -ge 15 ] && ok "$nfiles files in the package" || bad "only ${nfiles:-0} files - plist problem"
 [ "${nmvc:-0}" -ge 6 ] && ok "$nmvc MVC files (controllers, model, views)" || bad "only ${nmvc:-0} MVC files"
 case "$runs" in
   breeze-core*) ok "the binary runs on a FreeBSD 14 userland: $runs" ;;
   *) bad "the binary did not run in the FreeBSD 14 root" ;;
+esac
+case "$hostrel:$runs15" in
+  15.*:breeze-core*) ok "and on the builder's FreeBSD $hostrel: $runs15" ;;
+  15.*:*) bad "the binary did not run on the builder's FreeBSD $hostrel" ;;
+  *) bad "the builder is FreeBSD '${hostrel:-?}', not 15 - nothing checked the 26.7 half" ;;
 esac
 
 head_ "$pass passed, $fail failed"

@@ -667,7 +667,8 @@ fi
 # A single .pkg installed by hand (`pkg add <url>`), not a repository: an
 # OPNsense box already has pkg pointed at its own mirrors with its own ABI and
 # its own trust, and adding a third-party repository to a firewall is a bigger
-# ask than fetching one file. Built for FreeBSD:14, which is what OPNsense is.
+# ask than fetching one file. Built on FreeBSD 14 and stamped FreeBSD:1[45], so
+# it installs on OPNsense 26.1 (14.3) and 26.7 (15.1).
 echo "=== OPNsense plugin ==="
 if ls packaging/out/opnsense/os-breeze-core-*.pkg >/dev/null 2>&1; then
   mkdir -p "$OUT/opnsense"

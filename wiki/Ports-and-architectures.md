@@ -136,8 +136,9 @@ is not:
   also proves that an untrusted key is *refused*.
 - The three BSDs are built and verified **natively on real machines**, not
   cross-built at all, because Zig bundles no BSD libc.
-- The OPNsense plugin's binary is compiled and run **inside a FreeBSD 14 root**,
-  since OPNsense is 14 and FreeBSD binaries run forward rather than backward.
+- The OPNsense plugin's binary is compiled **inside a FreeBSD 14 root** and
+  run both there and on FreeBSD 15, since OPNsense 26.1 is 14 and 26.7 is 15,
+  and FreeBSD binaries run forward rather than backward.
 - **riscv64, ppc64le and s390x are cross-built and executed nowhere.** That is
   the remaining gap, and it is stated rather than hidden. The mitigation is that
   they come off the same one-step toolchain as amd64, from the same source, with

@@ -5,13 +5,22 @@
 #
 # Output: packaging/out/opnsense/os-breeze-core-<ver>.pkg
 #
-# Why this is a separate build from the ordinary FreeBSD package: OPNsense is
-# **FreeBSD 14**, and the FreeBSD package here is built on 15. FreeBSD binaries
-# run forward, not backward, so a 15-built binary on a 14 firewall is a gamble
-# with no upside. So the binary for this package is compiled in a FreeBSD 14
-# root on the builder - which is also where the Python line vendored its whole
+# Why this is a separate build from the ordinary FreeBSD package: OPNsense
+# spans two FreeBSD majors - 26.1 is FreeBSD 14.3, 26.7 is FreeBSD 15.1 - and
+# the FreeBSD package here is built on 15. FreeBSD binaries run forward, not
+# backward, so the binary for this package is compiled in a FreeBSD 14 root on
+# the builder, the oldest base it has to run on, and that one binary serves
+# both. (That root is also where the Python line vendored its whole
 # interpreter, for the harder reason that OPNsense ships neither rust nor pip
-# nor any of its dependencies. Nothing is ever compiled on the firewall.
+# nor any of its dependencies.) Nothing is ever compiled on the firewall.
+#
+# The package's ABI is therefore the pattern FreeBSD:1[45]:amd64, not the build
+# root's FreeBSD:14:amd64. pkg matches a package's ABI with fnmatch against the
+# host's, so that installs on 14 and 15 and refuses 13 (where a 14 binary
+# cannot run) and a future 16 (where nobody has tried it). Stamped with the
+# root's own ABI, as 4.1.1 was, it was refused by every OPNsense 26.7:
+#   "wrong architecture: FreeBSD:14:amd64 instead of FreeBSD:15:amd64".
+# Widen the pattern only after running the binary on the new major.
 set -euo pipefail
 
 HOST="${1:-192.168.122.131}"
@@ -70,6 +79,13 @@ if ! doas chroot "$ROOT" /bin/sh -c 'command -v cargo >/dev/null 2>&1'; then
 fi
 ABI="$(doas chroot "$ROOT" pkg config ABI)"
 echo "  build root: $ABI, $(doas chroot "$ROOT" cargo --version)"
+# The root has to be the OLDEST base the pattern admits, or the binary would
+# not run on it. A root upgraded to 15 would build something 26.1 cannot run.
+[ "$ABI" = "FreeBSD:14:amd64" ] || {
+    echo "  the build root is $ABI, not FreeBSD:14:amd64 - the package admits 14" >&2
+    exit 1
+}
+PKG_ABI='FreeBSD:1[45]:amd64'
 
 # ------------------------------------------------------------------ 2. build
 doas rm -rf "$ROOT/tmp/src" "$ROOT/tmp/stage" "$ROOT/tmp/pkgout"
@@ -97,8 +113,8 @@ doas chmod 755 "$S/usr/local/bin/breeze-core" \
      "$S/usr/local/opnsense/scripts/OPNsense/BreezeCore/setup.sh"
 
 # -------------------------------------------------------------- 4. manifest
-# ABI comes from the chroot, so it is FreeBSD:14:amd64 by construction rather
-# than a hardcoded string that can drift.
+# The ABI is the 14-and-15 pattern from step 1, not the root's own; see the
+# header for why.
 doas sh -c "cat > '$ROOT/tmp/manifest.ucl'" <<MANIFEST
 name: "os-breeze-core"
 version: "$VER"
@@ -117,9 +133,9 @@ Pair air conditioners with 'breeze-core pair'; admit clients with
 'breeze-core approve'. Approval is LAN-only by design.
 EOD
 maintainer: "monikapurpl3@users.noreply.github.com"
-www: "https://github.com/monikapurpl3/breeze-core"
-abi: "$ABI"
-arch: "$ABI"
+www: "https://github.com/monikapurpl3/breeze-core-native"
+abi: "$PKG_ABI"
+arch: "$PKG_ABI"
 prefix: "/usr/local"
 licenselogic: "single"
 licenses: ["AGPLv3+"]

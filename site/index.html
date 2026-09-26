@@ -297,9 +297,10 @@ sudo emerge -av app-misc/breeze-core-bin</pre>
     <p class="dim">Not a repository, deliberately: your firewall already has
       <code>pkg</code> pointed at its own mirrors with its own ABI and its own
       trust, and adding a third-party repository to a firewall is a much bigger
-      ask than fetching one file. Built against <b>FreeBSD:14</b>, which is what
-      OPNsense is — the ordinary FreeBSD package above is built on 15, and
-      FreeBSD binaries run forward, not backward. No dependencies, where the
+      ask than fetching one file. Built on <b>FreeBSD 14</b> and installs on both
+      OPNsense 26.1 (FreeBSD 14) and 26.7 (FreeBSD 15) — the ordinary FreeBSD
+      package above is built on 15, and FreeBSD binaries run forward, not
+      backward. No dependencies, where the
       Python plugin vendored an entire interpreter, so nothing is ever compiled
       on the firewall and nothing breaks when OPNsense changes its Python.</p>
     <div class="note warn"><b>The GUI page has never run on a real firewall.</b>
