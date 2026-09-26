@@ -201,6 +201,9 @@ paths="/ /aspic.css /favicon.svg /breeze-core/"
 [ -n "$TREE" ] && paths="$paths /aspic.asc /deb/dists/stable/InRelease /rpm/aspic.repo
   /alpine/x86_64/APKINDEX.tar.gz /xbps/x86_64-repodata /aspic-xbps.fingerprint
   /portage/breeze.git/info/refs /windows/updater/SHA256SUMS /windows/vendor/nssm-2.24.zip"
+# And this release's update feed, which no page links to either: without it
+# every installed updater's "Check for updates" reports a 404.
+[ -n "$TREE" ] && paths="$paths /windows/update/$(grep -m1 '^version' "$REPO/crates/breeze-core/Cargo.toml" | cut -d'"' -f2).xml"
 for u in $paths; do
   printf '  %-34s ' "$u"
   curl -fsS --max-time 20 -o /dev/null -w '%{http_code}\n' "$URL$u" \

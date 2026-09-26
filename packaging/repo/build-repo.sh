@@ -599,6 +599,45 @@ cp packaging/out/vendor/nssm-2.24.zip "$OUT/windows/vendor/"
 ( cd "$OUT/windows/vendor" && sha256sum nssm-2.24.zip | sed 's/ \*/  /' > nssm-2.24.zip.sha256 )
 ls -1 "$OUT/windows/updater" "$OUT/windows/vendor" | sed 's/^/  /'
 
+# --- Windows update feeds ---------------------------------------------------
+# GUP does no version comparison: an installed updater asks for
+# /windows/update/<its version>.xml and does what that file says. aspic is
+# static, so there is one file per released version, and every one of them is
+# written again here on every release: the current version's says "no", every
+# older one's points at this release's installer. A version with no file gets
+# a 404, which the sign-in check ignores and "Check for updates" reports.
+#
+# From GUP_FIRST, the first version whose installer could carry the updater;
+# 4.1.1 had test builds that did. Releases come from the tags, plus this
+# version in case it is not tagged yet; prereleases never get a feed, because
+# they are never published here.
+GUP_FIRST=4.1.1
+echo "=== Windows update feeds ==="
+mkdir -p "$OUT/windows/update"
+case "$VER" in
+  *-*)
+    echo "  !! $VER is a prerelease - no feeds written, and prereleases do not belong on aspic"
+    ;;
+  *)
+    SETUP="Breeze-Core-Setup-$VER.exe"
+    # Pointing every older installation at a file that is not there would turn
+    # every update check into a failed download.
+    [ -f "$OUT/windows/$SETUP" ] ||
+      { echo "  !! $SETUP is not being published - the feeds would point at nothing"; exit 1; }
+    for v in $( { git tag -l 'v*' | sed 's/^v//'; echo "$VER"; } | grep -v -- - | sort -u -V ); do
+      # Only GUP_FIRST <= v <= VER.
+      [ "$(printf '%s\n%s\n' "$GUP_FIRST" "$v" | sort -V | head -1)" = "$GUP_FIRST" ] || continue
+      [ "$(printf '%s\n%s\n' "$v" "$VER" | sort -V | tail -1)" = "$VER" ] || continue
+      if [ "$v" = "$VER" ]; then
+        printf '<?xml version="1.0" ?>\n<GUP>\n\t<NeedToBeUpdated>no</NeedToBeUpdated>\n</GUP>\n'
+      else
+        printf '<?xml version="1.0" ?>\n<GUP>\n\t<NeedToBeUpdated>yes</NeedToBeUpdated>\n\t<Version>%s</Version>\n\t<Location>https://aspic.salataputarica.hr.eu.org/windows/%s</Location>\n</GUP>\n' "$VER" "$SETUP"
+      fi > "$OUT/windows/update/$v.xml"
+      echo "  $v.xml -> $([ "$v" = "$VER" ] && echo 'up to date' || echo "$VER")"
+    done
+    ;;
+esac
+
 # --- FreeBSD (pkg) ----------------------------------------------------------
 # Built AND signed on a real FreeBSD machine by packaging/bsd/build-freebsd.sh:
 # `pkg repo` signs locally, so unlike every other repository here this one is
