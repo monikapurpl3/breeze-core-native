@@ -52,6 +52,12 @@ app could. On Windows, a new installer that keeps itself up to date.
   environment tabs. These went out on 26 September as a republished 4.1.1
   plugin; 4.2.0 is the first release that carries them. See
   [Installing on OPNsense](Installing-on-OPNsense).
+- **`migrate.sh` asks aspic which release is current** instead of carrying a
+  version. It carried 4.0.0 until now, so the backup's manifest named the wrong
+  target, the last check warned "expected 4.0.0", and on NetBSD and OpenBSD —
+  which install by filename — it fetched a package aspic no longer had. Its
+  checksums change this once, and are updated in
+  [Upgrading to 4.x](Upgrading-to-4#hashes-of-migratesh).
 - aspic's project page lists every package tree, with its key and downloads.
 
 ## 4.1.1

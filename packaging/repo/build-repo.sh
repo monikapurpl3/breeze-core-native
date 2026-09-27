@@ -226,6 +226,11 @@ mkdir -p "$OUT/breeze-core"
 # project is broken rather than the page being old.
 sed "s/@VER@/$VER/g" site/index.html > "$OUT/index.html"
 sed "s/@VER@/$VER/g" site/breeze-core/index.html > "$OUT/breeze-core/index.html"
+# The current release, one line, for migrate.sh to ask for. That script is
+# published with its checksums, so the version it installs lives here rather
+# than in it: written into it, it said 4.0.0 until 4.2.0.
+printf '%s\n' "$VER" > "$OUT/breeze-core/VERSION"
+chmod 644 "$OUT/breeze-core/VERSION"
 
 # The migration script, with a checksum generated here rather than pasted into a
 # page. It is served from the root because the one-liner that fetches it is the

@@ -40,7 +40,8 @@ set -eu
 
 ASPIC="${ASPIC_URL:-https://aspic.salataputarica.hr.eu.org}"
 BOLERO="${BOLERO_URL:-https://bolero.salataputarica.hr.eu.org}"
-WANT_VERSION="${BREEZE_WANT_VERSION:-4.0.0}"
+# Empty unless set: the current release is asked of aspic, below.
+WANT_VERSION="${BREEZE_WANT_VERSION:-}"
 TS="$(date -u +%Y%m%d-%H%M%S)"
 BACKUP_ROOT="${BREEZE_BACKUP_DIR:-/var/backups}"
 BACKUP=""
@@ -116,6 +117,25 @@ fetch_to() {  # fetch_to <url> <path>
         ftp)   ftp -o "$2" "$1" ;;
     esac
 }
+
+# ---------------------------------------------------------------- version
+# Which release to expect, asked of aspic rather than written in here. This
+# script is published with its checksums, so it should not have to change at
+# every release - and a version written into it went stale at the very next
+# one: it said 4.0.0 until 4.2.0, which on NetBSD and OpenBSD meant fetching a
+# package aspic no longer had. BREEZE_WANT_VERSION still overrides it.
+if [ -z "$WANT_VERSION" ]; then
+    VTMP="$(mktemp "${TMPDIR:-/tmp}/breeze-version.XXXXXX")"
+    if fetch_to "$ASPIC/breeze-core/VERSION" "$VTMP" >/dev/null 2>&1; then
+        WANT_VERSION="$(head -n 1 "$VTMP" | tr -d '\r ')"
+    fi
+    rm -f "$VTMP"
+fi
+case "$WANT_VERSION" in
+    ''|*[!0-9.]*|.*|*.|*..*)
+        die "could not learn the current version from $ASPIC/breeze-core/VERSION
+    (got '$WANT_VERSION'). Is aspic reachable? Or set BREEZE_WANT_VERSION." ;;
+esac
 
 # ---------------------------------------------------------------- detection
 OS="$(uname -s)"
