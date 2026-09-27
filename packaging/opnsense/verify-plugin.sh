@@ -108,6 +108,21 @@ if grep -q 'rm -f /usr/local/etc/rc.conf.d/breeze_core' packaging/opnsense/build
 else
   bad "a copy in /usr/local/etc/rc.conf.d would survive and override the settings"
 fi
+# OPNsense deletes every account from 2000 to 65000 that is not in config.xml,
+# at each boot. The service account must sit below that, or it is gone after
+# the first reboot - 4.1.1's 8420 was.
+acct_ids=$(grep -oE '(groupadd|groupmod|useradd|usermod) breeze -[gu] [0-9]+' packaging/opnsense/build-plugin.sh | grep -oE '[0-9]+$' | sort -u)
+if [ -n "$acct_ids" ] && ! printf '%s\n' "$acct_ids" | awk '$1 >= 2000 { bad = 1 } END { exit !bad }'; then
+  ok "the service account's ids ($(echo $acct_ids | tr ' ' ',')) are below 2000, which OPNsense leaves alone"
+else
+  bad "the service account has an id OPNsense deletes at boot: ${acct_ids:-none found}"
+fi
+if grep -q -- '-user 8420 -exec chown breeze' packaging/opnsense/build-plugin.sh &&
+   grep -q -- '-group 8420 -exec chgrp breeze' packaging/opnsense/build-plugin.sh; then
+  ok "files the old 8420 account owned are handed to the new one on upgrade"
+else
+  bad "an upgrade would leave config.json and the log owned by a deleted 8420"
+fi
 # rc.freebsd finds a script's rcvar with grep '^name=' and '^rcvar=', so both
 # must be at the start of a line in the rc script, not indented or computed.
 if grep -q '^name="breeze_core"$' "$FILES/usr/local/etc/rc.d/breeze_core" &&

@@ -145,10 +145,24 @@ licenses: ["AGPLv3+"]
 categories: ["www", "sysutils"]
 scripts: {
   post-install: <<EOS
-pw groupshow breeze >/dev/null 2>&1 || pw groupadd breeze -g 8420
-pw usershow breeze >/dev/null 2>&1 || pw useradd breeze -u 8420 -g breeze \
-    -d /nonexistent -s /usr/sbin/nologin -c "Breeze Core"
+# The service account, with ids BELOW 2000 on purpose. OPNsense's
+# local_sync_accounts() deletes every user and group from 2000 to 65000 that
+# is not in config.xml, at each boot and each account sync. Up to 4.1.1 this
+# was 8420, so the account vanished at the first reboot and the service could
+# not start: daemon: unknown user: breeze. 1842 is unassigned in FreeBSD's
+# ports UIDs and GIDs, and OPNsense's own users start at 2000. The plain
+# FreeBSD package keeps 8420; nothing there deletes accounts.
+if pw groupshow breeze >/dev/null 2>&1; then pw groupmod breeze -g 1842; else pw groupadd breeze -g 1842; fi
+if pw usershow breeze >/dev/null 2>&1; then pw usermod breeze -u 1842 -g breeze; else pw useradd breeze -u 1842 -g breeze \
+    -d /nonexistent -s /usr/sbin/nologin -c "Breeze Core"; fi
 install -d -o breeze -g breeze -m 750 /usr/local/etc/breeze-core
+# Hand over what the old ids owned - config.json, devices.json, the log - and
+# nothing else: a deleted account leaves its files owned by a bare 8420, which
+# the service cannot read once it runs as 1842. Only those, because configd
+# renders service.env as root with the service group, and that stays so.
+for p in /usr/local/etc/breeze-core /var/log/breeze_core.log /var/run/breeze_core; do
+  if [ -e "\$p" ]; then find "\$p" -user 8420 -exec chown breeze {} +; find "\$p" -group 8420 -exec chgrp breeze {} +; fi
+done
 # Where configd renders breeze_core: /etc/rc.conf.d, the one directory both
 # rc.subr and OPNsense's boot (rc.freebsd) read. Up to 4.1.1 it went to
 # /usr/local/etc/rc.conf.d, which the boot never reads, so the service did not

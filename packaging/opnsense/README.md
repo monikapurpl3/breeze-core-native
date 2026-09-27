@@ -90,8 +90,19 @@ by sourcing `/etc/rc.conf`, `/etc/rc.conf.local` and `/etc/rc.conf.d/*` —
 never `/usr/local/etc/rc.conf.d`, where the plugin rendered
 `breeze_core_enable="YES"`. `service breeze_core start` reads both, so every
 Start button and Save worked and nothing looked wrong until a reboot. It now
-renders to `/etc/rc.conf.d`, like OPNsense's own services, and is tested by
-rebooting the firewall.
+renders to `/etc/rc.conf.d`, like OPNsense's own services.
+
+With that fixed the boot did try to start it, and a seventh bug showed:
+`daemon: unknown user: breeze`. OPNsense owns the account database.
+`local_sync_accounts()` in `auth.inc` runs at every boot and account sync and
+deletes each user and group **from 2000 to 65000** that is not in
+`config.xml` — skipping only names starting with `_` and ids below 2000. The
+plugin created `breeze` as 8420, so the account went at the first reboot, and
+its files were left owned by a bare number. The account is now **1842**
+(unassigned in FreeBSD's ports `UIDs`/`GIDs`; OPNsense's own users start at
+2000), the post-install moves an existing account to it, and whatever the old
+8420 owned is handed over. The plain FreeBSD package keeps 8420, since nothing
+there deletes accounts. Both fixes are tested by rebooting the firewall.
 
 ## The page
 

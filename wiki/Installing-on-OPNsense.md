@@ -12,11 +12,13 @@ page under **Services → Breeze Core**.
 > would not install on 26.7, and on 26.1 its buttons and its Save did nothing —
 > and the package now on aspic is the fixed one.
 >
-> **4.2.0 also fixes starting at boot.** Up to 4.1.1 the service ran whenever
-> you pressed Start or saved, but did not come back after the firewall
-> rebooted: OPNsense's boot never read where the plugin wrote its enable
-> setting. On the 4.1.1 plugin, upgrade, or press Start after each reboot. The
-> 4.2.0 plugin has been tested by rebooting the firewall.
+> **4.2.0 fixes surviving a reboot.** Up to 4.1.1 the service ran until the
+> firewall rebooted and then could not start at all, for two reasons: the boot
+> never read where the plugin wrote its enable setting, and OPNsense deletes
+> accounts it does not manage — including the plugin's service account — at
+> every boot. On the 4.1.1 plugin, after a reboot, only reinstalling brings it
+> back; upgrade to 4.2.0 instead (below). The 4.2.0 plugin has been tested by
+> rebooting the firewall.
 >
 > On **OPNsense 26.1** (FreeBSD 14), only the binary and the package have been
 > checked: the binary runs on FreeBSD 14.3 and the package admits it, but the
@@ -30,13 +32,24 @@ pkg add https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.2.0.pkg
 
 Then: **Services → Breeze Core**, set the listen address, and enable it.
 
+To **upgrade**, the same with `-f`:
+
+```sh
+pkg add -f https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.2.0.pkg
+```
+
+Without it, `pkg add` refuses whenever any version is installed — with the
+misleading *"the most recent version of os-breeze-core-4.1.1 is already
+installed"*. `-f` replaces it; your settings, units and paired clients are kept,
+and the service is started again if it was enabled.
+
 ## Why a single package and not a repository
 
 Deliberate. Your firewall already has `pkg` pointed at its own mirrors, with
 its own ABI and its own trust, and adding a third-party repository to a
 firewall is a much bigger ask than fetching one file. So this is one file.
 
-The trade is that upgrades are manual: `pkg add` the new URL when a release
+The trade is that upgrades are manual: `pkg add -f` the new URL when a release
 comes out. Nothing will nag you.
 
 ## Why it is built on FreeBSD 14

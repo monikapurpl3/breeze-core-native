@@ -39,10 +39,14 @@ app could. On Windows, a new installer that keeps itself up to date.
   beside it. And it **checks for updates** (WinGUp, LGPL-3.0), trusting only
   HTTPS to aspic; there is a Check for updates shortcut, and a check at sign-in
   that can be turned off. See [Installing on Windows](Installing-on-Windows).
-- **The OPNsense plugin starts at boot.** Up to 4.1.1 it wrote its enable
-  setting to `/usr/local/etc/rc.conf.d`, which the service read and OPNsense's
-  boot does not, so it ran on Start and Save but never came back after the
-  firewall rebooted. It is in `/etc/rc.conf.d` now, and tested by rebooting.
+- **The OPNsense plugin survives a reboot.** Up to 4.1.1 it ran until the
+  firewall rebooted and then could not start, twice over: it wrote its enable
+  setting to `/usr/local/etc/rc.conf.d`, which OPNsense's boot does not read,
+  and its service account was uid 8420 — and OPNsense deletes every account
+  from 2000 up that it does not manage, at each boot. The setting is in
+  `/etc/rc.conf.d` now and the account is 1842, moved over on upgrade; tested
+  by rebooting. Upgrade with `pkg add -f` — plain `pkg add` refuses while any
+  version is installed.
 - **The OPNsense plugin** also installs on 26.7 as well as 26.1, its Save
   saves, the service survives an upgrade, and it has Units, Devices and
   environment tabs. These went out on 26 September as a republished 4.1.1
