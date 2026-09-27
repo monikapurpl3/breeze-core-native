@@ -80,6 +80,20 @@
         <div class="toggle">flap ↔ <div class="switch" data-role="hSwitch"></div></div>
       </div>
 
+      <!-- The unit's two timers: at most one sleep timer and one scheduled
+           start. Each chip shows while its timer is pending. -->
+      <div class="timer-row">
+        <div class="timer-chip hidden" data-role="sleepChip">
+          <span data-role="sleepText"></span>
+          <button class="chip-x" data-role="sleepCancel" aria-label="cancel the sleep timer" title="Cancel">×</button>
+        </div>
+        <div class="timer-chip hidden" data-role="startChip">
+          <span data-role="startText"></span>
+          <button class="chip-x" data-role="startCancel" aria-label="cancel the scheduled start" title="Cancel">×</button>
+        </div>
+        <button class="ghost-btn timer-btn" data-role="timerBtn" title="Switch off after a while, or on at a set time">⏲ timer</button>
+      </div>
+
       <div class="error" data-role="errorBox"></div>
       <div class="notice" data-role="noticeBox"></div>
       <div class="footer" data-role="footer">—</div>

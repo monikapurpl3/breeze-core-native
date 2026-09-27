@@ -4,7 +4,10 @@
 // (enroll.js), and rendering (unit-card.js).
 
 import { apiFetch, apiStream, clearDeviceToken, forgetSigner } from "./api.js";
-import { buildPanel, render, setError, setName, setNotice } from "./unit-card.js";
+import { buildPanel, render, setError, setName, setNotice, setTimers, renderTimers } from "./unit-card.js";
+import {
+  apiListTimers, apiSleepTimer, apiStartTimer, apiCancelTimer, timersFor, remaining, timerDialog,
+} from "./timers.js";
 import { notAppliedMessage } from "./feedback.js";
 import { enroll } from "./enroll.js";
 import {
@@ -27,6 +30,13 @@ let reauthing = false;
 let streamAbort = null;    // AbortController for the live stream, if open
 let streamRetry = STREAM_RETRY_MS;
 let pollTimer = null;      // only non-null while falling back to polling
+
+// Timers are not on the state stream, so they are listed on their own: on load,
+// after any change made here, on a slow interval, and when the tab comes back.
+// In between, the chips count down locally from the server's seconds_remaining.
+const TIMER_REFRESH_MS = 60000;
+const TIMER_REDRAW_MS = 15000;
+let timerFetchedAt = 0;
 
 // A 401 that survived apiFetch's own retry means this device's credential is
 // finished, whichever kind it is: clear it and re-run pairing. Both are dropped
@@ -150,9 +160,58 @@ function rerenderAll(){
   Object.values(panels).forEach(p => { if(p.state) render(p, p.state); });
 }
 
-// Per-card ⋮ actions: rename and remove.
+// ── timers ──────────────────────────────────────────────────────────────────
+
+async function refreshTimers(){
+  let res;
+  try{ res = await apiListTimers(); }catch(_){ return; }
+  if(res.status === 401){ reauth(); return; }
+  if(!res.ok) return;
+  const list = await res.json();
+  timerFetchedAt = Date.now();
+  Object.values(panels).forEach(p => setTimers(p, timersFor(list, p.id), timerFetchedAt));
+  // One that is due is being fired right now; look again shortly so its chip
+  // goes away rather than sitting at "off in a moment".
+  if(list.some(t => remaining(t, timerFetchedAt) === 0)) setTimeout(refreshTimers, 5000);
+}
+
+// The server's reason, if it gave one: {"detail": "..."}.
+async function reason(res){
+  try{ const b = await res.json(); if(b && b.detail) return b.detail; }catch(_){/* not JSON */}
+  return `HTTP ${res.status}`;
+}
+
+async function afterTimerCall(p, res, what){
+  if(res.status === 401){ reauth(); return; }
+  if(!res.ok){ setError(p, `${what} failed — ${await reason(res)}`); return; }
+  setError(p, null);
+  await refreshTimers();
+}
+
+// Per-card ⋮ actions: rename and remove; and the timer row's.
 function makeActions(){
   return {
+    onTimer: async (p) => {
+      const name = (p.state && p.state.name) || String(p.id);
+      const t = p.timers || {};
+      const choice = await timerDialog({
+        unitName: name, sleep: t.sleep, start: t.start,
+        fetchedAt: p.timersFetchedAt || Date.now(),
+      });
+      if(!choice) return;
+      if(choice.kind === "sleep"){
+        await afterTimerCall(p, await apiSleepTimer(p.id, choice.minutes), "timer");
+      }else if(choice.kind === "start"){
+        await afterTimerCall(p, await apiStartTimer(p.id, choice.days, choice.at), "scheduled start");
+      }else if(choice.kind === "cancel"){
+        await afterTimerCall(p, await apiCancelTimer(choice.id), "cancelling");
+      }
+    },
+    onCancelTimer: async (p, kind) => {
+      const t = p.timers && p.timers[kind];
+      if(!t) return;
+      await afterTimerCall(p, await apiCancelTimer(t.id), "cancelling");
+    },
     onRename: async (p) => {
       const cur = (p.state && p.state.name) || "";
       const r = await renameDialog(cur);
@@ -201,7 +260,7 @@ function buildGrid(units){
 
 async function reloadUnits(){
   const units = await loadUnits();
-  if(units !== null) buildGrid(units);
+  if(units !== null){ buildGrid(units); refreshTimers(); }
 }
 
 // Add a unit — scan the network for it, or type its IP. Either way it ends
@@ -308,6 +367,12 @@ async function init(){
   // only sends a unit when something changes, so waiting for it would leave the
   // panels blank until someone touched a remote.
   await fetchAllStates();
+  refreshTimers();
+  setInterval(() => {
+    if(document.hidden) return;
+    if(Date.now() - timerFetchedAt >= TIMER_REFRESH_MS) refreshTimers();
+    else Object.values(panels).forEach(renderTimers);
+  }, TIMER_REDRAW_MS);
 
   document.addEventListener("visibilitychange", () => {
     if(document.hidden){
@@ -319,6 +384,7 @@ async function init(){
       stopLive();
     }else{
       fetchAllStates();   // catch up on whatever changed while hidden
+      refreshTimers();
       startLive();
     }
   });

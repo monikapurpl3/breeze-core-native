@@ -10,12 +10,14 @@
 import { nextSwingMode } from "./swing.js";
 import { fmtTemp } from "./display.js";
 import { buildClimateBar } from "./climate-bar.js";
+import { sleepText, startText } from "./timers.js";
 
 const DIAL_CIRC = 2 * Math.PI * 78;
 
 // buildPanel(unit, control, actions) -> panel object { root, refs, id, state, pending }
 // `control` is the callback invoked as control(panel, body) on any input.
-// `actions` = { onRename(panel), onRemove(panel) } wires the ⋮ menu.
+// `actions` = { onRename(panel), onRemove(panel) } wires the ⋮ menu, and
+// { onTimer(panel), onCancelTimer(panel, kind) } the timer row.
 export function buildPanel(unit, control, actions = {}){
   const tpl = document.getElementById("panelTemplate");
   const node = tpl.content.firstElementChild.cloneNode(true);
@@ -72,6 +74,11 @@ export function buildPanel(unit, control, actions = {}){
     pill.addEventListener("click", () => control(p, {fan_speed: Number(pill.dataset.fan)}));
   });
 
+  // The timer row: the button opens the dialog, each chip's × cancels its own.
+  refs.timerBtn.addEventListener("click", () => actions.onTimer && actions.onTimer(p));
+  refs.sleepCancel.addEventListener("click", () => actions.onCancelTimer && actions.onCancelTimer(p, "sleep"));
+  refs.startCancel.addEventListener("click", () => actions.onCancelTimer && actions.onCancelTimer(p, "start"));
+
   // ⋮ menu: rename / remove. The menu closes on outside click or Escape.
   if(refs.menuBtn && refs.menu){
     const closeMenu = () => refs.menu.classList.add("hidden");
@@ -90,6 +97,25 @@ export function buildPanel(unit, control, actions = {}){
   }
 
   return p;
+}
+
+// The unit's timers, as the server last listed them: { sleep, start }, each a
+// timer or null, and when that list was fetched (the countdown runs from it).
+export function setTimers(p, timers, fetchedAt){
+  p.timers = timers;
+  p.timersFetchedAt = fetchedAt;
+  renderTimers(p);
+}
+
+// Redraw the chips. Called on every new list, and on a slow tick in between so
+// "off in 42 min" keeps counting without asking the server again.
+export function renderTimers(p){
+  const r = p.refs;
+  const t = p.timers || {};
+  r.sleepChip.classList.toggle("hidden", !t.sleep);
+  r.startChip.classList.toggle("hidden", !t.start);
+  if(t.sleep) r.sleepText.textContent = "⏳ " + sleepText(t.sleep, p.timersFetchedAt);
+  if(t.start) r.startText.textContent = "⏰ " + startText(t.start, p.timersFetchedAt);
 }
 
 // Update the displayed unit name (after a rename).

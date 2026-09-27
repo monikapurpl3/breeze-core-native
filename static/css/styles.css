@@ -350,6 +350,62 @@ body{
   text-align: center;
   display:none;
 }
+
+/* A unit's timers: a chip per pending one, and the button that sets them. */
+.timer-row{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.timer-chip{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+  color: var(--text);
+  font-size: 12px;
+}
+.chip-x{
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.chip-x:hover{ color: var(--text); background: var(--border); }
+.timer-btn{ margin-left: auto; }
+
+.timer-dialog{ max-width: 420px; }
+.timer-section{
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+.timer-section h3{
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.timer-section .row .pill{ min-width: 64px; }
+.timer-current{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.timer-current span{ flex: 1; }
+.timer-current .enroll-btn{ width: auto; padding: 8px 12px; }
+.timer-inline{ display: flex; gap: 8px; }
+.timer-inline .enroll-input{ flex: 1; margin-bottom: 8px; }
+.timer-inline .enroll-btn{ width: auto; padding: 0 18px; margin-bottom: 8px; }
 .empty-state{
   max-width: 1100px;
   margin: 0 auto;
