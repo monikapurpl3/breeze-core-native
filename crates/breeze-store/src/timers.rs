@@ -11,15 +11,25 @@
 //! wall clock, exactly as `datetime.now() + timedelta(minutes=45)` does. That is
 //! the behaviour to match rather than improve on, because the stored strings and
 //! the scheduler have to agree with each other.
+//!
+//! A **scheduled start** ("on in three days at 07:00", 4.2.0) is the one timer
+//! that names a wall-clock time, and it is still the server's clock that
+//! decides: the client sends a number of days and an `HH:MM`, and the server
+//! adds the days to *its* date, so "07:00" means seven o'clock at home whatever
+//! the phone thinks the time is.
 
-use chrono::{Local, NaiveDateTime, TimeDelta};
+use chrono::{Local, NaiveDateTime, NaiveTime, TimeDelta};
 
 use crate::control::ControlRequest;
-use crate::models::{Timer, TimersDoc};
+use crate::models::{Timer, TimerKind, TimersDoc};
 
 /// A day is the ceiling on purpose: this is "I am going to sleep", not a
 /// scheduling system. Anything longer is a program.
 pub const MAX_MINUTES: u32 = 24 * 60;
+
+/// How far ahead a scheduled start may be: a long holiday. Anything that
+/// repeats, or reaches further, is a schedule in a program.
+pub const MAX_START_DAYS: u32 = 30;
 
 /// How many unit ids one timer may name.
 pub const MAX_UNITS: usize = 64;
@@ -44,6 +54,12 @@ pub fn parse_local(text: &str) -> Option<NaiveDateTime> {
 pub enum TimerError {
     BadMinutes(u32),
     TooManyUnits(usize),
+    BadDays(u32),
+    BadTime(String),
+    /// A start whose moment has already gone - today at a time already past.
+    /// Refused rather than moved to tomorrow: guessing which day was meant is
+    /// how a unit comes on a day early or late.
+    InThePast(String),
 }
 
 impl core::fmt::Display for TimerError {
@@ -53,8 +69,23 @@ impl core::fmt::Display for TimerError {
                 write!(f, "minutes must be between 1 and {MAX_MINUTES}, got {m}")
             }
             Self::TooManyUnits(n) => write!(f, "at most {MAX_UNITS} units, got {n}"),
+            Self::BadDays(d) => write!(f, "days must be between 0 and {MAX_START_DAYS}, got {d}"),
+            Self::BadTime(t) => write!(f, "at must be a time as HH:MM, got {t:?}"),
+            Self::InThePast(t) => write!(f, "{t} has already passed on the server's clock"),
         }
     }
+}
+
+/// `HH:MM`, 24-hour, as the clients send it. One-digit hours are accepted
+/// because a person typing a time will send them.
+pub fn parse_hhmm(text: &str) -> Option<NaiveTime> {
+    let (h, m) = text.trim().split_once(':')?;
+    if h.is_empty() || h.len() > 2 || m.len() != 2 {
+        return None;
+    }
+    let hour: u32 = h.parse().ok()?;
+    let minute: u32 = m.parse().ok()?;
+    NaiveTime::from_hms_opt(hour, minute, 0)
 }
 
 impl std::error::Error for TimerError {}
@@ -86,6 +117,47 @@ pub fn build_timer(
         // second feature.
         settings: settings.unwrap_or_else(ControlRequest::power_off),
         label: label.to_string(),
+        kind: TimerKind::Sleep,
+    })
+}
+
+/// Build a scheduled start: `days` from today, at `at` on the server's clock.
+///
+/// It switches the unit on and nothing else. `minutes` is still filled in -
+/// the whole minutes from now until it fires, rounded up - because it is a
+/// required field every older client reads; for a start it is informational.
+pub fn build_start_timer(
+    id: impl Into<String>,
+    unit_ids: Vec<String>,
+    days: u32,
+    at: &str,
+    label: &str,
+    now: NaiveDateTime,
+) -> Result<Timer, TimerError> {
+    if days > MAX_START_DAYS {
+        return Err(TimerError::BadDays(days));
+    }
+    if unit_ids.len() > MAX_UNITS {
+        return Err(TimerError::TooManyUnits(unit_ids.len()));
+    }
+    let time = parse_hhmm(at).ok_or_else(|| TimerError::BadTime(at.to_string()))?;
+    let fires_at = (now.date() + TimeDelta::days(days as i64)).and_time(time);
+    if fires_at <= now {
+        // Said the way a person would read it back: "17:29 on 2026-09-27".
+        return Err(TimerError::InThePast(
+            fires_at.format("%H:%M on %Y-%m-%d").to_string(),
+        ));
+    }
+    let seconds = (fires_at - now).num_seconds();
+    Ok(Timer {
+        id: id.into(),
+        unit_ids,
+        minutes: ((seconds + 59) / 60) as u32,
+        created_at: format_local(now),
+        fires_at: format_local(fires_at),
+        settings: ControlRequest::power_on(),
+        label: label.to_string(),
+        kind: TimerKind::Start,
     })
 }
 
@@ -114,15 +186,18 @@ impl Timer {
 }
 
 impl TimersDoc {
-    /// Remove any timer already promising something about these units.
+    /// Remove any timer of this `kind` already promising something about
+    /// these units.
     ///
     /// Asking for "off in 30" when one is pending means the user changed their
-    /// mind, not that they want two competing promises about one unit. Returns
+    /// mind, not that they want two competing promises about one unit. But
+    /// only within a kind: a sleep timer and a scheduled start are different
+    /// promises, and "off tonight, on on Monday" has to be possible. Returns
     /// how many were displaced.
-    pub fn replace_for_units(&mut self, unit_ids: &[String]) -> usize {
+    pub fn replace_for_units(&mut self, unit_ids: &[String], kind: TimerKind) -> usize {
         let before = self.timers.len();
         self.timers
-            .retain(|t| !unit_ids.iter().any(|u| t.covers(u)));
+            .retain(|t| t.kind != kind || !unit_ids.iter().any(|u| t.covers(u)));
         before - self.timers.len()
     }
 
@@ -264,7 +339,10 @@ mod tests {
                 build_timer("b", vec!["2".into()], 30, None, "", now).unwrap(),
             ],
         };
-        assert_eq!(doc.replace_for_units(&["1".to_string()]), 1);
+        assert_eq!(
+            doc.replace_for_units(&["1".to_string()], TimerKind::Sleep),
+            1
+        );
         assert_eq!(doc.timers.len(), 1);
         assert_eq!(doc.timers[0].id, "b", "the other unit's timer must survive");
     }
@@ -277,7 +355,10 @@ mod tests {
         };
         // It promises something about unit 1, so a timer on unit 1 replaces it --
         // otherwise two promises would fight over the same air conditioner.
-        assert_eq!(doc.replace_for_units(&["1".to_string()]), 1);
+        assert_eq!(
+            doc.replace_for_units(&["1".to_string()], TimerKind::Sleep),
+            1
+        );
         assert!(doc.timers.is_empty());
     }
 
@@ -328,5 +409,120 @@ mod tests {
         // than to improve.
         let t = build_timer("t", vec![], 120, None, "", at("2026-10-25T01:30:00")).unwrap();
         assert_eq!(t.fires_at, "2026-10-25T03:30:00");
+    }
+
+    // ------------------------------------------------------ scheduled starts
+
+    #[test]
+    fn a_start_fires_on_the_servers_date_plus_days_at_the_time() {
+        let now = at("2026-09-27T12:00:00");
+        let t = build_start_timer("s", vec!["1".into()], 3, "07:30", "", now).unwrap();
+        assert_eq!(t.fires_at, "2026-09-30T07:30:00");
+        assert_eq!(t.kind, TimerKind::Start);
+        assert_eq!(
+            t.settings,
+            ControlRequest::power_on(),
+            "it only switches on"
+        );
+        // Informational, but a whole number of minutes, rounded up.
+        assert_eq!(t.minutes, 2 * 24 * 60 + 19 * 60 + 30);
+    }
+
+    #[test]
+    fn a_start_later_today_is_days_zero() {
+        let now = at("2026-09-27T12:00:00");
+        let t = build_start_timer("s", vec![], 0, "18:05", "", now).unwrap();
+        assert_eq!(t.fires_at, "2026-09-27T18:05:00");
+    }
+
+    #[test]
+    fn a_start_already_past_today_is_refused_not_moved_to_tomorrow() {
+        let now = at("2026-09-27T12:00:00");
+        assert_eq!(
+            build_start_timer("s", vec![], 0, "11:59", "", now),
+            Err(TimerError::InThePast("11:59 on 2026-09-27".into()))
+        );
+        // The same minute counts as past: it would fire at once.
+        assert!(build_start_timer("s", vec![], 0, "12:00", "", now).is_err());
+        assert!(build_start_timer("s", vec![], 1, "11:59", "", now).is_ok());
+    }
+
+    #[test]
+    fn a_start_reaches_thirty_days_and_no_further() {
+        let now = at("2026-09-27T12:00:00");
+        let t = build_start_timer("s", vec![], MAX_START_DAYS, "06:00", "", now).unwrap();
+        assert_eq!(
+            t.fires_at, "2026-10-27T06:00:00",
+            "across the month boundary"
+        );
+        assert_eq!(
+            build_start_timer("s", vec![], MAX_START_DAYS + 1, "06:00", "", now),
+            Err(TimerError::BadDays(MAX_START_DAYS + 1))
+        );
+    }
+
+    #[test]
+    fn a_start_time_is_hh_mm() {
+        for good in ["7:05", "07:05", "00:00", "23:59", " 07:05 "] {
+            assert!(parse_hhmm(good).is_some(), "{good:?}");
+        }
+        for bad in [
+            "24:00", "07:60", "7", "07:5", "07-05", "007:05", "", "ab:cd", "07:05:00",
+        ] {
+            assert!(parse_hhmm(bad).is_none(), "{bad:?}");
+        }
+        let now = at("2026-09-27T12:00:00");
+        assert_eq!(
+            build_start_timer("s", vec![], 1, "25:00", "", now),
+            Err(TimerError::BadTime("25:00".into()))
+        );
+    }
+
+    #[test]
+    fn a_unit_keeps_one_timer_of_each_kind() {
+        let now = at("2026-09-27T21:00:00");
+        let mut doc = TimersDoc {
+            timers: vec![
+                build_timer("sleep", vec!["1".into()], 30, None, "", now).unwrap(),
+                build_start_timer("start", vec!["1".into()], 2, "07:00", "", now).unwrap(),
+            ],
+        };
+        // A new start replaces the old start and leaves the sleep timer alone...
+        assert_eq!(
+            doc.replace_for_units(&["1".to_string()], TimerKind::Start),
+            1
+        );
+        assert_eq!(doc.timers.len(), 1);
+        assert_eq!(doc.timers[0].id, "sleep");
+        // ...and a new sleep timer replaces only the sleep timer.
+        doc.timers
+            .push(build_start_timer("start2", vec!["1".into()], 3, "07:00", "", now).unwrap());
+        assert_eq!(
+            doc.replace_for_units(&["1".to_string()], TimerKind::Sleep),
+            1
+        );
+        assert_eq!(doc.timers.len(), 1);
+        assert_eq!(doc.timers[0].id, "start2");
+    }
+
+    #[test]
+    fn a_sleep_timer_is_stored_exactly_as_before() {
+        // No `kind` key: timers.json files written before 4.2.0 read and write
+        // back byte for byte.
+        let now = at("2026-09-27T21:00:00");
+        let sleep = build_timer("a", vec!["1".into()], 30, None, "", now).unwrap();
+        let stored = crate::to_json(&sleep).unwrap();
+        assert!(!stored.contains("kind"), "{stored}");
+        let old: Timer = serde_json::from_str(&stored).unwrap();
+        assert_eq!(
+            old.kind,
+            TimerKind::Sleep,
+            "an old file's timers are sleep timers"
+        );
+        // A start says what it is.
+        let start = build_start_timer("b", vec![], 1, "07:00", "", now).unwrap();
+        assert!(crate::to_json(&start)
+            .unwrap()
+            .contains(r#""kind": "start""#));
     }
 }

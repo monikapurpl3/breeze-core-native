@@ -135,6 +135,15 @@ impl ControlRequest {
             ..Default::default()
         }
     }
+
+    /// Switches the unit on and nothing else — what a scheduled start does, so
+    /// the unit comes back in whatever mode and temperature it last had.
+    pub fn power_on() -> Self {
+        Self {
+            power_state: Some(true),
+            ..Default::default()
+        }
+    }
 }
 
 #[cfg(test)]

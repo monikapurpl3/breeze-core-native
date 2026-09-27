@@ -419,12 +419,16 @@ pub fn scan(state: &AppState, query: &str) -> Reply {
 
 /// Read one value out of a raw query string.
 ///
-/// Hand-rolled because this is the only route that takes a query parameter, and
-/// a URL-decoding dependency for one CIDR would be a poor trade. Handles `+`
-/// and `%XX`, which is everything a subnet can contain.
-fn query_value(query: &str, key: &str) -> Option<String> {
+/// Hand-rolled because only two routes take a query parameter (a scan's subnet,
+/// a timer listing's kind), and a URL-decoding dependency for those would be a
+/// poor trade. Handles `+` and `%XX`, which is everything either can contain.
+pub(crate) fn query_value(query: &str, key: &str) -> Option<String> {
     for pair in query.split('&') {
-        let (k, v) = pair.split_once('=')?;
+        // A bare flag ("?verbose&subnet=...") is skipped, not the end of the
+        // search.
+        let Some((k, v)) = pair.split_once('=') else {
+            continue;
+        };
         if k == key {
             return Some(percent_decode(&v.replace('+', " ")));
         }
@@ -465,6 +469,19 @@ fn persist(state: &AppState, config: &breeze_store::AppConfig) -> Result<(), Str
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_query_value_is_found_past_a_bare_flag() {
+        assert_eq!(
+            query_value("verbose&kind=all", "kind").as_deref(),
+            Some("all")
+        );
+        assert_eq!(
+            query_value("subnet=192.168.1.0%2F24", "subnet").as_deref(),
+            Some("192.168.1.0/24")
+        );
+        assert_eq!(query_value("", "kind"), None);
+    }
 
     fn unit(id: i64, name: &str, paired: bool) -> UnitConfig {
         UnitConfig {

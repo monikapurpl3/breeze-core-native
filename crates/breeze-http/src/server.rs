@@ -36,6 +36,7 @@ const FEATURES: &[&str] = &[
     "programs",
     "sleep_timer",
     "system_info",
+    "timer_at",
     "unit_capabilities",
     "unit_history",
     "unit_scan",
@@ -692,8 +693,8 @@ fn authorise(
 
 // ---------------------------------------------------------------- handlers
 
-fn route_timers_list(state: &AppState, _: &Incoming) -> Reply {
-    crate::timer_routes::list(state)
+fn route_timers_list(state: &AppState, incoming: &Incoming) -> Reply {
+    crate::timer_routes::list(state, query_of(incoming))
 }
 
 fn route_timer_create(state: &AppState, incoming: &Incoming) -> Reply {
@@ -916,14 +917,17 @@ fn route_delete_unit(state: &AppState, incoming: &Incoming) -> Reply {
 }
 
 fn route_scan(state: &AppState, incoming: &Incoming) -> Reply {
-    // The query lives on `signed_path`, which is the full URL; `path` has been
-    // stripped of it.
-    let query = incoming
+    crate::config_routes::scan(state, query_of(incoming))
+}
+
+/// The query string, without the `?`. It lives on `signed_path`, which is the
+/// full URL; `path` has been stripped of it.
+fn query_of(incoming: &Incoming) -> &str {
+    incoming
         .signed_path
         .split_once('?')
         .map(|(_, q)| q)
-        .unwrap_or_default();
-    crate::config_routes::scan(state, query)
+        .unwrap_or_default()
 }
 
 /// Pull the unit id out of `/api/units/{id}/...`.
@@ -1231,7 +1235,10 @@ mod tests {
         //
         // control_feedback (4.1.1): the control reply says which fields the
         // unit did not take, as `not_applied`.
-        let native_only = ["control_feedback"];
+        // timer_at (4.2.0): a scheduled start, `{"days":..,"at":"HH:MM"}` on
+        // POST /api/timers, alongside each unit's sleep timer; every timer
+        // carries `kind`.
+        let native_only = ["control_feedback", "timer_at"];
         let mut expected: Vec<&str> = reference
             .iter()
             .chain(native_only.iter())

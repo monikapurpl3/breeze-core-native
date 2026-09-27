@@ -7,11 +7,18 @@
 //! A client counts down from that rather than parsing `fires_at` against its own
 //! clock — a phone's idea of the time is exactly what this design avoids relying
 //! on.
+//!
+//! Two kinds, one of each per unit (4.2.0): a **sleep** timer, `{"minutes": 45}`,
+//! and a **scheduled start**, `{"days": 3, "at": "07:30"}` — on, on the server's
+//! date plus `days`, at `at` on the server's clock. Every timer on the wire says
+//! which it is in `kind`. Advertised as the `timer_at` feature. A listing shows
+//! only sleep timers unless it asks for `?kind=all` (or `start`), so a client
+//! that predates starts never mistakes one for a sleep timer.
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use breeze_store::{ControlRequest, Timer};
+use breeze_store::{ControlRequest, Timer, TimerKind};
 use serde::Deserialize;
 
 use crate::respond::Reply;
@@ -21,11 +28,51 @@ use crate::state::AppState;
 pub struct TimerRequest {
     #[serde(default)]
     pub unit_ids: Vec<String>,
-    pub minutes: u32,
+    /// A sleep timer: this many minutes from now.
+    #[serde(default)]
+    pub minutes: Option<u32>,
+    /// A scheduled start: this many days from the server's today (0 = today)...
+    #[serde(default)]
+    pub days: Option<u32>,
+    /// ...at this `HH:MM` on the server's clock.
+    #[serde(default)]
+    pub at: Option<String>,
     #[serde(default)]
     pub settings: Option<ControlRequest>,
     #[serde(default)]
     pub label: String,
+}
+
+/// What a request asks for, once it is known to ask for exactly one thing.
+#[derive(Debug, PartialEq)]
+pub enum When {
+    In(u32),
+    At { days: u32, at: String },
+}
+
+impl TimerRequest {
+    /// Which kind of timer this is, or why it is not either.
+    ///
+    /// No defaults and no guessing: "you forgot to say when" is not "now", and
+    /// a request naming both a duration and a time has no single meaning.
+    pub fn when(&self) -> Result<When, String> {
+        match (self.minutes, &self.at) {
+            (Some(_), Some(_)) => Err("give minutes or at, not both".into()),
+            (None, None) if self.days.is_some() => Err("days needs at (an HH:MM)".into()),
+            (None, None) => Err("say when: minutes, or at (with days)".into()),
+            (Some(_), None) if self.days.is_some() => {
+                Err("days goes with at, not with minutes".into())
+            }
+            (Some(m), None) => Ok(When::In(m)),
+            (None, Some(_)) if self.settings.is_some() => Err(
+                "a scheduled start only switches the unit on; settings are for sleep timers".into(),
+            ),
+            (None, Some(at)) => Ok(When::At {
+                days: self.days.unwrap_or(0),
+                at: at.clone(),
+            }),
+        }
+    }
 }
 
 /// How the runner is doing, for diagnostics.
@@ -50,17 +97,44 @@ fn serialise(timer: &Timer, now: chrono::NaiveDateTime) -> serde_json::Value {
         settings.retain(|_, v| !v.is_null());
     }
     value["seconds_remaining"] = serde_json::json!(timer.seconds_remaining(now));
+    // Always on the wire, though the stored form omits it for a sleep timer:
+    // a client should not have to know that an absent key means "sleep".
+    value["kind"] = serde_json::json!(timer.kind.as_str());
     value
 }
 
-/// `GET /api/timers`
-pub fn list(state: &AppState) -> Reply {
+/// Which timers a listing includes, from its `kind` query parameter.
+///
+/// Sleep timers only unless asked. A client from before 4.2.0 knows one kind of
+/// timer and would read a scheduled start as a sleep timer -- "switches off in
+/// 53 h" -- so a start is listed only for a client that says it knows them.
+fn listed_kinds(kind: Option<&str>) -> Result<&'static [TimerKind], String> {
+    match kind {
+        None | Some("sleep") => Ok(&[TimerKind::Sleep]),
+        Some("start") => Ok(&[TimerKind::Start]),
+        Some("all") => Ok(&[TimerKind::Sleep, TimerKind::Start]),
+        Some(other) => Err(format!("kind must be sleep, start or all, not {other:?}")),
+    }
+}
+
+/// `GET /api/timers[?kind=sleep|start|all]`
+pub fn list(state: &AppState, query: &str) -> Reply {
+    let kind = crate::config_routes::query_value(query, "kind");
+    let kinds = match listed_kinds(kind.as_deref()) {
+        Ok(k) => k,
+        Err(e) => return Reply::detail(422, e),
+    };
     let timers = match state.timers.read() {
         Ok(t) => t,
         Err(_) => return Reply::detail(500, "timer store unavailable"),
     };
     let now = breeze_store::now_local();
-    let list: Vec<serde_json::Value> = timers.timers.iter().map(|t| serialise(t, now)).collect();
+    let list: Vec<serde_json::Value> = timers
+        .timers
+        .iter()
+        .filter(|t| kinds.contains(&t.kind))
+        .map(|t| serialise(t, now))
+        .collect();
     Reply::json_body(200, &list)
 }
 
@@ -69,6 +143,10 @@ pub fn create(state: &AppState, body: &[u8]) -> Reply {
     let request: TimerRequest = match serde_json::from_slice(body) {
         Ok(r) => r,
         Err(e) => return Reply::detail(422, format!("invalid timer request: {e}")),
+    };
+    let when = match request.when() {
+        Ok(w) => w,
+        Err(e) => return Reply::detail(422, e),
     };
     if let Some(settings) = &request.settings {
         if let Err(e) = settings.validate() {
@@ -98,14 +176,25 @@ pub fn create(state: &AppState, body: &[u8]) -> Reply {
         None => return Reply::detail(500, "no entropy available"),
     };
     let now = breeze_store::now_local();
-    let timer = match breeze_store::build_timer(
-        id,
-        request.unit_ids.clone(),
-        request.minutes,
-        request.settings,
-        &request.label,
-        now,
-    ) {
+    let built = match when {
+        When::In(minutes) => breeze_store::build_timer(
+            id,
+            request.unit_ids.clone(),
+            minutes,
+            request.settings,
+            &request.label,
+            now,
+        ),
+        When::At { days, at } => breeze_store::build_start_timer(
+            id,
+            request.unit_ids.clone(),
+            days,
+            &at,
+            &request.label,
+            now,
+        ),
+    };
+    let timer = match built {
         Ok(t) => t,
         Err(e) => return Reply::detail(422, e.to_string()),
     };
@@ -114,7 +203,7 @@ pub fn create(state: &AppState, body: &[u8]) -> Reply {
         Ok(t) => t,
         Err(_) => return Reply::detail(500, "timer store unavailable"),
     };
-    timers.replace_for_units(&request.unit_ids);
+    timers.replace_for_units(&request.unit_ids, timer.kind);
     timers.timers.push(timer.clone());
     if let Err(e) = breeze_store::save(
         &state.settings.timers_path,
@@ -287,6 +376,20 @@ mod tests {
     }
 
     #[test]
+    fn a_listing_shows_starts_only_to_a_client_that_asks() {
+        // An app from before 4.2.0 lists without a kind and would take a start
+        // for a sleep timer, so it is not shown one.
+        assert_eq!(listed_kinds(None).unwrap(), &[TimerKind::Sleep]);
+        assert_eq!(listed_kinds(Some("sleep")).unwrap(), &[TimerKind::Sleep]);
+        assert_eq!(listed_kinds(Some("start")).unwrap(), &[TimerKind::Start]);
+        assert_eq!(
+            listed_kinds(Some("all")).unwrap(),
+            &[TimerKind::Sleep, TimerKind::Start]
+        );
+        assert!(listed_kinds(Some("both")).is_err());
+    }
+
+    #[test]
     fn the_wire_form_drops_nulls_from_settings() {
         // The stored form keeps them for byte-compatibility; a client rendering
         // "what happens when this fires" should not have to filter them.
@@ -326,17 +429,63 @@ mod tests {
     #[test]
     fn a_timer_request_needs_only_minutes() {
         let r: TimerRequest = serde_json::from_slice(br#"{"minutes":45}"#).unwrap();
-        assert_eq!(r.minutes, 45);
+        assert_eq!(r.when(), Ok(When::In(45)));
         assert!(r.unit_ids.is_empty(), "empty means every unit");
         assert!(r.settings.is_none());
         assert_eq!(r.label, "");
     }
 
+    fn when(body: &str) -> Result<When, String> {
+        serde_json::from_str::<TimerRequest>(body).unwrap().when()
+    }
+
     #[test]
-    fn a_request_without_minutes_is_rejected() {
+    fn a_request_that_does_not_say_when_is_rejected() {
         // No default: "in zero minutes" and "you forgot to say when" are
         // different, and guessing would fire something immediately.
-        assert!(serde_json::from_slice::<TimerRequest>(br#"{"unit_ids":["1"]}"#).is_err());
+        assert!(when(r#"{"unit_ids":["1"]}"#).is_err());
+        assert!(when(r#"{"days":2}"#).is_err(), "days alone is not a time");
+    }
+
+    #[test]
+    fn a_scheduled_start_is_days_and_an_hh_mm() {
+        assert_eq!(
+            when(r#"{"unit_ids":["1"],"days":3,"at":"07:30"}"#),
+            Ok(When::At {
+                days: 3,
+                at: "07:30".into()
+            })
+        );
+        // No days means today.
+        assert_eq!(
+            when(r#"{"at":"18:00"}"#),
+            Ok(When::At {
+                days: 0,
+                at: "18:00".into()
+            })
+        );
+    }
+
+    #[test]
+    fn a_request_that_says_two_things_is_rejected() {
+        assert!(when(r#"{"minutes":30,"at":"07:30"}"#).is_err());
+        assert!(when(r#"{"minutes":30,"days":1}"#).is_err());
+        // A start only switches on; anything else is a sleep timer's settings.
+        assert!(when(r#"{"at":"07:30","settings":{"power_state":true}}"#).is_err());
+    }
+
+    #[test]
+    fn every_timer_on_the_wire_says_which_kind_it_is() {
+        let now = at("2026-09-27T21:00:00");
+        let sleep = breeze_store::build_timer("a", vec!["1".into()], 30, None, "", now).unwrap();
+        assert_eq!(serialise(&sleep, now)["kind"], "sleep");
+        let start =
+            breeze_store::build_start_timer("b", vec!["1".into()], 1, "07:00", "", now).unwrap();
+        let wire = serialise(&start, now);
+        assert_eq!(wire["kind"], "start");
+        assert_eq!(wire["fires_at"], "2026-09-28T07:00:00");
+        assert_eq!(wire["seconds_remaining"], 10 * 3600);
+        assert_eq!(wire["settings"], serde_json::json!({"power_state": true}));
     }
 
     #[test]

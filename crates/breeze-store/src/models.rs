@@ -236,6 +236,36 @@ pub struct Timer {
     pub settings: ControlRequest,
     #[serde(default)]
     pub label: String,
+    /// Which of a unit's two timers this is. Absent in every file written
+    /// before 4.2.0 and still absent for a sleep timer, so those files stay
+    /// byte-for-byte what they were; only a scheduled start writes it.
+    #[serde(default, skip_serializing_if = "TimerKind::is_sleep")]
+    pub kind: TimerKind,
+}
+
+/// A unit has at most one of each: "off in 30 minutes" and "on in three days at
+/// 07:00" are different promises, and setting one must not cancel the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TimerKind {
+    /// In N minutes, apply the settings (by default: switch off).
+    #[default]
+    Sleep,
+    /// On a given day at a given server-local time, switch on.
+    Start,
+}
+
+impl TimerKind {
+    pub fn is_sleep(&self) -> bool {
+        *self == Self::Sleep
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Sleep => "sleep",
+            Self::Start => "start",
+        }
+    }
 }
 
 /// `timers.json` — mode 600.
