@@ -25,6 +25,10 @@ echo '-- starting from nothing'
 doas service breeze_core stop >/dev/null 2>&1 || true
 doas pkg_delete -f breeze-core >/dev/null 2>&1 || true
 doas rm -rf /usr/pkg/breeze-core
+# pkg_delete keeps the config directory, so whatever another harness left in
+# the stores would carry into this run. verify-migrate.sh once left a
+# devices.json that 4.x cannot parse, and the service then refused to start.
+for f in config devices programs timers; do doas rm -f /usr/pkg/etc/breeze-core/\$f.json; done
 
 echo '-- installing the published Python 3.2.0'
 doas pkg_add '$OLD_URL' 2>&1 | tail -2

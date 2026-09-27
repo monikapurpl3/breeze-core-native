@@ -19,6 +19,9 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 PKG="packaging/out/pkg"
 VERSION="$(grep -m1 '^version' crates/breeze-core/Cargo.toml | cut -d'"' -f2)"
+# The package release, as build-packages.sh stamps it. Never hardcode it: nfpm
+# writes it into every filename, in each format's own dialect.
+RELEASE="${BC_RELEASE:-1}"
 
 MOUNT="$REPO"
 case "$MOUNT" in /[a-z]/*) MOUNT="$(echo "$MOUNT" | sed -E 's#^/([a-z])/#\U\1:/#')" ;; esac
@@ -71,7 +74,7 @@ run_case() {
 # --- Debian: install, then the same thing again as an upgrade over 3.2.0 -----
 run_case debian debian:12 "
   apt-get -qq update >/dev/null && apt-get -qq install -y wget >/dev/null
-  dpkg -i /pkg/breeze-core_${VERSION}_amd64.deb
+  dpkg -i /pkg/breeze-core_${VERSION}-${RELEASE}_amd64.deb
   $(checks)
   echo '-- removal keeps the configuration'
   dpkg -r breeze-core >/dev/null 2>&1
@@ -87,7 +90,7 @@ run_case debian-upgrade debian:12 "
   echo '-- leaving something behind in /etc/breeze-core'
   printf '{\"api_key\":\"kept-across-the-upgrade\",\"units\":[]}' > /etc/breeze-core/config.json
   echo '-- now upgrading to ${VERSION}'
-  dpkg -i /pkg/breeze-core_${VERSION}_amd64.deb
+  dpkg -i /pkg/breeze-core_${VERSION}-${RELEASE}_amd64.deb
   $(checks)
   echo '-- and the configuration survived'
   grep -q kept-across-the-upgrade /etc/breeze-core/config.json
@@ -96,7 +99,7 @@ run_case debian-upgrade debian:12 "
 # --- RHEL family ------------------------------------------------------------
 run_case alma almalinux:9 "
   dnf -q -y install wget >/dev/null 2>&1 || true
-  rpm -i /pkg/breeze-core-${VERSION}-1.x86_64.rpm
+  rpm -i /pkg/breeze-core-${VERSION}-${RELEASE}.x86_64.rpm
   $(checks)
   echo '-- removal keeps the configuration'
   rpm -e breeze-core
@@ -109,7 +112,7 @@ run_case alma-upgrade almalinux:9 "
   rpm -i --nodeps /tmp/old.rpm
   printf '{\"api_key\":\"kept-across-the-upgrade\",\"units\":[]}' > /etc/breeze-core/config.json
   echo '-- upgrading with rpm -U, the way dnf would'
-  rpm -U /pkg/breeze-core-${VERSION}-1.x86_64.rpm
+  rpm -U /pkg/breeze-core-${VERSION}-${RELEASE}.x86_64.rpm
   $(checks)
   grep -q kept-across-the-upgrade /etc/breeze-core/config.json
 "
@@ -117,7 +120,7 @@ run_case alma-upgrade almalinux:9 "
 # --- Arch -------------------------------------------------------------------
 run_case arch archlinux:base "
   pacman -Sy --noconfirm --quiet wget >/dev/null 2>&1 || true
-  pacman -U --noconfirm /pkg/breeze-core-${VERSION}-1-x86_64.pkg.tar.zst >/dev/null
+  pacman -U --noconfirm /pkg/breeze-core-${VERSION}-${RELEASE}-x86_64.pkg.tar.zst >/dev/null
   $(checks)
 "
 
@@ -127,8 +130,7 @@ run_case alpine alpine:3.20 "
   # --allow-untrusted: the package file itself carries no signature; the
   # repository index is what gets signed, and that is verified separately by
   # packaging/repo/verify-repo.sh.
-  apk add --allow-untrusted /pkg/breeze-core-${VERSION}-r0.apk >/dev/null 2>&1 \
-    || apk add --allow-untrusted /pkg/breeze-core_${VERSION}_x86_64.apk >/dev/null
+  apk add --allow-untrusted /pkg/breeze-core_${VERSION}-r${RELEASE}_x86_64.apk >/dev/null
   $(checks)
   echo '-- the OpenRC service is installed'
   [ -x /etc/init.d/breeze-core ]

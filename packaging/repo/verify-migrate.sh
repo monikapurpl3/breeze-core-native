@@ -96,7 +96,7 @@ echo '-- installing the bolero repository and the Python 3.2.0 package'
 $1
 echo '-- leaving markers in the stores'
 printf %s '{\"api_key\":\"survives-the-migration\",\"units\":[]}' > /etc/breeze-core/config.json
-printf %s '{\"devices\":[\"kept-too\"]}' > /etc/breeze-core/devices.json
+printf %s '{\"devices\":[],\"marker\":\"kept-too\"}' > /etc/breeze-core/devices.json
 breeze-core version 2>/dev/null | head -1 || true
 "; }
 
