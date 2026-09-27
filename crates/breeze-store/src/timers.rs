@@ -34,6 +34,11 @@ pub const MAX_START_DAYS: u32 = 30;
 /// How many unit ids one timer may name.
 pub const MAX_UNITS: usize = 64;
 
+/// How late a scheduled start may still fire: enough to ride out a restart or
+/// an upgrade, not so much that a unit comes on in an empty house hours after
+/// the moment it was asked for because the server was down through it.
+pub const START_GRACE_MINUTES: i64 = 15;
+
 /// The format Breeze Core writes: seconds precision, no zone, no fraction.
 const ISO_SECONDS: &str = "%Y-%m-%dT%H:%M:%S";
 
@@ -179,6 +184,20 @@ impl Timer {
         self.seconds_remaining(now) == 0
     }
 
+    /// A scheduled start whose moment passed more than
+    /// [`START_GRACE_MINUTES`] ago, while the server was not running. It is
+    /// dropped rather than fired: a schedule skips a minute it missed too, and
+    /// "on at 07:30" happening at 14:00 is not what anybody asked for.
+    ///
+    /// A late sleep timer still fires, because "off, late" is the safe
+    /// direction to be wrong in; "on, at some unknown time" is not, so a start
+    /// whose time cannot be read counts as missed.
+    pub fn missed(&self, now: NaiveDateTime) -> bool {
+        self.kind == TimerKind::Start
+            && parse_local(&self.fires_at)
+                .is_none_or(|due| now - due > TimeDelta::minutes(START_GRACE_MINUTES))
+    }
+
     /// Whether this timer covers `unit_id`. An empty list means every unit.
     pub fn covers(&self, unit_id: &str) -> bool {
         self.unit_ids.is_empty() || self.unit_ids.iter().any(|u| u == unit_id)
@@ -228,6 +247,29 @@ mod tests {
 
     fn at(text: &str) -> NaiveDateTime {
         parse_local(text).expect("test timestamp")
+    }
+
+    #[test]
+    fn a_start_missed_by_more_than_the_grace_is_dropped_not_fired() {
+        let now = at("2026-09-28T07:00:00");
+        let start = build_start_timer("s1", vec!["1".into()], 1, "07:30", "", now).unwrap();
+        // A restart across the moment: still fires.
+        assert!(!start.missed(at("2026-09-29T07:30:00")));
+        assert!(!start.missed(at("2026-09-29T07:45:00")));
+        // The server was down through it: dropped.
+        assert!(start.missed(at("2026-09-29T07:45:01")));
+        assert!(start.missed(at("2026-10-01T09:00:00")));
+
+        // A sleep timer is never "missed": switching off late is harmless.
+        let sleep = build_timer("t1", vec!["1".into()], 30, None, "", now).unwrap();
+        assert!(!sleep.missed(at("2026-10-01T09:00:00")));
+
+        // A start with an unreadable time is not switched on at a guess.
+        let broken = Timer {
+            fires_at: "whenever".into(),
+            ..start
+        };
+        assert!(broken.missed(now));
     }
 
     #[test]

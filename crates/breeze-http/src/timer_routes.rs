@@ -307,6 +307,14 @@ pub fn run_once(state: &AppState) {
     let mut fired = 0u64;
     let mut errors = 0u64;
     for timer in &due {
+        // Removed with the rest below, but not fired. See Timer::missed.
+        if timer.missed(now) {
+            eprintln!(
+                "timer {}: a scheduled start for {} was missed while the server was                  not running -- dropped, not switched on late",
+                timer.id, timer.fires_at
+            );
+            continue;
+        }
         let targets: Vec<u64> = if timer.unit_ids.is_empty() {
             state.manager.known_units()
         } else {
