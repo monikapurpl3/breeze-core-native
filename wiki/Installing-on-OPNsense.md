@@ -12,6 +12,12 @@ page under **Services → Breeze Core**.
 > would not install on 26.7, and on 26.1 its buttons and its Save did nothing —
 > and the package now on aspic is the fixed one.
 >
+> **4.2.0 also fixes starting at boot.** Up to 4.1.1 the service ran whenever
+> you pressed Start or saved, but did not come back after the firewall
+> rebooted: OPNsense's boot never read where the plugin wrote its enable
+> setting. On the 4.1.1 plugin, upgrade, or press Start after each reboot. The
+> 4.2.0 plugin has been tested by rebooting the firewall.
+>
 > On **OPNsense 26.1** (FreeBSD 14), only the binary and the package have been
 > checked: the binary runs on FreeBSD 14.3 and the package admits it, but the
 > GUI has not been driven there. A report either way is genuinely useful.

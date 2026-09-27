@@ -4,10 +4,13 @@
 set -e
 
 CONF=/usr/local/etc/breeze-core
-RCCONF=/usr/local/etc/rc.conf.d/breeze_core
+# Where OPNsense's boot looks as well as rc.subr -- see the template's comment.
+RCCONF=/etc/rc.conf.d/breeze_core
 install -d -o breeze -g breeze -m 750 "$CONF"
-# The directory rc.subr reads from, in case nothing else has created it yet.
-install -d -m 755 /usr/local/etc/rc.conf.d
+install -d -m 755 /etc/rc.conf.d
+# Where 4.1.1 and earlier rendered it. rc.subr reads this one AFTER the one in
+# /etc, so a copy left behind would quietly override every later Save.
+rm -f /usr/local/etc/rc.conf.d/breeze_core
 
 /usr/local/sbin/configctl template reload OPNsense/BreezeCore >/dev/null 2>&1 || true
 

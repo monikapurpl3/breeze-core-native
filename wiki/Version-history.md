@@ -39,10 +39,14 @@ app could. On Windows, a new installer that keeps itself up to date.
   beside it. And it **checks for updates** (WinGUp, LGPL-3.0), trusting only
   HTTPS to aspic; there is a Check for updates shortcut, and a check at sign-in
   that can be turned off. See [Installing on Windows](Installing-on-Windows).
-- **The OPNsense plugin** installs on 26.7 as well as 26.1, its Save saves, the
-  service survives an upgrade, and it has Units, Devices and environment tabs.
-  These went out on 26 September as a republished 4.1.1 plugin; 4.2.0 is the
-  first release that carries them. See
+- **The OPNsense plugin starts at boot.** Up to 4.1.1 it wrote its enable
+  setting to `/usr/local/etc/rc.conf.d`, which the service read and OPNsense's
+  boot does not, so it ran on Start and Save but never came back after the
+  firewall rebooted. It is in `/etc/rc.conf.d` now, and tested by rebooting.
+- **The OPNsense plugin** also installs on 26.7 as well as 26.1, its Save
+  saves, the service survives an upgrade, and it has Units, Devices and
+  environment tabs. These went out on 26 September as a republished 4.1.1
+  plugin; 4.2.0 is the first release that carries them. See
   [Installing on OPNsense](Installing-on-OPNsense).
 - aspic's project page lists every package tree, with its key and downloads.
 

@@ -89,13 +89,32 @@ if grep -q 'rc.d/configd restart' packaging/opnsense/build-plugin.sh; then
 else
   bad "post-install does not restart configd - every button fails until a reboot"
 fi
-# The template's target path is the one load_rc_config() will source, and
-# nothing else works if it is 'tidier'.
-if grep -q '^breeze-core.conf:/usr/local/etc/rc.conf.d/breeze_core$' \
+# The template's target path is the one both load_rc_config() and OPNsense's
+# boot (rc.freebsd, which reads only /etc/rc.conf.d) will source. Anywhere else
+# and either the settings never reach the server or the service never starts
+# at boot - 4.1.1 rendered to /usr/local/etc/rc.conf.d, the second case.
+if grep -q '^breeze-core.conf:/etc/rc.conf.d/breeze_core$' \
      "$FILES/usr/local/opnsense/service/templates/OPNsense/BreezeCore/+TARGETS"; then
-  ok "the template renders to /usr/local/etc/rc.conf.d/breeze_core"
+  ok "the template renders to /etc/rc.conf.d/breeze_core, where the boot looks"
 else
-  bad "+TARGETS does not render where load_rc_config() reads"
+  bad "+TARGETS does not render to /etc/rc.conf.d - the service would not start at boot"
+fi
+# And a copy 4.1.1 left in /usr/local/etc/rc.conf.d is removed on install and
+# on every Save: rc.subr reads it after /etc's, so it would override both.
+if grep -q 'rm -f /usr/local/etc/rc.conf.d/breeze_core' packaging/opnsense/build-plugin.sh &&
+   grep -q 'rm -f /usr/local/etc/rc.conf.d/breeze_core' \
+     "$FILES/usr/local/opnsense/scripts/OPNsense/BreezeCore/setup.sh"; then
+  ok "the old rc.conf.d copy is removed on install and on Save"
+else
+  bad "a copy in /usr/local/etc/rc.conf.d would survive and override the settings"
+fi
+# rc.freebsd finds a script's rcvar with grep '^name=' and '^rcvar=', so both
+# must be at the start of a line in the rc script, not indented or computed.
+if grep -q '^name="breeze_core"$' "$FILES/usr/local/etc/rc.d/breeze_core" &&
+   grep -q '^rcvar="breeze_core_enable"$' "$FILES/usr/local/etc/rc.d/breeze_core"; then
+  ok "the rc script's name and rcvar are where rc.freebsd greps for them"
+else
+  bad "rc.freebsd cannot find the rc script's name/rcvar - it would never start at boot"
 fi
 
 head_ "secrets stay out of config.xml"

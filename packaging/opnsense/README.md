@@ -52,8 +52,10 @@ when OPNsense changes its Python.
 - every configd action `reconfigureAction()` can call exists — it does stop,
   `template reload`, then start *or* reload, so a missing `reload` fails only at
   the last step of saving a setting;
-- `+TARGETS` renders to `/usr/local/etc/rc.conf.d/breeze_core`, the path
-  `load_rc_config()` actually sources;
+- `+TARGETS` renders to `/etc/rc.conf.d/breeze_core` — the one directory both
+  `load_rc_config()` and OPNsense's boot read — the install and every Save
+  remove the copy 4.1.1 left in `/usr/local/etc/rc.conf.d`, and the rc script's
+  `name=` and `rcvar=` are where the boot greps for them;
 - the package's ABI is `FreeBSD:1[45]:amd64`, it declares no dependencies, and
   its plist has the whole MVC tree in it;
 - the binary runs inside the FreeBSD 14 root (OPNsense 26.1) **and** on the
@@ -81,6 +83,16 @@ the package; configd was never restarted, so every button failed until a
 reboot; the page could not tell running from stopped; Save saved nothing; and
 an upgrade left the service stopped.
 
+A sixth turned up at 4.2.0, when the VM was **rebooted** for the first time:
+the service did not come back. OPNsense does not run FreeBSD's `rc`; its boot
+starts services from `/usr/local/etc/rc.freebsd`, which decides what is enabled
+by sourcing `/etc/rc.conf`, `/etc/rc.conf.local` and `/etc/rc.conf.d/*` —
+never `/usr/local/etc/rc.conf.d`, where the plugin rendered
+`breeze_core_enable="YES"`. `service breeze_core start` reads both, so every
+Start button and Save worked and nothing looked wrong until a reboot. It now
+renders to `/etc/rc.conf.d`, like OPNsense's own services, and is tested by
+rebooting the firewall.
+
 ## The page
 
 Three tabs under **Services → Breeze Core**:
@@ -88,7 +100,7 @@ Three tabs under **Services → Breeze Core**:
 - **Settings** — enable, listen address, port, and extra environment variables
   (one `NAME=value` per line, validated by the model; the names the plugin sets
   itself are refused). These are in the OPNsense model, so in `config.xml`.
-  configd renders them to `rc.conf.d/breeze_core` and
+  configd renders them to `/etc/rc.conf.d/breeze_core` and
   `/usr/local/etc/breeze-core/service.env`, which `serve.sh` reads line by line
   and exports as data — it never sources it.
 - **Units** — Breeze Core's own `config.json`, edited in place by

@@ -149,9 +149,13 @@ pw groupshow breeze >/dev/null 2>&1 || pw groupadd breeze -g 8420
 pw usershow breeze >/dev/null 2>&1 || pw useradd breeze -u 8420 -g breeze \
     -d /nonexistent -s /usr/sbin/nologin -c "Breeze Core"
 install -d -o breeze -g breeze -m 750 /usr/local/etc/breeze-core
-# Where configd renders breeze_core - and the only place besides /etc that
-# load_rc_config() will source it from.
-install -d -m 755 /usr/local/etc/rc.conf.d
+# Where configd renders breeze_core: /etc/rc.conf.d, the one directory both
+# rc.subr and OPNsense's boot (rc.freebsd) read. Up to 4.1.1 it went to
+# /usr/local/etc/rc.conf.d, which the boot never reads, so the service did not
+# come back after a reboot. That old copy goes, because rc.subr reads it after
+# /etc's and it would override every later Save.
+install -d -m 755 /etc/rc.conf.d
+rm -f /usr/local/etc/rc.conf.d/breeze_core
 # What opnsense/plugins' Mk/plugins.mk appends to every plugin's +POST_INSTALL,
 # in its order (Templates/actions.d, models, configure, templates). configd
 # reads actions.d only when it starts: without the restart, every Services >
