@@ -4,11 +4,11 @@ The 4.x line. For 3.x and earlier, see the Python project's own
 [version history](https://github.com/monikapurpl3/breeze-core/wiki/Version-history) —
 everything published for it stays where it is and keeps installing.
 
-## 4.2.0 — not released yet
+## 4.2.0
 
 Timers switch a unit **on** as well as off: "on in 3 days at 07:30", beside
 "off in 45 minutes". And the web panel sets both at last; until now only the
-app could.
+app could. On Windows, a new installer that keeps itself up to date.
 
 **What changed**
 
@@ -32,6 +32,19 @@ app could.
 - **The Breeze app, 2.3.0**, has the start in its timer sheet.
 - `timers.json` from 4.1 reads and writes unchanged. Only a start is stored
   with a `kind`.
+- **The Windows installer asks Simple or Advanced**, and on an upgrade whether
+  to keep the settings or review them. It **downloads NSSM** during setup,
+  checked against pinned hashes, instead of carrying it — antivirus products
+  flag installers that embed NSSM — so an offline machine needs the zip put
+  beside it. And it **checks for updates** (WinGUp, LGPL-3.0), trusting only
+  HTTPS to aspic; there is a Check for updates shortcut, and a check at sign-in
+  that can be turned off. See [Installing on Windows](Installing-on-Windows).
+- **The OPNsense plugin** installs on 26.7 as well as 26.1, its Save saves, the
+  service survives an upgrade, and it has Units, Devices and environment tabs.
+  These went out on 26 September as a republished 4.1.1 plugin; 4.2.0 is the
+  first release that carries them. See
+  [Installing on OPNsense](Installing-on-OPNsense).
+- aspic's project page lists every package tree, with its key and downloads.
 
 ## 4.1.1
 

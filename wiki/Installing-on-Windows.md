@@ -2,19 +2,18 @@
 
 A guided installer that registers a hardened Windows service. About a megabyte.
 
-**[Breeze-Core-Setup-4.1.1.exe](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.1.1.exe)**
-· [sha256](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.1.1.exe.sha256)
+**[Breeze-Core-Setup-4.2.0.exe](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.2.0.exe)**
+· [sha256](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.2.0.exe.sha256)
 
 x86-64 only.
 
-> **From 4.1.2 the installer downloads two small helpers while it runs** —
-> NSSM, which runs the server as a service, and the updater — each checked
-> against a fixed checksum. So a first install needs the internet, or see
-> [Installing offline](#installing-offline). The 4.1.1 installer above still
-> carries NSSM inside and needs no network at all. The sections marked
-> **(4.1.2)** below describe the newer installer.
+> **The installer downloads two small helpers while it runs** — NSSM, which
+> runs the server as a service, and the updater — each checked against a fixed
+> checksum. So a first install needs the internet, or see
+> [Installing offline](#installing-offline). Installers up to 4.1.1 carried NSSM
+> inside instead.
 
-## Simple or Advanced (4.1.2)
+## Simple or Advanced
 
 The installer asks first.
 
@@ -49,8 +48,8 @@ by default.
 - adds a **LAN-only inbound firewall rule** for its port, 8420 unless chosen
   otherwise;
 - adds Start-menu shortcuts: **Pair AC units**, **Diagnose**, **Edit service
-  (nssm)**, **Set up Caddy reverse proxy**, **Uninstall** and, from 4.1.2,
-  **Check for updates**.
+  (nssm)**, **Set up Caddy reverse proxy**, **Uninstall** and **Check for
+  updates**.
 
 **Caddy**, only if you tick the box — for public HTTPS. See below.
 
@@ -58,10 +57,10 @@ It is unsigned, so SmartScreen will object. The published SHA-256 is what you
 have to go on; check it before running:
 
 ```powershell
-Get-FileHash .\Breeze-Core-Setup-4.1.1.exe -Algorithm SHA256
+Get-FileHash .\Breeze-Core-Setup-4.2.0.exe -Algorithm SHA256
 ```
 
-## Why it downloads NSSM (4.1.2)
+## Why it downloads NSSM
 
 Antivirus products flag installers that carry NSSM, because malware uses it to
 keep itself running, so its bytes inside a setup program look like a threat.
@@ -82,7 +81,7 @@ from [aspic's mirror](https://aspic.salataputarica.hr.eu.org/windows/vendor/)),
 put it in the same folder as the installer, and run the installer. It is
 checked against the same checksum.
 
-## Updates (4.1.2)
+## Updates
 
 The installer adds a **Check for updates** shortcut and — on by default — a
 quiet check a few minutes after an administrator signs in. Both ask aspic
@@ -130,7 +129,7 @@ Then open `http://<this machine's LAN address>:8420` and pair a browser —
 
 ### Changing the address or the port
 
-- **(4.1.2)** Run the installer again and choose **Review and change the
+- Run the installer again and choose **Review and change the
   settings**; or, from an elevated PowerShell, change just what you name and
   keep the rest:
 
@@ -155,8 +154,8 @@ Stop-Service BreezeCore
 Get-Content "$env:ProgramData\breeze-core\logs\service.log" -Tail 40 -Wait
 ```
 
-The service is supervised by **NSSM**, installed next to the executable. The
-4.1.1 installer carries it; from 4.1.2 setup downloads it, as described above.
+The service is supervised by **NSSM**, installed next to the executable, which
+setup downloads as described above.
 
 ## Public HTTPS, with Caddy
 
@@ -205,8 +204,8 @@ bug for a while. Read
 ## Uninstalling
 
 Add/Remove Programs, or the uninstaller in the install directory. It removes
-the service, the firewall rules, the program files and, from 4.1.2, the updater
-and its sign-in check.
+the service, the firewall rules, the program files, the updater and its
+sign-in check.
 
 **`%ProgramData%\breeze-core` is kept.** A paired V3 unit's token and key were
 issued once by a cloud that no longer hands them out, so nothing in the

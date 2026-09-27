@@ -47,7 +47,7 @@ download dependencies from PyPI, and most of its support burden was one of
 those going wrong on somebody else's machine. This one installs a single
 executable with the panel compiled into it.
 
-Up to 4.1.1 it also carried NSSM and needed no network at all. **From 4.1.2 it
+Up to 4.1.1 it also carried NSSM and needed no network at all. **From 4.2.0 it
 downloads NSSM during setup instead**, because antivirus products flag
 installers that embed it (malware uses NSSM to persist, so its bytes inside a
 setup program read as a threat). `install-service.ps1 -Action FetchNssm` tries,
