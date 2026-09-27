@@ -65,7 +65,7 @@ X-Breeze-Signature:     <base64url Ed25519 over the canonical string>
 | `DELETE` | `/api/programs/{id}` | full | delete |
 | `POST` | `/api/programs/{id}/apply` | full | run it now |
 | `GET` | `/api/programs/status` | full | scheduler health |
-| `GET` | `/api/timers` | full | pending one-shot timers |
+| `GET` | `/api/timers` | full | pending sleep timers; `?kind=all` for starts too |
 | `POST` | `/api/timers` | full | create one |
 | `DELETE` | `/api/timers/{id}` | full | cancel |
 | `GET` | `/api/timers/status` | full | runner health |
@@ -180,7 +180,7 @@ Two things to know:
 
 ## Timers
 
-You ask for **minutes**, never a time of day.
+A client never sends a moment. A sleep timer is asked for in **minutes**:
 
 ```sh
 curl -X POST http://server:8420/api/timers \
@@ -189,15 +189,27 @@ curl -X POST http://server:8420/api/timers \
   -d '{"unit_ids": ["153931628470980"], "minutes": 45}'
 ```
 
+and, since 4.2.0, a scheduled start as **days from the server's today** and a
+time on the **server's** clock:
+
+```sh
+  -d '{"unit_ids": ["153931628470980"], "days": 3, "at": "07:30"}'
+```
+
 The server computes the moment from its own clock and every response carries
 `seconds_remaining`, computed server-side, so a client counts down from that
 rather than from its own idea of the time. That is deliberate: the alternative
 puts the burden of knowing the server's timezone on every client, when the phone
 may be in another zone and its clock may be wrong.
 
-`settings` defaults to switching the unit off, but it is a full control payload,
-so "switch to eco in an hour" needs no second feature. More:
-[Timers](Timers).
+A sleep timer's `settings` defaults to switching the unit off, but it is a full
+control payload, so "switch to eco in an hour" needs no second feature. A start
+only switches the unit on, up to 30 days ahead. A unit has at most one of each,
+and every timer says which it is in `kind`.
+
+`GET /api/timers` lists only sleep timers unless it asks for `?kind=all`, so a
+client from before 4.2.0 never mistakes a start for a sleep timer. Starts are
+advertised as the `timer_at` feature. More: [Timers](Timers).
 
 ## Diagnostics
 

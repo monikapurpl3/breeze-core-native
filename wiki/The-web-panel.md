@@ -76,9 +76,17 @@ Two consequences worth knowing:
 
 The panel is a full editor for both.
 
-**Timers** are one-shot: "off in 45 minutes". You ask in *minutes*, never a
-time of day, and the countdown comes from the server so a phone in another
-timezone with a wrong clock still counts down correctly. See [Timers](Timers).
+**Timers** are one-shot. Since 4.2.0 each unit card has a **timer** button,
+which opens a dialog with two halves: **Switch off** — the presets from 15
+minutes to 2 hours, or any number of minutes up to a day — and **Switch on
+later** — a day, from today to 30 days ahead, and a time. A pending timer shows
+on the card as a chip, *off in 40 min* or *on Tue 29 Sep at 07:30*, with its own
+× to cancel it. A unit can have one of each.
+
+The day and time are the **server's**, and so is the countdown, so a browser in
+another timezone with a wrong clock still shows the right thing. Setting a start
+for a time already gone today says so, in the server's words. See
+[Timers](Timers).
 
 **Programs** come in three kinds — favourites, schedules and curves — and the
 scheduler that runs them lives in the server, so they fire whether or not any

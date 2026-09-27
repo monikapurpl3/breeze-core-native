@@ -4,6 +4,35 @@ The 4.x line. For 3.x and earlier, see the Python project's own
 [version history](https://github.com/monikapurpl3/breeze-core/wiki/Version-history) —
 everything published for it stays where it is and keeps installing.
 
+## 4.2.0 — not released yet
+
+Timers switch a unit **on** as well as off: "on in 3 days at 07:30", beside
+"off in 45 minutes". And the web panel sets both at last; until now only the
+app could.
+
+**What changed**
+
+- **A scheduled start.** `POST /api/timers` takes `{"days": 3, "at": "07:30"}`:
+  on, on the server's date plus `days`, at that time on the server's clock, up
+  to 30 days ahead. It only switches the unit on, in the mode and at the
+  temperature it last had. A time already gone today is refused, and says so.
+  Advertised as the `timer_at` feature. See [Timers](Timers).
+- **One of each per unit.** A new start replaces the unit's start, a new sleep
+  timer its sleep timer, and neither touches the other. Every timer says which
+  it is in `kind`.
+- **`GET /api/timers` lists only sleep timers** unless it asks for
+  `?kind=all`. An app from before this would have shown a start three days out
+  as "switching off in 53 h".
+- **A start the server was down for is dropped, not fired late.** More than 15
+  minutes past its moment, it is removed with a line in the log, so "on at
+  07:30" does not become "on at 14:00" in an empty house. A late sleep timer
+  still fires, as before.
+- **The web panel**: a timer button on every unit card, a dialog with both
+  halves, and a chip for each pending timer with its own cancel.
+- **The Breeze app, 2.3.0**, has the start in its timer sheet.
+- `timers.json` from 4.1 reads and writes unchanged. Only a start is stored
+  with a `kind`.
+
 ## 4.1.1
 
 The air conditioner's refusals are visible. A unit that ignores part of a
