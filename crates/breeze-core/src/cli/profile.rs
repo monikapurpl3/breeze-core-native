@@ -201,10 +201,8 @@ pub fn enrol_with(base_url: String, api_key: String) -> Result<Profile, String> 
 /// The API key out of the server's own config, when this is running on the
 /// server and the file is readable.
 fn key_from_config() -> Option<String> {
-    let path = std::env::var("AC_CONFIG").unwrap_or_else(|_| {
-        let dir = std::env::var("AC_CONFIG_DIR").unwrap_or_else(|_| "/etc/breeze-core".into());
-        format!("{dir}/config.json")
-    });
+    let path = std::env::var("AC_CONFIG")
+        .unwrap_or_else(|_| format!("{}/config.json", breeze_store::config_dir()));
     let text = std::fs::read_to_string(path).ok()?;
     let value: serde_json::Value = serde_json::from_str(&text).ok()?;
     let key = value.get("api_key")?.as_str()?;

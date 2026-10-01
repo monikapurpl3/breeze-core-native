@@ -60,7 +60,7 @@ impl Settings {
     /// Read from the environment, using the same variable names as Breeze Core so
     /// an existing unit file or container keeps working untouched.
     pub fn from_env() -> Self {
-        let dir = std::env::var("AC_CONFIG_DIR").unwrap_or_else(|_| "/etc/breeze-core".into());
+        let dir = breeze_store::config_dir();
         let in_dir = |name: &str| PathBuf::from(&dir).join(name);
         Self {
             config_path: env_path("AC_CONFIG", in_dir("config.json")),

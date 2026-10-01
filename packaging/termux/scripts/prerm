@@ -1,0 +1,13 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# On removal (not upgrade), stop the service and leave it switched off.
+#
+# The run script goes with the package, but the directory stays (it holds
+# runsv's supervise/ state, which dpkg does not own), and runsvdir would keep
+# trying to start a service with nothing to run. `down` stops that.
+set -e
+SV=/data/data/com.termux/files/usr/var/service/breeze-core
+if [ "${1:-}" = remove ]; then
+    : > "$SV/down" 2>/dev/null || true
+    sv force-stop "$SV" >/dev/null 2>&1 || true
+fi
+exit 0

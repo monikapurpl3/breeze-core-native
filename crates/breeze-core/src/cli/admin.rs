@@ -53,9 +53,11 @@ impl ClientOpts {
             )),
             // Said plainly, with both ways out: on the server the config is
             // right there, and off it enrolling is the answer.
-            None => Err("no API key: pass --config /etc/breeze-core/config.json, \
-                 or run `breeze-core login` to enrol this machine"
-                .to_string()),
+            None => Err(format!(
+                "no API key: pass --config {}/config.json, \
+                 or run `breeze-core login` to enrol this machine",
+                breeze_store::DEFAULT_CONFIG_DIR
+            )),
         }
     }
 

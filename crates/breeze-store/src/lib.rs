@@ -40,6 +40,23 @@ pub use programs::{
     ProgramSpec, PROGRAM_KINDS,
 };
 pub use store::{load, save, to_json, Mode, StoreError};
+
+/// Where the four store files live when `AC_CONFIG_DIR` does not say.
+///
+/// `/etc/breeze-core` everywhere but Android. There, no app may write to
+/// `/etc`, and Termux keeps its whole userland under its own prefix, so a
+/// server with the usual default would refuse to start until told where its
+/// config is -- and so would every CLI command that reads it.
+#[cfg(not(target_os = "android"))]
+pub const DEFAULT_CONFIG_DIR: &str = "/etc/breeze-core";
+#[cfg(target_os = "android")]
+pub const DEFAULT_CONFIG_DIR: &str = "/data/data/com.termux/files/usr/etc/breeze-core";
+
+/// The store directory: `AC_CONFIG_DIR`, or [`DEFAULT_CONFIG_DIR`]. The server
+/// and the CLI resolve it through here so they cannot disagree.
+pub fn config_dir() -> String {
+    std::env::var("AC_CONFIG_DIR").unwrap_or_else(|_| DEFAULT_CONFIG_DIR.into())
+}
 pub use timers::{
     build_start_timer, build_timer, now_local, TimerError, MAX_MINUTES, MAX_START_DAYS, MAX_UNITS,
     START_GRACE_MINUTES,

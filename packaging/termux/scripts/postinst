@@ -1,0 +1,36 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Post-install: restart a running service on upgrade, or print the quickstart
+# on a first install.
+set -e
+P=/data/data/com.termux/files/usr
+SV="$P/var/service/breeze-core"
+
+chmod 700 "$P/etc/breeze-core" 2>/dev/null || true
+chmod 600 "$P/etc/breeze-core/breeze-core.env" 2>/dev/null || true
+
+# dpkg passes "configure" with the old version in $2 on an upgrade.
+if [ "${1:-}" = configure ] && [ -n "${2:-}" ]; then
+    # try-restart: only if it is running, so a stopped service stays stopped.
+    sv try-restart "$SV" >/dev/null 2>&1 || true
+    exit 0
+fi
+
+cat <<BANNER
+
+  Breeze Core installed.
+
+  1. Pair your AC units (writes $P/etc/breeze-core/config.json):
+         breeze-core pair
+  2. For the rest of the LAN to reach it, set this phone's Wi-Fi address in
+         $P/etc/breeze-core/breeze-core.env   (BREEZE_HOST=...)
+  3. Start it, now and every time Termux starts:
+         sv-enable breeze-core
+     (If termux-services was installed just now, restart Termux first.)
+  4. Keep Android from stopping it: run termux-wake-lock, and use the
+     Termux:Boot add-on to start it after a reboot.
+
+  Then open http://<BREEZE_HOST>:8420 and pair a browser or the app.
+  Docs: https://github.com/monikapurpl3/breeze-core-native/wiki/Installing-on-Termux
+
+BANNER
+exit 0

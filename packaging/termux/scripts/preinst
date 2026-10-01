@@ -1,0 +1,16 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Switch the service off BEFORE its directory has a run script in it.
+#
+# runsvdir scans $PREFIX/var/service every few seconds and starts whatever it
+# finds there. Unpacked without a `down` file, breeze-core would start at once,
+# with no config.json yet, and restart in a loop until someone paired a unit.
+# Creating `down` here, ahead of the unpack, closes that window. It is made only
+# on a first install: on an upgrade the user's sv-enable / sv-disable choice is
+# theirs and stays as it is.
+set -e
+SV=/data/data/com.termux/files/usr/var/service/breeze-core
+if [ "$1" = install ] && [ ! -e "$SV/run" ]; then
+    mkdir -p "$SV"
+    : > "$SV/down"
+fi
+exit 0

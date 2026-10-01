@@ -1,0 +1,16 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Config, device tokens, programs and timers are KEPT, even on purge, as by
+# every other package: a paired V3 unit's credentials cannot be issued again.
+# A purge removes only what the service manager left behind.
+set -e
+P=/data/data/com.termux/files/usr
+if [ "${1:-}" = purge ]; then
+    rm -rf "$P/var/service/breeze-core" "$P/var/log/sv/breeze-core"
+fi
+if [ "${1:-}" = remove ] || [ "${1:-}" = purge ]; then
+    if [ -d "$P/etc/breeze-core" ]; then
+        echo "breeze-core: kept $P/etc/breeze-core (config + device tokens)." >&2
+        echo "breeze-core: delete it by hand for a full wipe: rm -rf $P/etc/breeze-core" >&2
+    fi
+fi
+exit 0

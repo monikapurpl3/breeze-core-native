@@ -47,8 +47,7 @@ pub fn default_config_path() -> String {
     if let Ok(path) = std::env::var("AC_CONFIG") {
         return path;
     }
-    let dir = std::env::var("AC_CONFIG_DIR").unwrap_or_else(|_| "/etc/breeze-core".into());
-    format!("{dir}/config.json")
+    format!("{}/config.json", breeze_store::config_dir())
 }
 
 pub fn run(options: Options) -> Result<(), String> {

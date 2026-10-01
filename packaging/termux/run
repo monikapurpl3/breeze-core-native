@@ -1,0 +1,20 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# Breeze Core under termux-services (runit). Switch it on with
+#     sv-enable breeze-core
+#
+# The same settings file as every other package, at Termux's prefix. The store
+# files need no variables: on Android the binary already looks for them in
+# $PREFIX/etc/breeze-core.
+P=/data/data/com.termux/files/usr
+BREEZE_HOST=127.0.0.1
+BREEZE_PORT=8420
+BREEZE_OPTS=
+if [ -r "$P/etc/breeze-core/breeze-core.env" ]; then
+    set -a
+    . "$P/etc/breeze-core/breeze-core.env"
+    set +a
+fi
+exec 2>&1
+# BREEZE_OPTS is a list of flags, so it is split on purpose.
+# shellcheck disable=SC2086
+exec "$P/bin/breeze-core" serve --host "$BREEZE_HOST" --port "$BREEZE_PORT" $BREEZE_OPTS

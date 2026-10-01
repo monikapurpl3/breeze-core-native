@@ -106,6 +106,24 @@ fn os_facts() -> serde_json::Value {
             }
         }
     }
+    // Android has no /etc/os-release. Its release is a system property, and
+    // getprop is the one reader of those that needs no libc binding.
+    #[cfg(target_os = "android")]
+    if pretty.is_none() {
+        let release = std::process::Command::new("/system/bin/getprop")
+            .arg("ro.build.version.release")
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        id = Some("android".into());
+        pretty = Some(match &release {
+            Some(r) => format!("Android {r}"),
+            None => "Android".into(),
+        });
+        version = release;
+    }
     // The reference's field NAMES, because the panel reads them by name: it
     // shows blanks for `distro_id` if the server calls it `distribution_id`.
     // `family`/`platform`/`arch` stay as additions -- they cost nothing and a
@@ -156,7 +174,11 @@ fn kernel_version() -> Option<String> {
 /// project exists: a static musl build behaves differently from a glibc one,
 /// and "which libc" is the first question when a binary refuses to run.
 fn libc_description() -> &'static str {
-    if cfg!(target_env = "musl") {
+    // Android first: its target_env is empty, so it would otherwise land on
+    // "unknown" for the one libc every Android process is guaranteed to have.
+    if cfg!(target_os = "android") {
+        "bionic"
+    } else if cfg!(target_env = "musl") {
         "musl (static)"
     } else if cfg!(target_env = "gnu") {
         "glibc"
@@ -204,8 +226,20 @@ fn init_facts() -> serde_json::Value {
     ))]
     return facts("rc.d", "service breeze_core status");
 
+    // Termux has no init system of its own; termux-services runs a runsv per
+    // service under its prefix, and runsv leaves `supervise/` behind once it
+    // has run this one. Started from a shell instead, nothing supervises it.
+    #[cfg(target_os = "android")]
+    {
+        if Path::new("/data/data/com.termux/files/usr/var/service/breeze-core/supervise").is_dir() {
+            return facts("termux-services", "sv status breeze-core");
+        }
+        facts("none", "started from a shell, not by termux-services")
+    }
+
     #[cfg(all(
         unix,
+        not(target_os = "android"),
         not(target_os = "macos"),
         not(target_os = "freebsd"),
         not(target_os = "openbsd"),

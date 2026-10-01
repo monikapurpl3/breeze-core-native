@@ -1,0 +1,104 @@
+# nfpm config for the Termux package: the program packaging/nfpm/ ships, laid
+# out under Termux's prefix and run by termux-services instead of an init
+# system.
+#
+#   BC_VERSION  package version (4.3.0)
+#   BC_RELEASE  package release, as in packaging/nfpm/nfpm.yaml
+#   BC_ARCH     Termux's architecture name: aarch64 | arm | x86_64
+#
+# Three things differ from every other Linux package, all because Termux is an
+# app and not a distribution:
+#
+#   * Everything lives under /data/data/com.termux/files/usr. There is no /usr,
+#     no /etc and no /bin that an app may write to.
+#   * No service account. Android gives Termux one user id, and everything the
+#     package installs and runs is that user's.
+#   * The maintainer scripts start with Termux's own shell. Android has no
+#     /bin/sh, so dpkg cannot run a script that asks for it.
+
+name: breeze-core
+arch: ${BC_ARCH}
+platform: linux
+version: ${BC_VERSION}
+version_schema: none
+release: ${BC_RELEASE}
+section: utils
+priority: optional
+maintainer: monikapurpl3 <monikapurpl3@users.noreply.github.com>
+vendor: Breeze Core
+homepage: https://github.com/monikapurpl3/breeze-core
+license: AGPL-3.0-or-later
+description: |
+  Self-hosted, LAN-first control for Midea air conditioners.
+  REST API and web control panel with device-pairing authentication,
+  server-side schedules and temperature curves, built for Termux. Run it
+  as a service with termux-services: sv-enable breeze-core.
+
+# The service is a runit directory, and runit's `sv` is how the scripts below
+# start and stop it.
+depends:
+  - termux-services
+
+contents:
+  - src: /stage/breeze-core
+    dst: /data/data/com.termux/files/usr/bin/breeze-core
+    file_info:
+      mode: 0755
+
+  # termux-services runs one runsv per directory here. The `down` file that
+  # keeps it from starting before it is configured is made by preinst, not
+  # shipped: a shipped file is restored on every upgrade, which would switch
+  # the service off each time someone updated.
+  - src: packaging/termux/run
+    dst: /data/data/com.termux/files/usr/var/service/breeze-core/run
+    file_info:
+      mode: 0755
+  # svlogger is termux-services' own logger: the log ends up in
+  # $PREFIX/var/log/sv/breeze-core/current.
+  - src: /data/data/com.termux/files/usr/share/termux-services/svlogger
+    dst: /data/data/com.termux/files/usr/var/service/breeze-core/log/run
+    type: symlink
+
+  # Kept on upgrade and on removal, as everywhere else: a V3 unit's token
+  # cannot be issued again. 0700 because nobody else on the phone should read
+  # it, and nobody else needs to.
+  - dst: /data/data/com.termux/files/usr/etc/breeze-core
+    type: dir
+    file_info:
+      mode: 0700
+  - src: packaging/nfpm/breeze-core.env
+    dst: /data/data/com.termux/files/usr/etc/breeze-core/breeze-core.env
+    type: config|noreplace
+    file_info:
+      mode: 0600
+
+  - src: README.md
+    dst: /data/data/com.termux/files/usr/share/doc/breeze-core/README.md
+    file_info:
+      mode: 0644
+  - src: LICENSE
+    dst: /data/data/com.termux/files/usr/share/doc/breeze-core/LICENSE
+    file_info:
+      mode: 0644
+
+scripts:
+  preinstall: packaging/termux/scripts/preinst
+  postinstall: packaging/termux/scripts/postinst
+  preremove: packaging/termux/scripts/prerm
+  postremove: packaging/termux/scripts/postrm
+
+# xz, not the zstd every other deb here uses, because xz is what Termux's own
+# packages are: it is the one format its apt is exercised with on every phone.
+# Measured, not assumed: on 32-bit arm Termux, apt rejects a zstd .deb AND a
+# gzip one ("Could not read meta data from …") while installing the same
+# package as xz -- even though dpkg -i accepts the zstd one, so `dpkg-deb -f`
+# passing proves nothing about apt. Whether that is the emulator or a real
+# 32-bit phone, matching Termux's own packages sidesteps it on all of them.
+#
+# `arch` again, verbatim: left to itself nfpm translates aarch64 and x86_64 into
+# Debian's arm64 and amd64, which Termux's dpkg refuses as a foreign
+# architecture. nfpm does not expand variables in this field, so the build
+# script substitutes the placeholder into a copy of this file.
+deb:
+  arch: "@TERMUX_ARCH@"
+  compression: xz

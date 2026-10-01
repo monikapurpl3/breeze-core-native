@@ -53,3 +53,7 @@ packaging/windows/wingup/breeze.patch -text
 # Checked with `sha256sum -c` on Linux, where a CR would become part of the
 # file name it looks for.
 packaging/windows/wingup/SHA256SUMS text eol=lf
+
+# The Termux package: its run script and maintainer scripts are executed by
+# Termux's shell on a phone, and none of them has an extension to match on.
+packaging/termux/**     text eol=lf
