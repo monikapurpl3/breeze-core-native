@@ -8,14 +8,86 @@ this page covers both.
 
 ## What you need
 
-- **Rust**, a recent stable. There is no `rust-toolchain.toml` pinning a
-  version, and nothing here uses a nightly feature.
+- **Rust 1.88 or newer**, the oldest the dependencies accept (the Unicode
+  crates `idna` uses). There is no `rust-toolchain.toml` pinning a version, and
+  nothing here uses a nightly feature.
 - **A C linker**, which your platform's usual build tools provide.
 - **Nothing else.** No Python, no Node, no system libraries to find, no
   `pkg-config`. The panel is generated at build time by a build script that
   walks `static/`, and the TLS roots are compiled in.
 
-## Build
+## As a package, from your package manager
+
+If you'd rather build it yourself but still have a package your system
+manages, aspic serves the **source** too:
+
+- an SRPM for `rpmbuild`;
+- a Debian source package for `dpkg-buildpackage`;
+- a `makepkg` source tarball for Arch.
+
+Each builds **the same package** as the binary one in the repository: the same
+name, files, `breeze` account and install scripts, so either replaces the
+other. The only difference is the binary: built by your distribution's Rust and
+linked against its glibc, where the repository's is static musl.
+
+All three build **offline**. Every crate the program needs is vendored in the
+source package, so nothing is fetched from crates.io during the build.
+
+Add [the repository](Installing-from-packages) first. Then:
+
+**Fedora / RHEL / Alma / Rocky** (the `[aspic-source]` entry is already in
+`aspic.repo`, switched off):
+
+```sh
+dnf download --source breeze-core       # dnf 5: dnf download --srpm breeze-core
+sudo dnf builddep ./breeze-core-*.src.rpm
+rpmbuild --rebuild ./breeze-core-*.src.rpm
+sudo dnf install ~/rpmbuild/RPMS/*/breeze-core-*.rpm
+```
+
+**Debian / Ubuntu.** Add `deb-src` to the same entry: `Types: deb deb-src` in
+a `.sources` file, or a second `deb-src` line in a `.list` file. Then:
+
+```sh
+sudo apt update
+apt source breeze-core
+sudo apt build-dep breeze-core
+cd breeze-core-*/ && dpkg-buildpackage -b -us -uc
+sudo apt install ../breeze-core_*.deb
+```
+
+**Arch.** pacman has no source mode, so this is a signed tarball from
+`/arch/sources/`; take the newest from the
+[listing](https://aspic.salataputarica.hr.eu.org/arch/sources/):
+
+```sh
+curl -O https://aspic.salataputarica.hr.eu.org/arch/sources/breeze-core-<ver>-<rel>.src.tar.gz
+curl -O https://aspic.salataputarica.hr.eu.org/arch/sources/breeze-core-<ver>-<rel>.src.tar.gz.sig
+gpg --verify breeze-core-*.src.tar.gz.sig       # with the aspic key imported
+tar -xf breeze-core-*.src.tar.gz && cd breeze-core
+makepkg -si
+```
+
+**Which distributions have a new enough Rust of their own** (checked
+2026-10-01):
+
+| | Rust | |
+|---|---|---|
+| Fedora 44 · Arch | 1.98 | ✅ |
+| Alma / RHEL / Rocky 8, 9 and 10 | 1.92 | ✅ |
+| Ubuntu 26.04 | 1.93 | ✅ |
+| Ubuntu 24.04 | 1.75, plus `rustc-1.89` / `rustc-1.91` | ✅ `apt build-dep` picks the versioned one |
+| **Debian 13** | 1.85 | ❌ install Rust with [rustup](https://rustup.rs), then `dpkg-buildpackage -b -d` |
+| Debian 12 | 1.63 | ❌ the same |
+
+`-d` tells `dpkg-buildpackage` not to look for Debian's own `rustc`, because
+rustup's is in your `$PATH` instead.
+
+The source packages are rebuilt from scratch for every release, in clean Alma 9,
+Fedora 44, Ubuntu 26.04, Ubuntu 24.04 and Arch containers. Each rebuild runs the
+whole test suite and checks the package against the binary one.
+
+## Building it by hand
 
 ```sh
 git clone https://github.com/monikapurpl3/breeze-core-native

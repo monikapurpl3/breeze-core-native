@@ -16,6 +16,7 @@ packaging/build-binaries.sh                  one static executable per target
 packaging/nfpm/build-packages.sh             deb, rpm, pacman, apk, ipk
 packaging/xbps/build-xbps.sh                 Void
 packaging/termux/build-packages.sh           Termux (Android, with the NDK)
+packaging/source/build-source.sh             SRPM, Debian source, Arch source
 packaging/portage/build-overlay.sh           Gentoo
 packaging/container/build-images.sh          the two images
 packaging/bsd/build-{free,net,open}bsd.sh    on real BSD machines
@@ -67,6 +68,7 @@ to the fix:
 ```sh
 BC_RELEASE=2          ./packaging/nfpm/build-packages.sh
 BC_RELEASE=2          ./packaging/termux/build-packages.sh
+BC_RELEASE=2          ./packaging/source/build-source.sh
 BC_XBPS_REVISION=2    ./packaging/xbps/build-xbps.sh
 BC_PORTAGE_REVISION=1 ./packaging/portage/build-overlay.sh   # Gentoo -r1
 ```
@@ -118,6 +120,10 @@ Alongside it:
 - `packaging/termux/verify-termux.sh` — 39 checks per architecture in
   termux-docker (x86_64 natively, aarch64 and arm under QEMU): installed with
   apt, run under termux-services, paired, upgraded, removed and purged;
+- `packaging/source/verify-source.sh` — every source package rebuilt in a clean
+  container with that distribution's own Rust (Alma 9, Fedora 44, Ubuntu 26.04
+  and 24.04, Arch, and Debian 13 with rustup), tests included, and its files
+  compared with the binary package's;
 - `packaging/xbps/verify-xbps.sh` — 38 checks in a Void container, ending in a
   live HTTP request to a server running as the service account;
 - `packaging/portage/verify-portage.sh` — a real `emerge`, plus the ebuild's
@@ -155,6 +161,7 @@ cargo test --workspace
 ./packaging/nfpm/build-packages.sh
 ./packaging/xbps/build-xbps.sh
 ./packaging/termux/build-packages.sh && ./packaging/termux/verify-termux.sh
+./packaging/source/build-source.sh && ./packaging/source/verify-source.sh   # a committed tree
 ./packaging/portage/build-overlay.sh
 ./packaging/container/build-images.sh
 # and, on the real machines

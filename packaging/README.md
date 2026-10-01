@@ -102,6 +102,17 @@ repacks them with `dpkg-deb` as xz, because nfpm always gzips `control.tar` and
 in termux-docker. They go to their own apt repository, `/termux`, signed with
 the same key as `/deb`.
 
+## Source packages
+
+`packaging/source/build-source.sh` makes the SRPM, the Debian source package
+and the Arch `makepkg --allsource` tarball from one `git archive` of the commit
+and one `cargo vendor` tarball. Every recipe pastes in `packaging/nfpm/scripts/`,
+so a rebuilt package is the same package as the binary one. It refuses a dirty
+tree, because the tarball is the commit. `verify-source.sh` rebuilds each one
+in clean containers and diffs its file list against the nfpm package's.
+build-repo.sh signs them into `/rpm/SRPMS`, the apt `Sources` index and
+`/arch/sources`.
+
 ## The BSDs
 
 `build-binaries.sh` does not build them: Zig bundles no FreeBSD, NetBSD or

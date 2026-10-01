@@ -63,7 +63,10 @@ else
   docker network create "$NET" >/dev/null 2>&1 || true
   docker rm -f "$HOST" >/dev/null 2>&1 || true
   docker run -d --name "$HOST" --network "$NET" \
-    -v "$MOUNT/$TREE:/usr/share/nginx/html:ro" nginx:alpine >/dev/null
+    -v "$MOUNT/$TREE:/usr/share/nginx/html:ro" nginx:alpine \
+    sh -c "sed -i 's#location / {#location / { autoindex on;#' /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'" >/dev/null
+  # Directory listings on, as site/aspic.conf has them: OpenBSD's pkg_add reads
+  # its index out of one, and the Arch source case finds its tarball in another.
   echo "serving $TREE as $BASE"
 fi
 
@@ -336,6 +339,91 @@ run_case gentoo alpine:3.20 '
   git -C /tmp/aspic pull -q 2>/tmp/err2 || {
     echo "   !! pull failed"; sed "s/^/      /" /tmp/err2; exit 1; }
   echo "   pulled"
+'
+
+# --- source packages ---------------------------------------------------------
+# The source, fetched through each package manager from the signed tree, and
+# built with that distribution's own Rust. Tests are skipped in these builds
+# (packaging/source/verify-source.sh runs them); what is checked here is the
+# fetch, its signature, the build dependencies and the result. Each case
+# compiles the whole program, so these take minutes.
+
+run_case ubuntu-src ubuntu:26.04 '
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get -qq update >/dev/null && apt-get -qq install -y curl gnupg dpkg-dev >/dev/null
+  curl -fsSL "$BASE/aspic.asc" | gpg --dearmor -o /usr/share/keyrings/aspic.gpg
+  printf "Types: deb deb-src\nURIs: %s/deb\nSuites: stable\nComponents: main\nSigned-By: /usr/share/keyrings/aspic.gpg\n" \
+    "$BASE" > /etc/apt/sources.list.d/aspic.sources
+  apt-get -qq update >/dev/null
+
+  echo "-- apt source fetches it, and dpkg-source checks the .dsc signature"
+  # dpkg-source verifies against the keys in trustedkeys.gpg, so trust the
+  # repository key there first; without it, it only warns.
+  gpg --batch --quiet --no-default-keyring --keyring trustedkeys.gpg --import /usr/share/keyrings/aspic.gpg
+  cd /tmp && apt-get source breeze-core > src.log 2>&1 || { tail -20 src.log; exit 1; }
+  grep -q "Good signature" src.log || { echo "   !! no good signature on the .dsc"; tail -10 src.log; exit 1; }
+  echo "   $(grep -o "Good signature from \"[^\"]*\"" src.log | head -1)"
+
+  echo "-- apt build-dep, then dpkg-buildpackage"
+  apt-get -qq build-dep -y breeze-core >/dev/null
+  cd breeze-core-$VER
+  DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -b -us -uc > /tmp/build.log 2>&1 || { tail -30 /tmp/build.log; exit 1; }
+  apt-get -qq install -y /tmp/breeze-core_${VER}-*_amd64.deb >/dev/null
+  breeze-core --version | grep -q "breeze-core $VER"
+  echo "   built and installed $(breeze-core --version | head -1)"
+'
+
+SRPM_CASE="$(cat <<'CASE'
+  dnf -q -y install curl rpm-build dnf-plugins-core >/dev/null 2>&1 \
+    || dnf -q -y install curl rpm-build "dnf-command(download)" "dnf-command(builddep)" >/dev/null
+  curl -fsSL "$BASE/rpm/aspic.repo" \
+    | sed "s#https://aspic.salataputarica.hr.eu.org#$BASE#g" > /etc/yum.repos.d/aspic.repo
+  grep -q "^\[aspic-source\]" /etc/yum.repos.d/aspic.repo || { echo "!! aspic.repo has no source repository"; exit 1; }
+  rpm --import "$BASE/aspic.asc"
+
+  echo "-- dnf download fetches the SRPM from the switched-off source repository"
+  # dnf 4 calls it --source, dnf 5 --srpm.
+  cd /tmp
+  dnf -q -y download --source breeze-core >/dev/null 2>&1 || dnf -q -y download --srpm breeze-core >/dev/null
+  ls breeze-core-$VER-*.src.rpm >/dev/null
+  rpm -K breeze-core-$VER-*.src.rpm | tee /tmp/k | sed "s/^/   /"
+  grep -q "signatures OK" /tmp/k
+
+  echo "-- dnf builddep, then rpmbuild --rebuild"
+  dnf -q -y builddep breeze-core-$VER-*.src.rpm >/dev/null
+  rpmbuild --rebuild --nocheck --define "_topdir /rb" breeze-core-$VER-*.src.rpm > /tmp/build.log 2>&1 \
+    || { tail -30 /tmp/build.log; exit 1; }
+  dnf -q -y install /rb/RPMS/*/breeze-core-$VER-*.rpm >/dev/null
+  breeze-core --version | grep -q "breeze-core $VER"
+  echo "   built and installed $(breeze-core --version | head -1)"
+CASE
+)"
+run_case alma-src   almalinux:9 "$SRPM_CASE"
+run_case fedora-src fedora:44   "$SRPM_CASE"
+
+run_case arch-src archlinux:base '
+  pacman -Syu --noconfirm --needed base-devel cargo >/dev/null 2>&1
+  echo "-- the source tarball, found in the directory listing"
+  f=$(curl -fsS "$BASE/arch/sources/" | grep -o "breeze-core-$VER-[0-9]*\.src\.tar\.gz" | sort -u | tail -1)
+  [ -n "$f" ] || { echo "   !! no $VER source tarball listed at $BASE/arch/sources/"; exit 1; }
+  cd /tmp && curl -fsSO "$BASE/arch/sources/$f" && curl -fsSO "$BASE/arch/sources/$f.sig"
+
+  echo "-- its signature verifies against the repository key, and a tampered copy does not"
+  curl -fsSL "$BASE/aspic.asc" | gpg --batch --quiet --import
+  gpg --batch --verify "$f.sig" "$f" 2>&1 | grep -q "Good signature"
+  cp "$f" tampered.tar.gz && printf x >> tampered.tar.gz
+  if gpg --batch --verify "$f.sig" tampered.tar.gz >/dev/null 2>&1; then
+    echo "   !! a tampered tarball verified"; exit 1
+  fi
+  echo "   $f: good signature; tampered copy refused"
+
+  echo "-- makepkg, then pacman -U"
+  useradd -m builder && mkdir /b && chown builder /b
+  su builder -c "cd /b && tar -xf /tmp/$f && cd breeze-core && makepkg --nocheck --noconfirm" > /tmp/build.log 2>&1 \
+    || { tail -30 /tmp/build.log; exit 1; }
+  pacman -U --noconfirm /b/breeze-core/breeze-core-$VER-*-x86_64.pkg.tar.zst >/dev/null
+  breeze-core --version | grep -q "breeze-core $VER"
+  echo "   built and installed $(breeze-core --version | head -1)"
 '
 
 echo

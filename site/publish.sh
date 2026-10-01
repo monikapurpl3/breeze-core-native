@@ -198,7 +198,7 @@ paths="/ /aspic.css /favicon.svg /breeze-core/"
 # xbps and portage entries earn their place twice over: neither is a path any
 # page links to, so the link checker above cannot see them, and the Gentoo one
 # is a file git needs (info/refs) rather than one a browser would ever ask for.
-[ -n "$TREE" ] && paths="$paths /aspic.asc /deb/dists/stable/InRelease /termux/dists/stable/InRelease /rpm/aspic.repo
+[ -n "$TREE" ] && paths="$paths /aspic.asc /deb/dists/stable/InRelease /termux/dists/stable/InRelease /deb/dists/stable/main/source/Sources.gz /rpm/aspic.repo /rpm/SRPMS/repodata/repomd.xml.asc
   /alpine/x86_64/APKINDEX.tar.gz /xbps/x86_64-repodata /aspic-xbps.fingerprint
   /portage/breeze.git/info/refs /windows/updater/SHA256SUMS /windows/vendor/nssm-2.24.zip
   /migrate.sh /breeze-core/VERSION"

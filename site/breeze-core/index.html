@@ -38,6 +38,24 @@ pkg install breeze-core             <span class="c"># FreeBSD</span></pre>
       package repository, since ebuilds are not packages.</p>
   </div>
 
+  <section id="source" class="s-native">
+    <h2>Building it yourself</h2>
+    <span class="who">The source, through the same repository, built into the
+      same package with your distribution's own Rust</span>
+<pre>dnf download --source breeze-core &amp;&amp; rpmbuild --rebuild breeze-core-*.src.rpm   <span class="c"># Fedora / RHEL</span>
+apt source breeze-core &amp;&amp; cd breeze-core-*/ &amp;&amp; dpkg-buildpackage -b              <span class="c"># Debian / Ubuntu, with deb-src</span>
+<span class="c"># Arch: the newest tarball in /arch/sources/, then</span> tar -xf breeze-core-*.src.tar.gz &amp;&amp; cd breeze-core &amp;&amp; makepkg -si</pre>
+    <p class="dim">An SRPM, a Debian source package and a <code>makepkg</code>
+      tarball (<a href="/arch/sources/">/arch/sources/</a>, with a
+      <code>.sig</code> beside each), each signed with the repository key and building offline from
+      vendored crates. What comes out has the same name, files and
+      <code>breeze</code> account as the package above, so either replaces the
+      other; only the binary differs, linked against your glibc instead of
+      static. Needs Rust 1.88 or newer, which Debian 13 does not have.
+      <a href="https://github.com/monikapurpl3/breeze-core-native/wiki/Installing-from-source">The
+      wiki</a> has the build dependencies and every step.</p>
+  </section>
+
   <section id="after" class="s-native">
     <h2>After installing</h2>
     <span class="who">Three steps, and the first one is the only one that needs

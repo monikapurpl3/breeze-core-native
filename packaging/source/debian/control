@@ -1,0 +1,25 @@
+Source: breeze-core
+Section: utils
+Priority: optional
+Maintainer: monikapurpl3 <monikapurpl3@users.noreply.github.com>
+# 1.88 is the oldest Rust the dependencies accept (the ICU crates, by way of
+# idna). Ubuntu 24.04's default is 1.75, but it also packages newer toolchains
+# under versioned names, which these alternatives pick up; debian/rules then
+# calls them by those names. Debian 13 has 1.85 and no such packages: build
+# there with rustup and `dpkg-buildpackage -d`.
+Build-Depends: debhelper-compat (= 13),
+               cargo (>= 1.88) | cargo-1.91 | cargo-1.89,
+               rustc (>= 1.88) | rustc-1.91 | rustc-1.89,
+               gcc
+Standards-Version: 4.7.0
+Homepage: https://github.com/monikapurpl3/breeze-core-native
+Rules-Requires-Root: no
+
+Package: breeze-core
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, passwd
+Description: Self-hosted, LAN-first control for Midea air conditioners
+ A REST API and web control panel with device-pairing authentication,
+ server-side schedules and temperature curves, built from source with this
+ distribution's Rust. The same package as the one in the aspic repository:
+ the same files, service account and maintainer scripts.

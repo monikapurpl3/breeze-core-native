@@ -13,10 +13,12 @@
 #   ├── index.html  aspic.css  favicon.svg      the repository's own page
 #   ├── breeze-core/index.html                  one page per project
 #   ├── aspic.asc  aspic-alpine.rsa.pub  aspic-usign.pub  aspic-xbps.fingerprint
-#   ├── deb/     dists/stable/… + pool/         (apt,  GPG InRelease)
+#   ├── deb/     dists/stable/… + pool/         (apt,  GPG InRelease; deb-src too)
 #   ├── termux/  dists/stable/… + pool/         (Termux's apt, same key)
 #   ├── rpm/     <arch>/repodata/ + aspic.repo  (dnf/zypper, signed rpms)
+#   │            SRPMS/repodata/               (the source, for dnf download --source)
 #   ├── arch/    <arch>/aspic.db…               (pacman, signed db + packages)
+#   │            sources/*.src.tar.gz + .sig   (makepkg --allsource, for makepkg -si)
 #   ├── alpine/  <arch>/APKINDEX.tar.gz         (apk, RSA-signed index)
 #   ├── openwrt/ <arch>/Packages + Packages.sig (opkg, usign)
 #   ├── xbps/    <arch>-repodata + .xbps        (Void, RSA-signed, trust-on-first-use)
@@ -83,6 +85,9 @@ ls "$PKG"/breeze-core_"${VER}"*_amd64.deb >/dev/null 2>&1 || {
 # Termux is tier 1: a release without it is incomplete, not a smaller release.
 ls packaging/out/termux/breeze-core_"${VER}"-*_aarch64.deb >/dev/null 2>&1 || {
   echo "no Termux packages for $VER — run packaging/termux/build-packages.sh first"; exit 1; }
+# So are the source packages, which the deb, rpm and pacman stages all carry.
+ls packaging/out/source/rpm/breeze-core-"${VER}"-*.src.rpm >/dev/null 2>&1 || {
+  echo "no source packages for $VER — run packaging/source/build-source.sh first"; exit 1; }
 
 # Refuse to build a repository out of two versions at once.
 #
@@ -115,6 +120,10 @@ OBSD_STAGE="$(ls -d packaging/out/bsd/openbsd/*/packages/* 2>/dev/null | head -1
 STAGING="
 $PKG|./packaging/nfpm/build-packages.sh|
 packaging/out/termux|./packaging/termux/build-packages.sh|
+packaging/out/source|./packaging/source/build-source.sh|
+packaging/out/source/rpm|./packaging/source/build-source.sh|
+packaging/out/source/deb|./packaging/source/build-source.sh|
+packaging/out/source/arch|./packaging/source/build-source.sh|
 packaging/out/bsd/freebsd|./packaging/bsd/build-freebsd.sh|data.pkg packagesite.pkg digests.pkg filesite.pkg meta meta.conf packagesite.yaml aspic-freebsd.pub
 packaging/out/bsd/netbsd/All|./packaging/bsd/build-netbsd.sh|pkg_summary pkg_summary.gz pkg_summary.bz2
 $OBSD_STAGE|./packaging/bsd/build-openbsd.sh|
@@ -285,6 +294,14 @@ stage debian:bookworm-slim '
   R=/out/deb
   mkdir -p "$R/pool/main/b/breeze-core"
   cp /work/packaging/out/pkg/*.deb "$R/pool/main/b/breeze-core/"
+  # The source package, for `apt source breeze-core` with a deb-src line. Its
+  # .dsc is clearsigned with the repository key, as debsign would; apt trusts
+  # it through the signed Sources index either way, and dpkg-source -x checks
+  # this signature against the keys the user trusts.
+  cp /work/packaging/out/source/deb/* "$R/pool/main/b/breeze-core/"
+  for d in "$R"/pool/main/b/breeze-core/*.dsc; do
+    gpg --batch --yes --clearsign -o "$d.asc" "$d" && mv "$d.asc" "$d"
+  done
   cd "$R"
   ARCHES="amd64 arm64 armhf riscv64 ppc64el s390x"
   for a in $ARCHES; do
@@ -292,6 +309,11 @@ stage debian:bookworm-slim '
     apt-ftparchive --arch "$a" packages pool > "dists/stable/main/binary-$a/Packages"
     gzip -9kf "dists/stable/main/binary-$a/Packages"
   done
+  mkdir -p dists/stable/main/source
+  apt-ftparchive sources pool > dists/stable/main/source/Sources
+  gzip -9kf dists/stable/main/source/Sources
+  grep -q "^Package: breeze-core" dists/stable/main/source/Sources || {
+    echo "!! no source package in the Sources index"; exit 1; }
   cd dists/stable
   apt-ftparchive \
     -o APT::FTPArchive::Release::Origin=Aspic \
@@ -365,6 +387,17 @@ EOF
     gpg --batch --yes -abs -o "/out/rpm/$a/repodata/repomd.xml.asc" \
         "/out/rpm/$a/repodata/repomd.xml"
   done
+
+  # The SRPM: signed like the binaries, in a repository of its own that
+  # aspic.repo lists switched off. `dnf download --source` turns on the
+  # matching -source repository for that one command, so nobody resolves
+  # source packages by accident.
+  mkdir -p /out/rpm/SRPMS
+  cp /work/packaging/out/source/rpm/*.src.rpm /out/rpm/SRPMS/
+  rpmsign --addsign /out/rpm/SRPMS/*.src.rpm >/dev/null
+  createrepo_c --general-compress-type gz /out/rpm/SRPMS >/dev/null
+  gpg --batch --yes -abs -o /out/rpm/SRPMS/repodata/repomd.xml.asc \
+      /out/rpm/SRPMS/repodata/repomd.xml
 '
 cp packaging/repo/aspic.repo "$OUT/rpm/aspic.repo"
 
@@ -388,6 +421,12 @@ stage archlinux:base '
       done
       true )
   done
+
+  # The source: pacman has no source mode, so this is a plain makepkg
+  # --allsource tarball with a detached signature, for `makepkg -si`.
+  mkdir -p /out/arch/sources
+  cp /work/packaging/out/source/arch/*.src.tar.gz /out/arch/sources/
+  ( cd /out/arch/sources && for s in *.src.tar.gz; do gpg --batch --yes --detach-sign "$s"; done )
 '
 
 # --- apk (alpine) -----------------------------------------------------------

@@ -1,0 +1,6 @@
+breeze-core (@VER@-@REL@) stable; urgency=medium
+
+  * Built from source. What changed in each release:
+    https://github.com/monikapurpl3/breeze-core-native/wiki/Version-history
+
+ -- monikapurpl3 <monikapurpl3@users.noreply.github.com>  @DEBDATE@

@@ -57,3 +57,7 @@ packaging/windows/wingup/SHA256SUMS text eol=lf
 # The Termux package: its run script and maintainer scripts are executed by
 # Termux's shell on a phone, and none of them has an extension to match on.
 packaging/termux/**     text eol=lf
+
+# The source-package recipes: debian/rules is a makefile run on Debian, and the
+# spec, PKGBUILD and control files are read on Linux builders.
+packaging/source/**     text eol=lf

@@ -246,6 +246,13 @@ pydantic models.
 - **termux-docker drops `-e` variables** (its entrypoint switches user with
   `env -i`) and has no `/tmp` (use `$TMPDIR`); the 32-bit image needs
   `--security-opt seccomp=unconfined` for bionic's `personality()` call.
+- **Source packages paste in the nfpm scripts**, so editing
+  `packaging/nfpm/scripts/` changes four package formats, not one. The spec
+  doubles every `%` in them (rpm expands macros inside comments too), and sets
+  `_use_weak_usergroup_deps`: rpm 4.19+ otherwise turns `%attr(...,breeze,...)`
+  into a hard `Requires: user(breeze)` that nothing provides.
+- **`git archive` honours core.autocrlf** -- on this machine it writes CRLF into
+  the tarball unless run as `git -c core.autocrlf=false archive`.
 - Pin the Zig version in CI. `setup-zig@v1` could not fetch 0.16 at all — Zig
   renamed release artifacts (arch before OS, under `/download/` not `/builds/`).
 

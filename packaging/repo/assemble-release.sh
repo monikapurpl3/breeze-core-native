@@ -65,6 +65,9 @@ take xbps     "$TREE"/xbps/breeze-core-"$VER"_*.xbps
 take windows  "$TREE"/windows/Breeze-Core-Setup-"$VER".exe "$TREE"/windows/Breeze-Core-Setup-"$VER".exe.sha256
 take opnsense "$TREE"/opnsense/os-breeze-core-"$VER".pkg
 take tarballs "$DIST"/breeze-core-"$VER"-*.tar.zst "$DIST"/breeze-core-"$VER"-*.zip
+# The source, and every crate it needs: the two tarballs the SRPM, the Debian
+# source package and the PKGBUILD are all built from, byte for byte.
+take source   packaging/out/source/breeze-core-"$VER".tar.xz packaging/out/source/breeze-core-"$VER"-vendor.tar.xz
 
 # Alpine packages are named <name>-<ver>-r<rel>.apk inside the repository; the
 # release has always used nfpm's own spelling, which names the architecture.

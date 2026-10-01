@@ -1,0 +1,66 @@
+#!/usr/bin/make -f
+# Generated into the source package by packaging/source/build-source.sh.
+#
+# Recipes start with ">" rather than a tab (.RECIPEPREFIX, GNU make 3.82+), so
+# the file survives being edited on a machine whose editor turns tabs into
+# spaces -- which would otherwise break every recipe with a bare
+# "missing separator".
+.RECIPEPREFIX = >
+
+# The newest versioned toolchain if Ubuntu's are installed (see debian/control),
+# otherwise plain cargo and rustc: Debian's own, or rustup's.
+CARGO := $(firstword $(foreach c,cargo-1.91 cargo-1.89,$(shell command -v $(c))) cargo)
+RUSTC := $(firstword $(foreach c,rustc-1.91 rustc-1.89,$(shell command -v $(c))) rustc)
+export RUSTC
+export BREEZE_COMMIT = @COMMIT@
+# Kept in the build tree, not in $HOME, which a build may not write to.
+export CARGO_HOME = $(CURDIR)/debian/cargo-home
+
+D = debian/breeze-core
+
+%:
+> dh $@
+
+override_dh_auto_configure:
+> mkdir -p .cargo
+# Build from the vendored crates and nothing else: builders run offline, and a
+# build that fetched crates.io would not be building the source it was given.
+> printf '[source.crates-io]\nreplace-with = "vendored-sources"\n\n[source.vendored-sources]\ndirectory = "vendor"\n' > .cargo/config.toml
+
+override_dh_auto_build:
+> $(CARGO) build --release --locked --offline -p breeze-core
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+> $(CARGO) test --locked --offline --workspace
+endif
+
+# The same layout as the nfpm package: /usr/bin, the /usr/lib symlink the
+# Python package's paths need, the systemd unit, the settings file.
+override_dh_auto_install:
+> install -Dm0755 target/release/breeze-core $(D)/usr/bin/breeze-core
+> install -d $(D)/usr/lib/breeze-core
+> ln -s /usr/bin/breeze-core $(D)/usr/lib/breeze-core/breeze-core
+> install -Dm0644 packaging/nfpm/breeze-core.service $(D)/usr/lib/systemd/system/breeze-core.service
+> install -d -m0750 $(D)/etc/breeze-core
+> install -m0640 packaging/nfpm/breeze-core.env $(D)/etc/breeze-core/breeze-core.env
+> install -Dm0644 README.md $(D)/usr/share/doc/breeze-core/README.md
+> install -Dm0644 LICENSE $(D)/usr/share/doc/breeze-core/LICENSE
+
+override_dh_auto_clean:
+> rm -rf target .cargo debian/cargo-home
+
+# dh_clean deletes every *.orig file as a patch leftover -- including the
+# Cargo.toml.orig that every vendored crate ships and lists in its
+# .cargo-checksum.json, so cargo would then refuse the crate as tampered with
+# ("failed to calculate checksum of: vendor/base64/Cargo.toml.orig").
+override_dh_clean:
+> dh_clean -XCargo.toml.orig
+
+# Not enabled or started on install, exactly as the nfpm package does not: the
+# postinst prints how, because there is no config.json until `pair` has run.
+override_dh_installsystemd:
+
+# Already stripped by the release profile; no debug information to split off.
+override_dh_strip:
+override_dh_dwz:

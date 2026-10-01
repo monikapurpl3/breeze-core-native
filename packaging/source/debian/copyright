@@ -1,0 +1,18 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: breeze-core
+Source: https://github.com/monikapurpl3/breeze-core-native
+
+Files: *
+Copyright: monikapurpl3
+License: AGPL-3.0-or-later
+
+Files: vendor/*
+Copyright: the authors of each vendored crate
+License: various
+ Each crate under vendor/ carries its own licence files; together they are
+ MIT, Apache-2.0, ISC, BSD-3-Clause, Unicode-3.0 and similar permissive
+ licences, all compatible with AGPL-3.0-or-later.
+
+License: AGPL-3.0-or-later
+ On Debian systems the full text is in the LICENSE file shipped with the
+ source, and at https://www.gnu.org/licenses/agpl-3.0.txt.
