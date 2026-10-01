@@ -10,7 +10,18 @@ repository.workspace = true
 serde = { version = "1", features = ["derive"] }
 getrandom = "0.2"
 sha2 = "0.10"
+# The v5 API (SmartHome, Meiju) signs every request with HMAC-SHA256, hashes
+# one password field with MD5 twice, and wants Basic auth for SmartHome. md-5
+# and base64 are already in the workspace, for the LAN protocol and auth.
+hmac = "0.12"
+md-5 = "0.10"
+base64 = "0.22"
 serde_json = "1"
 # Blocking HTTPS. Only ever used interactively, during pairing, so there is
 # nothing to gain from async here.
 ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+
+[dev-dependencies]
+# A mock cloud for the flow tests: the requests are checked as the real API
+# would see them, signature included, without a network or an account.
+tiny_http = "0.12"

@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use sha2::{Digest, Sha256};
 
-use crate::{hex, CloudError, Credentials, Token};
+use crate::{hex, random_hex, timestamp, CloudError, Credentials, Token};
 
 const BASE_URL: &str = "https://mapp.appsmb.com";
 const APP_ID: &str = "1017";
@@ -49,19 +49,30 @@ pub struct Session {
 /// derived udpid are tried, because firmware is inconsistent about it and the
 /// wrong one simply returns nothing.
 pub fn fetch_token(credentials: &Credentials, device_id: u64) -> Result<Token, CloudError> {
-    let session = login(credentials)?;
-    let mut last = None;
-    for big_endian in [false, true] {
-        match get_token(&session, device_id, big_endian) {
-            Ok(token) => return Ok(token),
-            // A refusal is about the account or the API, not the byte order, so
-            // there is nothing to gain from trying the other one.
-            Err(e @ CloudError::Api { .. }) => return Err(e),
-            Err(e) => last = Some(e),
-        }
+    fetch_with(&login(credentials)?, device_id)
+}
+
+/// The token, from a session already logged in. Both byte orders.
+pub fn fetch_with(session: &Session, device_id: u64) -> Result<Token, CloudError> {
+    crate::try_both_orders(|big_endian| get_token(session, device_id, big_endian))
+}
+
+/// Whether NetHome Plus has the account, asked without a password: step 1
+/// alone, which takes only the account name.
+pub fn account_known(account: &str) -> Result<bool, CloudError> {
+    let session = Session {
+        session_id: String::new(),
+        device_id: random_hex(8),
+    };
+    match request(
+        &session,
+        "/v1/user/login/id/get",
+        [("loginAccount", account)],
+    ) {
+        Ok(_) => Ok(true),
+        Err(CloudError::Api { code: 3102, .. }) => Ok(false),
+        Err(e) => Err(e),
     }
-    Err(last
-        .unwrap_or_else(|| CloudError::NoToken("the cloud returned no token for this unit".into())))
 }
 
 /// Steps 1 and 2.
@@ -232,43 +243,6 @@ fn encrypt_password(login_id: &str, password: &str) -> String {
     hex(&Sha256::digest(
         format!("{login_id}{first}{APP_KEY}").as_bytes(),
     ))
-}
-
-/// UTC, `yyyymmddHHMMSS`, as the API wants it.
-fn timestamp() -> String {
-    // Hand-formatted from the epoch rather than pulling in a date library for
-    // one string. Days-from-civil, in the usual formulation.
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let (days, rest) = ((now / 86_400) as i64, now % 86_400);
-    let (hour, minute, second) = (rest / 3600, (rest % 3600) / 60, rest % 60);
-
-    // Epoch day 0 is 1970-01-01; shift to a March-based year to make the leap
-    // day the last day of the cycle.
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = if month <= 2 { y + 1 } else { y };
-
-    format!("{year:04}{month:02}{day:02}{hour:02}{minute:02}{second:02}")
-}
-
-fn random_hex(bytes: usize) -> String {
-    let mut buffer = vec![0u8; bytes];
-    if getrandom::getrandom(&mut buffer).is_err() {
-        // Only ever an opaque identifier; a fixed one is worse than a random one
-        // but not a security property.
-        buffer.fill(0x42);
-    }
-    hex(&buffer)
 }
 
 #[cfg(test)]

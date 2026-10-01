@@ -174,8 +174,10 @@ fn resolve_credentials(
         .take()
         .unwrap_or_else(|| "DE".to_string());
     let credentials = breeze_cloud::Credentials::new(account, password, region);
-    match breeze_cloud::nethome::fetch_token(&credentials, device_id) {
-        Ok(token) => Ok((Some(token.token.clone()), Some(token.key.clone()))),
+    // Whichever cloud has the account: SmartHome, Meiju, or -- to explain its
+    // refusal -- NetHome Plus. See breeze_cloud::fetch_token_any.
+    match breeze_cloud::fetch_token_any(&credentials, device_id) {
+        Ok((_, token)) => Ok((Some(token.token.clone()), Some(token.key.clone()))),
         // The advice matters more than the error: "9999" means nothing to
         // anybody, and the way out is usually a token they already hold.
         Err(e) => Err(Reply::json(

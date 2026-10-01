@@ -7,16 +7,19 @@
 //! to a real unit here got no reply at all, and the V3 handshake proves
 //! knowledge of the key without ever transmitting it. The only issuer is Midea.
 //!
-//! And Midea has been closing the door. Measured against the live services:
+//! And Midea has been closing the door. As of October 2026:
 //!
 //! | cloud | app id | what happens |
 //! |---|---|---|
-//! | MSmartHome (`mp-prod.appsmb.com`) | 1010 | `3004 value is illegal`; adding the `applianceCodes` field turns that into `3201 You have no permissions` |
-//! | NetHome Plus (`mapp.appsmb.com`) | 1017 | logs in, then `9999 system error` for a unit the account does not own |
+//! | MSmartHome (`mp-prod.appsmb.com`) | 1010 | **works for the account the unit is paired with**, given `applianceCodes`; any other account gets `3201 no permissions` |
+//! | 美的美居 Meiju (`mp-prod.smartmidea.net`) | 900 | the same, through v2 `getToken` with the unit's home; v1 answers `40404` since late August 2026 |
+//! | NetHome Plus (`mapp.appsmb.com`) | 1017 | logs in, then `9999 system error` for every unit, its owner's included, since about 19 August 2026 |
 //!
-//! Which matches what the wider community reports: token fetching is already
-//! withdrawn on Meiju and SmartHome, NetHome Plus is the last one answering, and
-//! it is expected to follow.
+//! So shared and borrowed accounts are finished everywhere: the token is
+//! issued to the unit's own account or not at all. An account made in NetHome
+//! Plus does not exist on SmartHome (it answers `3102` before a password is
+//! even sent), so a NetHome Plus unit has to be paired to a SmartHome account
+//! first. `breeze-core fetch` walks a person through all of that.
 //!
 //! # So the shape of this is deliberate
 //!
@@ -25,14 +28,21 @@
 //!   on the way out.
 //! * **It is a last resort, not the happy path.** The durable way to hold a V3
 //!   unit's credentials is to *have* them: `POST /api/units` takes a `token` and
-//!   `key` directly, and `config.json` is the backup. When Midea finishes
-//!   turning this off, that path keeps working and this one stops.
-//! * **NetHome Plus only**, because it is the only one that still answers. There
-//!   is no point carrying code for two dead APIs.
+//!   `key` directly, and `config.json` is the backup. The unit never forgets its
+//!   token; only Midea can stop handing it out.
+//! * **Whether a cloud knows an account is asked without a password**
+//!   ([`Cloud::account_known`]), so the password goes only to a cloud that has
+//!   the account.
 
 use std::fmt;
 
+pub mod meiju;
 pub mod nethome;
+pub mod smarthome;
+mod v5;
+
+#[cfg(test)]
+mod mock_cloud;
 
 /// A Midea account, held only as long as one exchange takes.
 ///
@@ -126,6 +136,8 @@ pub enum CloudError {
     NoToken(String),
     /// The response was not the shape it should be.
     Malformed(String),
+    /// None of the clouds asked has this account at all.
+    UnknownAccount,
 }
 
 impl fmt::Display for CloudError {
@@ -137,6 +149,7 @@ impl fmt::Display for CloudError {
             }
             Self::NoToken(e) => write!(f, "{e}"),
             Self::Malformed(e) => write!(f, "the cloud answered something unexpected: {e}"),
+            Self::UnknownAccount => write!(f, "no Midea cloud knows this account"),
         }
     }
 }
@@ -150,16 +163,22 @@ impl CloudError {
     /// `9999`/`3004`/`3201` are the API refusing whatever it is sent.
     pub fn advice(&self) -> &'static str {
         match self {
-            Self::Api { code: 3102, .. } => {
-                "That account or password was not accepted. It has to be the Midea \
-                 app account the unit is registered to."
+            Self::Api { code: 3101, .. } | Self::Api { code: 3102, .. } => {
+                "That account or password was not accepted. It has to be the account \
+                 of the Midea app the unit is paired with -- and an account made in \
+                 NetHome Plus does not exist on MSmartHome: they are separate systems."
             }
-            Self::Api { code: 9999, .. } | Self::Api { code: 3201, .. } => {
-                "The cloud accepted the login and then refused to issue a token. \
-                 That usually means this account is not the one the unit is \
-                 registered to. Midea has also been withdrawing this API, so it may \
-                 simply be gone — if you already hold a token and key, add the unit \
-                 with those instead."
+            Self::Api { code: 9999, .. } => {
+                "NetHome Plus logged in and then refused to issue a token, as it has \
+                 for every unit, its owners' included, since August 2026. Pair the \
+                 unit with an MSmartHome account and fetch with that (`breeze-core \
+                 fetch` walks through it), or, if you already hold a token and key, \
+                 add the unit with those instead."
+            }
+            Self::Api { code: 3201, .. } => {
+                "The cloud logged in and then refused this unit, which means it is not \
+                 paired with this account. Only the account a unit is paired with gets \
+                 its token. If you already hold a token and key, add it with those."
             }
             Self::Api { code: 3004, .. } => {
                 "The cloud rejected the request outright, which is what a withdrawn \
@@ -173,14 +192,196 @@ impl CloudError {
             }
             Self::Transport(_) => "The cloud could not be reached at all.",
             Self::NoToken(_) => {
-                "The cloud answered but had nothing for this unit, which means this \
-                 account does not have it registered."
+                "The cloud answered but had nothing for this unit, which means it is \
+                 not paired with this account."
+            }
+            Self::UnknownAccount => {
+                "Neither MSmartHome, Meiju nor NetHome Plus has this account (each was \
+                 asked without the password). Check the spelling, or use the account \
+                 of the app the unit is paired with."
             }
             Self::Malformed(_) => {
                 "The cloud's answer could not be read. The API has probably changed."
             }
         }
     }
+}
+
+/// Which Midea app, and so which cloud, an account belongs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cloud {
+    SmartHome,
+    Meiju,
+    NetHomePlus,
+}
+
+impl Cloud {
+    /// The app's name as a person would see it on their phone.
+    pub fn app_name(self) -> &'static str {
+        match self {
+            Self::SmartHome => "MSmartHome",
+            Self::Meiju => "美的美居 (Meiju)",
+            Self::NetHomePlus => "NetHome Plus",
+        }
+    }
+
+    /// Whether this cloud has the account, asked without the password.
+    ///
+    /// NetHome Plus answers the same question the same way, but has nothing to
+    /// offer once it says yes, so asking it is only useful for explaining why.
+    pub fn account_known(self, account: &str) -> Result<bool, CloudError> {
+        match self {
+            Self::SmartHome => smarthome::account_known(account),
+            Self::Meiju => meiju::account_known(account),
+            Self::NetHomePlus => nethome::account_known(account),
+        }
+    }
+
+    /// Log in, list the account's units, and fetch tokens for them.
+    pub fn login(self, credentials: &Credentials) -> Result<Session, CloudError> {
+        Ok(match self {
+            Self::SmartHome => Session::SmartHome(smarthome::login(credentials)?),
+            Self::Meiju => Session::Meiju(meiju::login(credentials)?),
+            Self::NetHomePlus => Session::NetHomePlus(nethome::login(credentials)?),
+        })
+    }
+}
+
+/// A logged-in session with one of the clouds.
+pub enum Session {
+    SmartHome(smarthome::Session),
+    Meiju(meiju::Session),
+    NetHomePlus(nethome::Session),
+}
+
+impl Session {
+    /// The units paired with the account, where the cloud will say. NetHome
+    /// Plus is not asked: it issues no tokens any more, so its list would only
+    /// raise hopes.
+    pub fn appliances(&self) -> Result<Option<Vec<Appliance>>, CloudError> {
+        match self {
+            Self::SmartHome(s) => s.appliances().map(Some),
+            Self::Meiju(s) => s.appliances().map(Some),
+            Self::NetHomePlus(_) => Ok(None),
+        }
+    }
+
+    pub fn token(&self, device_id: u64) -> Result<Token, CloudError> {
+        match self {
+            Self::SmartHome(s) => s.token(device_id),
+            Self::Meiju(s) => s.token(device_id),
+            Self::NetHomePlus(s) => nethome::fetch_with(s, device_id),
+        }
+    }
+}
+
+/// For a caller with nobody to talk to -- the panel's add-unit form: find the
+/// cloud that knows the account, asking each without the password, log in to
+/// that one alone, and fetch.
+///
+/// SmartHome first, because outside China it is the one that still issues
+/// tokens; NetHome Plus last, because it no longer does, and its refusal is
+/// still the most useful thing to tell a NetHome Plus user.
+pub fn fetch_token_any(
+    credentials: &Credentials,
+    device_id: u64,
+) -> Result<(Cloud, Token), CloudError> {
+    let mut last = None;
+    for cloud in [Cloud::SmartHome, Cloud::Meiju, Cloud::NetHomePlus] {
+        match cloud.account_known(&credentials.account) {
+            Ok(true) => {
+                return cloud
+                    .login(credentials)
+                    .and_then(|session| session.token(device_id))
+                    .map(|token| (cloud, token));
+            }
+            Ok(false) => {}
+            Err(e) => last = Some(e),
+        }
+    }
+    Err(last.unwrap_or(CloudError::UnknownAccount))
+}
+
+/// One unit as an account's cloud lists it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Appliance {
+    /// The id discovery reports, and the one tokens are keyed by.
+    pub id: u64,
+    pub name: String,
+    /// `0xAC` for an air conditioner.
+    pub kind: Option<u8>,
+    pub online: bool,
+}
+
+impl Appliance {
+    /// From either cloud's listing: SmartHome calls the id `id`, Meiju
+    /// `applianceCode`, and either may send it as a string or a number.
+    pub(crate) fn from_cloud(value: &serde_json::Value) -> Option<Self> {
+        let raw = value.get("id").or_else(|| value.get("applianceCode"))?;
+        let id = raw
+            .as_u64()
+            .or_else(|| raw.as_str().and_then(|s| s.trim().parse().ok()))?;
+        let kind = value.get("type").and_then(|t| t.as_str()).and_then(|t| {
+            u8::from_str_radix(t.trim_start_matches("0x").trim_start_matches("0X"), 16).ok()
+        });
+        Some(Self {
+            id,
+            name: value
+                .get("name")
+                .and_then(|n| n.as_str())
+                .unwrap_or("unnamed")
+                .to_string(),
+            kind,
+            online: value.get("onlineStatus").and_then(|s| s.as_str()) == Some("1"),
+        })
+    }
+}
+
+/// The token for `wanted` out of a `getToken` answer's `tokenlist`.
+///
+/// Only the entry for the udpid that was asked about: the list can carry other
+/// units' entries, and taking the first would be the wrong unit's credentials.
+pub(crate) fn pick_token(answer: &serde_json::Value, wanted: &str) -> Result<Token, CloudError> {
+    let list = answer
+        .get("tokenlist")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| CloudError::Malformed("no tokenlist in the response".into()))?;
+    for entry in list {
+        let udpid = entry.get("udpId").and_then(|v| v.as_str()).unwrap_or("");
+        if !udpid.eq_ignore_ascii_case(wanted) {
+            continue;
+        }
+        if let (Some(token), Some(key)) = (
+            entry.get("token").and_then(|v| v.as_str()),
+            entry.get("key").and_then(|v| v.as_str()),
+        ) {
+            return Ok(Token {
+                token: token.to_ascii_lowercase(),
+                key: key.to_ascii_lowercase(),
+            });
+        }
+    }
+    Err(CloudError::NoToken(format!(
+        "the cloud listed {} token(s), none of them for this unit",
+        list.len()
+    )))
+}
+
+/// Ask with each udpid byte order, little-endian first. Firmware is
+/// inconsistent about it, and the wrong one simply finds nothing. A refusal is
+/// about the account or the API, not the byte order, so it ends the search.
+pub(crate) fn try_both_orders(
+    mut ask: impl FnMut(bool) -> Result<Token, CloudError>,
+) -> Result<Token, CloudError> {
+    let mut last = None;
+    for big_endian in [false, true] {
+        match ask(big_endian) {
+            Ok(token) => return Ok(token),
+            Err(e @ CloudError::Api { .. }) => return Err(e),
+            Err(e) => last = Some(e),
+        }
+    }
+    Err(last.unwrap_or_else(|| CloudError::NoToken("no token for this unit".into())))
 }
 
 /// The udpid the token API keys a device by.
@@ -216,6 +417,43 @@ pub(crate) fn hex(bytes: &[u8]) -> String {
         let _ = write!(out, "{b:02x}");
     }
     out
+}
+
+/// UTC, `yyyymmddHHMMSS`, as the API wants it.
+pub(crate) fn timestamp() -> String {
+    // Hand-formatted from the epoch rather than pulling in a date library for
+    // one string. Days-from-civil, in the usual formulation.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let (days, rest) = ((now / 86_400) as i64, now % 86_400);
+    let (hour, minute, second) = (rest / 3600, (rest % 3600) / 60, rest % 60);
+
+    // Epoch day 0 is 1970-01-01; shift to a March-based year to make the leap
+    // day the last day of the cycle.
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if month <= 2 { y + 1 } else { y };
+
+    format!("{year:04}{month:02}{day:02}{hour:02}{minute:02}{second:02}")
+}
+
+pub(crate) fn random_hex(bytes: usize) -> String {
+    let mut buffer = vec![0u8; bytes];
+    if getrandom::getrandom(&mut buffer).is_err() {
+        // Only ever an opaque identifier; a fixed one is worse than a random one
+        // but not a security property.
+        buffer.fill(0x42);
+    }
+    hex(&buffer)
 }
 
 #[cfg(test)]
@@ -315,10 +553,18 @@ mod tests {
             code: 9999,
             message: "system error".into(),
         };
-        assert!(refused.advice().contains("registered to"));
+        assert!(
+            refused.advice().contains("MSmartHome"),
+            "it should say what works now"
+        );
         assert!(
             refused.advice().contains("token and key"),
             "it should point at the path that still works"
         );
+        let not_theirs = CloudError::Api {
+            code: 3201,
+            message: "You have no permissions".into(),
+        };
+        assert!(not_theirs.advice().contains("not paired with this account"));
     }
 }
