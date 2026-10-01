@@ -11,7 +11,10 @@
 # otherwise plain cargo and rustc: Debian's own, or rustup's.
 CARGO := $(firstword $(foreach c,cargo-1.91 cargo-1.89,$(shell command -v $(c))) cargo)
 RUSTC := $(firstword $(foreach c,rustc-1.91 rustc-1.89,$(shell command -v $(c))) rustc)
-export RUSTC
+# And rustdoc, which `cargo test` runs for the doctests: the versioned packages
+# name it rustdoc-1.91, and a plain `rustdoc` is not there at all.
+RUSTDOC := $(firstword $(foreach c,rustdoc-1.91 rustdoc-1.89,$(shell command -v $(c))) rustdoc)
+export RUSTC RUSTDOC
 export BREEZE_COMMIT = @COMMIT@
 # Kept in the build tree, not in $HOME, which a build may not write to.
 export CARGO_HOME = $(CURDIR)/debian/cargo-home
@@ -60,6 +63,12 @@ override_dh_clean:
 # Not enabled or started on install, exactly as the nfpm package does not: the
 # postinst prints how, because there is no config.json until `pair` has run.
 override_dh_installsystemd:
+
+# README.md and LICENSE stay as they are, as in the binary package; dh_compress
+# would otherwise gzip both, and the two packages would no longer hold the
+# same files.
+override_dh_compress:
+> dh_compress -XREADME.md -XLICENSE
 
 # Already stripped by the release profile; no debug information to split off.
 override_dh_strip:
