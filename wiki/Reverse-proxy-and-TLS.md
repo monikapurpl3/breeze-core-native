@@ -180,15 +180,16 @@ The container compose file `docker-compose.https.yml` ships this shape already
     Header always set Strict-Transport-Security "max-age=63072000; includeSubDomains"
 
     ProxyPreserveHost On
-    RequestHeader set X-Forwarded-Proto "https"
 
-    # mod_remoteip, so the forwarded address is the one that gets logged and
-    # sent on. Without RemoteIPHeader, Apache appends and the value can be
-    # forged.
-    RemoteIPHeader X-Forwarded-For
+    # X-Forwarded-For OVERWRITTEN with the real peer. mod_proxy's own
+    # X-Forwarded-For appends to whatever the client sent, so it is switched
+    # off and the header set outright: one entry, the real one.
+    ProxyAddHeaders Off
+    RequestHeader set X-Forwarded-For   "expr=%{REMOTE_ADDR}"
+    RequestHeader set X-Forwarded-Proto "expr=%{REQUEST_SCHEME}"
 
     <Location ~ "^/api/auth/(enroll/approve|devices)">
-        Require ip 192.168.1.0/24 127.0.0.1
+        Require ip 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1 ::1
     </Location>
 
     # The event stream must not be buffered or compressed.
@@ -202,8 +203,21 @@ The container compose file `docker-compose.https.yml` ships this shape already
 </VirtualHost>
 ```
 
-Apache needs `mod_proxy`, `mod_proxy_http`, `mod_headers`, `mod_remoteip` and
-`mod_ssl` enabled.
+Apache needs `mod_proxy`, `mod_proxy_http`, `mod_headers` and `mod_ssl`
+enabled, and is 2.4.10 or later for the `expr=` form.
+
+> **If you set Apache up from this page before October 2026, change it.** The
+> earlier version used `RemoteIPHeader X-Forwarded-For` and left mod_proxy's
+> header on, which appends. A request sent with `X-Forwarded-For: 192.168.1.5`
+> then reached the server as `192.168.1.5, <real address>`. Servers before 4.3.0
+> read the left-most entry, so that request passed the LAN-only check from
+> anywhere, and could approve its own pairing. **4.3.0 reads the right-most
+> entry**, the one the proxy itself added, which no client can write. So 4.3.0
+> is safe even behind the old configuration, but change it anyway. Tested: the
+> configuration above forwards only the real address. nginx with
+> `$remote_addr` and Caddy without `trusted_proxies` were never affected. To
+> check yours, send a request with a made-up `X-Forwarded-For` and look at
+> `client_ip` in `/api/system`, as below.
 
 ## Check it, do not assume it
 

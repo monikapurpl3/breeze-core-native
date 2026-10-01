@@ -23,9 +23,16 @@ pub fn client_ip(
 ) -> Option<IpAddr> {
     if behind_proxy {
         if let Some(xff) = forwarded_for {
-            // The left-most entry is the original client; the rest are proxies.
-            if let Some(first) = xff.split(',').next() {
-                if let Ok(ip) = first.trim().parse() {
+            // The RIGHT-most entry: the address the proxy in front of this one
+            // saw, which is the only entry a client cannot write. A proxy that
+            // appends rather than overwrites -- Apache's mod_proxy does, by
+            // default -- passes `<anything the client sent>, <the real one>`,
+            // and reading the left-most entry, as this did until 4.3.0, let a
+            // request from anywhere claim 192.168.x.x and pass the LAN-only
+            // check. With a proxy that overwrites, the only kind the docs
+            // describe, there is one entry and the two readings agree.
+            if let Some(last) = xff.rsplit(',').next() {
+                if let Ok(ip) = last.trim().parse() {
                     return Some(ip);
                 }
             }
@@ -117,13 +124,16 @@ mod tests {
     }
 
     #[test]
-    fn the_leftmost_forwarded_entry_is_the_client() {
-        let real = client_ip(
-            v4(127, 0, 0, 1),
-            Some("192.168.1.50, 10.0.0.1, 172.16.0.1"),
-            true,
+    fn the_rightmost_forwarded_entry_is_the_one_trusted() {
+        // What an appending proxy sends for a client at 203.0.113.9 that claimed
+        // to be on the LAN -- seen from Apache's default mod_proxy. The claim
+        // must lose.
+        let seen = client_ip(v4(127, 0, 0, 1), Some("192.168.1.5, 203.0.113.9"), true);
+        assert_eq!(seen, v4(203, 0, 113, 9));
+        assert!(
+            !is_private_ip(seen),
+            "a forged LAN address must not pass the LAN check"
         );
-        assert_eq!(real, v4(192, 168, 1, 50));
     }
 
     #[test]
