@@ -28,7 +28,6 @@
 
 use std::collections::HashMap;
 use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
@@ -77,7 +76,10 @@ pub struct StateStream {
     /// Guards nothing but the condvar wait; the subscriber count is read from
     /// `subs` each time round.
     wake_lock: Mutex<()>,
-    next_id: AtomicU64,
+    /// A mutex rather than an AtomicU64: 32-bit MIPS has no 64-bit atomics,
+    /// and MIPS is what most OpenWrt routers are. A client subscribes once per
+    /// connection, so the lock costs nothing that matters.
+    next_id: Mutex<u64>,
     tick: Duration,
 }
 
@@ -88,7 +90,7 @@ impl StateStream {
             last: Mutex::new(HashMap::new()),
             wake: Condvar::new(),
             wake_lock: Mutex::new(()),
-            next_id: AtomicU64::new(1),
+            next_id: Mutex::new(1),
             // A one-second floor, as the reference clamps it: a zero tick would
             // hammer the units as fast as the LAN allows.
             tick: Duration::from_secs(tick_seconds.max(1)),
@@ -106,7 +108,12 @@ impl StateStream {
     /// Register a listener. Returns `None` when [`MAX_STREAMS`] is already open.
     fn subscribe(&self) -> Option<(u64, Receiver<Event>)> {
         let (tx, rx) = sync_channel(QUEUE_DEPTH);
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let id = {
+            let mut next = self.next_id.lock().ok()?;
+            let id = *next;
+            *next += 1;
+            id
+        };
         {
             let mut subs = self.subs.lock().ok()?;
             if subs.len() >= MAX_STREAMS {
