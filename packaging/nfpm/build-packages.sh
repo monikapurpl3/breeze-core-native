@@ -26,6 +26,10 @@ RELEASE="${BC_RELEASE:-1}"
 # are static musl. The OpenWrt column exists because opkg matches its own
 # architecture names, which nfpm has never heard of: the ipks differ only in
 # that field, so they are produced by re-running nfpm with BC_ARCH set to each.
+#
+# An nfpm arch of "-" means OpenWrt only: 32-bit MIPS is what most routers
+# are, and no distribution that uses deb, rpm, pacman or Alpine's apk still
+# ships it. Those binaries come from packaging/mips/build-mips.sh.
 ARCHES="
 amd64|amd64|x86_64
 arm64|arm64|aarch64_generic aarch64_cortex-a53 aarch64_cortex-a72
@@ -33,6 +37,8 @@ armv7|arm7|arm_cortex-a7_neon-vfpv4
 riscv64|riscv64|riscv64_riscv64
 ppc64le|ppc64le|-
 s390x|s390x|-
+mipsel|-|mipsel_24kc
+mips|-|mips_24kc
 "
 
 want=("$@")
@@ -67,7 +73,7 @@ while IFS='|' read -r label nfpm_arch owrt; do
   if [ ! -f "$binary" ]; then
     # Loud, not skipped: a missing architecture that says nothing is how a
     # release ships with one fewer package than its own page advertises.
-    echo "!! no binary for $label — run packaging/build-binaries.sh $label"
+    echo "!! no binary for $label — run packaging/build-binaries.sh $label (MIPS: packaging/mips/build-mips.sh $label)"
     continue
   fi
   # Refuse to wrap a stale binary.
@@ -81,7 +87,7 @@ while IFS='|' read -r label nfpm_arch owrt; do
   newer="$(find crates static Cargo.toml Cargo.lock -newer "$binary" -type f -print -quit 2>/dev/null || true)"
   if [ -n "$newer" ]; then
     echo "!! the $label binary is older than the source ($newer)"
-    echo "   run: ./packaging/build-binaries.sh $label"
+    echo "   run: ./packaging/build-binaries.sh $label   (MIPS: ./packaging/mips/build-mips.sh $label)"
     exit 1
   fi
 
@@ -109,9 +115,11 @@ while IFS='|' read -r label nfpm_arch owrt; do
       exec 3>&1 1>&2
       mkdir -p /stage /tmp/out
       install -m 0755 '/work/$binary' /stage/breeze-core
-      for packager in deb rpm archlinux apk; do
-        BC_ARCH='$nfpm_arch' nfpm package -f packaging/nfpm/nfpm.yaml -p \$packager -t /tmp/out
-      done
+      if [ '$nfpm_arch' != '-' ]; then
+        for packager in deb rpm archlinux apk; do
+          BC_ARCH='$nfpm_arch' nfpm package -f packaging/nfpm/nfpm.yaml -p \$packager -t /tmp/out
+        done
+      fi
       # ipk, once per OpenWrt architecture label.
       if [ '$owrt' != '-' ]; then
         for a in $owrt; do

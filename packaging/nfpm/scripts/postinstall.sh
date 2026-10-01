@@ -17,7 +17,9 @@ set -e
 # service — which runs as breeze — then cannot write devices.json. Pairing fails
 # with a 500 and nothing on the machine explains why. Doing it here covers every
 # packager, including any that starts behaving the same way later.
-if getent passwd breeze >/dev/null 2>&1; then
+# getent where there is one; OpenWrt has none, and its accounts are plain lines
+# in /etc/passwd.
+if getent passwd breeze >/dev/null 2>&1 || grep -qs '^breeze:' /etc/passwd; then
     chown breeze:breeze /etc/breeze-core 2>/dev/null || true
     chmod 750 /etc/breeze-core 2>/dev/null || true
     if [ -f /etc/breeze-core/breeze-core.env ]; then

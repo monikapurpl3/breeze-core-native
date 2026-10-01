@@ -20,7 +20,8 @@
 #   ├── arch/    <arch>/aspic.db…               (pacman, signed db + packages)
 #   │            sources/*.src.tar.gz + .sig   (makepkg --allsource, for makepkg -si)
 #   ├── alpine/  <arch>/APKINDEX.tar.gz         (apk, RSA-signed index)
-#   ├── openwrt/ <arch>/Packages + Packages.sig (opkg, usign)
+#   ├── openwrt/ <arch>/Packages + Packages.sig (opkg, usign: OpenWrt 24.10 and older)
+#   ├── openwrt-apk/ <arch>/packages.adb        (apk v3, P-256: OpenWrt 25.12 and later)
 #   ├── xbps/    <arch>-repodata + .xbps        (Void, RSA-signed, trust-on-first-use)
 #   └── portage/breeze.git/                     (Gentoo overlay, dumb-HTTP git)
 #
@@ -41,6 +42,7 @@ GPG_NAME="Aspic Repository"
 GPG_EMAIL="repo@aspic.salataputarica.hr.eu.org"
 APK_KEY="aspic-alpine.rsa"
 XBPS_KEY="aspic-xbps.pem"
+OWRT_APK_KEY="aspic-openwrt-apk.pem"
 # Persistent, and it MUST be: the Gentoo overlay is published as a git
 # repository, and regenerating it from scratch each release would give every
 # commit a new hash. A user who had added the overlay would then get
@@ -86,6 +88,8 @@ ls "$PKG"/breeze-core_"${VER}"*_amd64.deb >/dev/null 2>&1 || {
 ls packaging/out/termux/breeze-core_"${VER}"-*_aarch64.deb >/dev/null 2>&1 || {
   echo "no Termux packages for $VER — run packaging/termux/build-packages.sh first"; exit 1; }
 # So are the source packages, which the deb, rpm and pacman stages all carry.
+ls packaging/out/openwrt-apk/x86_64/breeze-core-"${VER}"-r*.apk >/dev/null 2>&1 || {
+  echo "no OpenWrt apk packages for $VER — run packaging/openwrt-apk/build-apk.sh first"; exit 1; }
 ls packaging/out/source/rpm/breeze-core-"${VER}"-*.src.rpm >/dev/null 2>&1 || {
   echo "no source packages for $VER — run packaging/source/build-source.sh first"; exit 1; }
 
@@ -222,6 +226,19 @@ if [ ! -f "$KEYS/$XBPS_KEY" ]; then
     apk add --no-cache openssl >/dev/null
     openssl genrsa -out /keys/$XBPS_KEY 4096 2>/dev/null
     chmod 600 /keys/$XBPS_KEY
+  "
+fi
+
+if [ ! -f "$KEYS/$OWRT_APK_KEY" ]; then
+  echo "=== generating the OpenWrt apk key (first run) ==="
+  # ECDSA P-256, because that is what OpenWrt itself signs its apk indexes
+  # with (/etc/apk/keys/openwrt-25.12.pem is one) -- a sixth key, since
+  # apk-tools 3 reads neither GPG nor usign.
+  docker run --rm -v "$MOUNT/$KEYS:/keys" alpine:3.24 sh -c "
+    apk add --no-cache openssl >/dev/null
+    openssl ecparam -name prime256v1 -genkey -noout -out /keys/$OWRT_APK_KEY 2>/dev/null
+    openssl ec -in /keys/$OWRT_APK_KEY -pubout -out /keys/$OWRT_APK_KEY.pub 2>/dev/null
+    chmod 600 /keys/$OWRT_APK_KEY
   "
 fi
 
@@ -630,6 +647,29 @@ echo "  feed signed (usign fingerprint $(cat /out/aspic-usign.fingerprint))"
         sh -eu -s
         tar -cf - -C /out . >&3
       ' | tar -xf - -C "$OUT"
+
+# --- apk v3 feed (OpenWrt 25.12 and later) ------------------------------------
+# OpenWrt 25.12 replaced opkg with apk-tools 3, so the feed above serves 24.10
+# and older and this one serves 25.12 onwards: one packages.adb per OpenWrt
+# architecture, signed with the P-256 key. The packages themselves carry no
+# signature, which is how OpenWrt's own are made: the index records each one's
+# hash, and the index is what is signed -- hence --allow-untrusted, which only
+# tells mkndx not to insist on per-package signatures.
+echo "=== apk v3 feed (OpenWrt 25.12+) ==="
+stage alpine:3.24 '
+  R=/out/openwrt-apk
+  for d in /work/packaging/out/openwrt-apk/*/; do
+    a=$(basename "$d")
+    mkdir -p "$R/$a"
+    cp "$d"breeze-core-*.apk "$R/$a/"
+    apk mkndx --allow-untrusted --sign-key /work/packaging/repo/keys/aspic-openwrt-apk.pem \
+      --description "Aspic" -o "$R/$a/packages.adb" "$R/$a"/breeze-core-*.apk >/dev/null
+  done
+  [ -s "$R/mipsel_24kc/packages.adb" ] || { echo "!! no mipsel_24kc index"; exit 1; }
+  echo "  $(ls -d "$R"/*/ | wc -l) architectures indexed and signed"
+'
+cp "$KEYS/$OWRT_APK_KEY.pub" "$OUT/aspic-openwrt.pem"
+chmod 644 "$OUT/aspic-openwrt.pem"
 
 # --- Windows installer ------------------------------------------------------
 # A download, not a repository: Windows has no package manager in the sense the

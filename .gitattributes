@@ -61,3 +61,8 @@ packaging/termux/**     text eol=lf
 # The source-package recipes: debian/rules is a makefile run on Debian, and the
 # spec, PKGBUILD and control files are read on Linux builders.
 packaging/source/**     text eol=lf
+
+# The MIPS builder and the OpenWrt apk builder: a Dockerfile whose RUN lines
+# continue with backslashes, and scripts run in Linux containers.
+packaging/mips/**        text eol=lf
+packaging/openwrt-apk/** text eol=lf

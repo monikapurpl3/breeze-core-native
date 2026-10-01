@@ -85,8 +85,11 @@ run_case() {
   # BASE and VER as the script's first lines as well as -e: termux-docker's
   # entrypoint switches to the app user through `env -i`, which drops every
   # variable it does not list itself. Harmless everywhere else.
+  # CASE_DOCKER_ARGS: extra docker arguments for one case, such as the
+  # --platform an imported MIPS image needs.
+  # shellcheck disable=SC2086
   if printf 'BASE=%s\nVER=%s\n%s' "$BASE" "$VER" "$script" \
-     | timeout 900 docker run --rm -i ${NETARG} -e BASE="$BASE" -e VER="$VER" \
+     | timeout 900 docker run --rm -i ${NETARG} ${CASE_DOCKER_ARGS:-} -e BASE="$BASE" -e VER="$VER" \
          "$image" sh -eu -s 2>&1 | sed 's/^/    /'; then
     report 0 "$name"
   else
@@ -340,6 +343,96 @@ run_case gentoo alpine:3.20 '
     echo "   !! pull failed"; sed "s/^/      /" /tmp/err2; exit 1; }
   echo "   pulled"
 '
+
+# --- OpenWrt -----------------------------------------------------------------
+# Two feeds, because OpenWrt 25.12 replaced opkg with apk-tools 3: /openwrt
+# (opkg, usign) for 24.10 and older, /openwrt-apk (apk v3, P-256) for 25.12
+# and later. In OpenWrt's own root filesystems, x86_64 natively and both MIPS
+# endiannesses under QEMU (packaging/mips/prepare-qemu.sh, run below when a
+# MIPS case is selected).
+#
+# Every install's output is searched for errors as well as its exit status:
+# the 4.2.0 packages "installed" on OpenWrt with a pre-install script that had
+# died on a missing addgroup, and so with no service account, and only the
+# word "error" in the transcript said so.
+#
+# What a container cannot show: procd. It is not running, so the server is
+# started by hand, as root; on a router procd starts it as breeze.
+OWRT_RUN='
+  echo "-- the server runs"
+  K=$(head -c 16 /dev/urandom | hexdump -e "16/1 \"%02x\"")
+  printf "{\"api_key\": \"%s\", \"units\": []}\n" "$K" > /etc/breeze-core/config.json
+  breeze-core serve --host 127.0.0.1 --port 8420 > /tmp/serve.log 2>&1 &
+  i=0; until wget -qO- http://127.0.0.1:8420/api/health >/dev/null 2>&1; do
+    i=$((i+1)); [ $i -lt 40 ] || { echo "   !! no answer"; cat /tmp/serve.log; exit 1; }; sleep 0.5; done
+  echo "   /api/health answers"
+'
+OWRT_ACCOUNT='
+  grep -q "^breeze:" /etc/passwd || { echo "   !! no breeze account"; exit 1; }
+  [ "$(ls -ld /etc/breeze-core | awk "{print \$3}")" = breeze ] || { echo "   !! /etc/breeze-core is not owned by breeze"; exit 1; }
+  echo "   account breeze, owning /etc/breeze-core"
+'
+
+# OpenWrt'"'"'s boot creates /var/lock, and a container never boots: without it
+# opkg will not run at all ("Could not create lock file") and apk-era account
+# helpers fail. Both cases make it first, as /etc/init.d/boot would.
+OPKG_CASE='
+  mkdir -p /var/lock
+  . /etc/openwrt_release
+  echo "src/gz aspic $BASE/openwrt/$DISTRIB_ARCH" >> /etc/opkg/customfeeds.conf
+
+  echo "-- without the key, opkg must refuse the feed"
+  # Both halves: the refusal named in the output, and nothing installable. A
+  # check on the message alone once read "opkg would not run" as "accepted".
+  opkg update > /tmp/u 2>&1 || true
+  if grep -q "Signature check failed" /tmp/u && ! opkg install breeze-core > /dev/null 2>&1; then
+    echo "   refused, as it should"
+  else echo "   !! the feed was not refused as unsigned:"; sed "s/^/      /" /tmp/u; exit 1; fi
+
+  echo "-- with the key, it installs ($DISTRIB_ARCH, OpenWrt $DISTRIB_RELEASE)"
+  wget -qO /tmp/aspic-usign.pub "$BASE/aspic-usign.pub"
+  cp /tmp/aspic-usign.pub "/etc/opkg/keys/$(usign -F -p /tmp/aspic-usign.pub)"
+  opkg update > /dev/null 2>&1
+  opkg install breeze-core > /tmp/i 2>&1 || { cat /tmp/i; exit 1; }
+  if grep -qi "error\|not found" /tmp/i; then echo "   !! the install reported an error:"; cat /tmp/i; exit 1; fi
+  breeze-core --version | grep -q "breeze-core $VER"
+  echo "   installed $(breeze-core --version | head -1)"
+'"$OWRT_ACCOUNT$OWRT_RUN"
+
+APK3_CASE='
+  mkdir -p /var/lock
+  . /etc/openwrt_release
+  echo "$BASE/openwrt-apk/$DISTRIB_ARCH/packages.adb" > /etc/apk/repositories.d/aspic.list
+
+  echo "-- without the key, apk must refuse the feed"
+  apk update > /tmp/u 2>&1 || true
+  if grep -q "openwrt-apk.*UNTRUSTED\|UNTRUSTED.*openwrt-apk" /tmp/u && ! apk add breeze-core > /dev/null 2>&1; then
+    echo "   refused, as it should"
+  else echo "   !! apk accepted an unverifiable feed"; cat /tmp/u; exit 1; fi
+
+  echo "-- with the key, it installs ($DISTRIB_ARCH, OpenWrt $DISTRIB_RELEASE)"
+  wget -qO /etc/apk/keys/aspic-openwrt.pem "$BASE/aspic-openwrt.pem"
+  apk update > /dev/null 2>&1
+  apk add breeze-core > /tmp/i 2>&1 || { cat /tmp/i; exit 1; }
+  if grep -qi "error\|not found" /tmp/i; then echo "   !! the install reported an error:"; cat /tmp/i; exit 1; fi
+  breeze-core --version | grep -q "breeze-core $VER"
+  echo "   installed $(breeze-core --version | head -1)"
+'"$OWRT_ACCOUNT$OWRT_RUN"'
+  echo "-- removal keeps the credentials"
+  apk del breeze-core > /dev/null 2>&1
+  [ ! -e /usr/bin/breeze-core ] && [ -s /etc/breeze-core/config.json ] && echo "   removed; /etc/breeze-core kept"
+'
+
+if selected openwrt-mipsel || selected openwrt-mips || selected openwrt-mipsel-opkg; then
+  ./packaging/mips/prepare-qemu.sh > /dev/null
+fi
+run_case openwrt            openwrt/rootfs:x86_64-24.10.8 "$OPKG_CASE"
+run_case openwrt-apk        openwrt/rootfs:x86_64-25.12.5 "$APK3_CASE"
+CASE_DOCKER_ARGS="--platform linux/mipsle" \
+run_case openwrt-mipsel     bc-openwrt:malta-le-25.12.5   "$APK3_CASE"
+run_case openwrt-mips       openwrt/rootfs:mips_24kc-25.12.5 "$APK3_CASE"
+CASE_DOCKER_ARGS="--platform linux/mipsle" \
+run_case openwrt-mipsel-opkg bc-openwrt:malta-le-24.10.8  "$OPKG_CASE"
 
 # --- source packages ---------------------------------------------------------
 # The source, fetched through each package manager from the signed tree, and
