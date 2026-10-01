@@ -33,6 +33,16 @@ impl Verdict {
             Self::Skip => "skip",
         }
     }
+
+    /// The verdict as `--nerd` writes it.
+    fn name(self) -> &'static str {
+        match self {
+            Self::Ok => "ok",
+            Self::Warn => "warn",
+            Self::Fail => "fail",
+            Self::Skip => "skip",
+        }
+    }
 }
 
 pub struct Report {
@@ -96,7 +106,12 @@ const SANE_MAX: f64 = 80.0;
 /// about 700 ms, and a second and a half means a weak signal.
 const SLOW_MS: u128 = 1_500;
 
-pub fn run(options: &crate::cli::admin::ClientOpts) -> Result<i32, String> {
+/// Run every check. With `nerd`, also save the Nerd snapshot -- to that path,
+/// or to a generated name in the current directory when it is `Some(None)`.
+pub fn run(
+    options: &crate::cli::admin::ClientOpts,
+    nerd: Option<Option<&str>>,
+) -> Result<i32, String> {
     // `--config` is how the reference's own alias invokes this: the key comes
     // from the server's config rather than from a profile, which is also what
     // lets a first run on the server enrol itself without stopping to ask.
@@ -104,7 +119,17 @@ pub fn run(options: &crate::cli::admin::ClientOpts) -> Result<i32, String> {
     let mut report = Report::new();
 
     println!("breeze-core diag -> {}", client.base_url());
+    checks(&client, &mut report);
+    report.summarise();
+    // After the checks, and whatever they found: a server in trouble is
+    // exactly when someone wants this file.
+    if let Some(path) = nerd {
+        write_nerd(&client, &report, path)?;
+    }
+    Ok(report.exit_code())
+}
 
+fn checks(client: &Client, report: &mut Report) {
     // --- reachable, and what it is -----------------------------------------
     report.section("server");
     match client.get("/api/health") {
@@ -114,8 +139,7 @@ pub fn run(options: &crate::cli::admin::ClientOpts) -> Result<i32, String> {
         Ok(other) => report.add(Verdict::Fail, format!("health returned {other}")),
         Err(e) => {
             report.add(Verdict::Fail, format!("cannot reach the server: {e}"));
-            report.summarise();
-            return Ok(report.exit_code());
+            return;
         }
     }
 
@@ -178,8 +202,7 @@ pub fn run(options: &crate::cli::admin::ClientOpts) -> Result<i32, String> {
         Ok(u) => u,
         Err(e) => {
             report.add(Verdict::Fail, format!("cannot list units: {e}"));
-            report.summarise();
-            return Ok(report.exit_code());
+            return;
         }
     };
     let list = units.as_array().cloned().unwrap_or_default();
@@ -188,8 +211,7 @@ pub fn run(options: &crate::cli::admin::ClientOpts) -> Result<i32, String> {
             Verdict::Warn,
             "no units are configured -- add one with `breeze-core control` or the panel",
         );
-        report.summarise();
-        return Ok(report.exit_code());
+        return;
     }
     report.add(Verdict::Ok, format!("{} unit(s) configured", list.len()));
 
@@ -260,7 +282,7 @@ pub fn run(options: &crate::cli::admin::ClientOpts) -> Result<i32, String> {
             );
         }
 
-        check_state(&mut report, &state);
+        check_state(report, &state);
 
         // Capabilities, where the server offers them: a client hides controls
         // based on this, so a wrong answer is a missing button.
@@ -356,9 +378,91 @@ pub fn run(options: &crate::cli::admin::ClientOpts) -> Result<i32, String> {
             "an out-of-range temperature was ACCEPTED and sent to a unit",
         ),
     }
+}
 
-    report.summarise();
-    Ok(report.exit_code())
+/// `--nerd`: what the app's Nerd screen shows, and every check above, as one
+/// JSON file -- the single attachment a bug report needs.
+///
+/// The same two calls the screen makes (`/api/version`, then a timed
+/// `/api/system`), so the file and the screen cannot disagree about what they
+/// describe. Written 0600: it holds no keys or tokens, but it does hold this
+/// server's hostname, LAN addresses and paths, which is said when it is saved.
+fn write_nerd(client: &Client, report: &Report, path: Option<&str>) -> Result<(), String> {
+    let version = client
+        .get("/api/version")
+        .unwrap_or(serde_json::Value::Null);
+    let started = std::time::Instant::now();
+    let system = client.get("/api/system");
+    let round_trip_ms = started.elapsed().as_millis();
+    let (system, system_error) = match system {
+        Ok(s) => (s, None),
+        Err(e) => (serde_json::Value::Null, Some(e)),
+    };
+
+    let now = breeze_store::now_local();
+    let doc = serde_json::json!({
+        "breeze_core_nerd": 1,
+        "generated_at": now.format("%Y-%m-%dT%H:%M:%S").to_string(),
+        "generated_by": format!("breeze-core {} diag --nerd", env!("CARGO_PKG_VERSION")),
+        "base_url": client.base_url(),
+        "round_trip_ms": round_trip_ms,
+        "version": version,
+        "system": system,
+        "system_error": system_error,
+        "checks": report.checks.iter()
+            .map(|(v, m)| serde_json::json!({ "verdict": v.name(), "message": m }))
+            .collect::<Vec<_>>(),
+        "summary": {
+            "ok": report.count(Verdict::Ok),
+            "warn": report.count(Verdict::Warn),
+            "fail": report.count(Verdict::Fail),
+            "skip": report.count(Verdict::Skip),
+        },
+    });
+
+    let path = match path {
+        Some(p) => p.to_string(),
+        None => {
+            // The server's own hostname, where it said, so two files from two
+            // servers do not look alike in a downloads folder.
+            let host: String = doc["system"]["os"]["hostname"]
+                .as_str()
+                .unwrap_or("server")
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || c == '-' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            format!(
+                "breeze-core-nerd-{host}-{}.json",
+                now.format("%Y%m%d-%H%M%S")
+            )
+        }
+    };
+    let text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n";
+    write_private(&path, &text).map_err(|e| format!("cannot write {path}: {e}"))?;
+    println!("\n== nerd ==");
+    println!("  saved to {path}");
+    println!("  It holds this server's hostname, LAN addresses and file paths, but no");
+    println!("  keys or tokens. Look it over before posting it anywhere public.");
+    Ok(())
+}
+
+/// Create (or replace) a file readable only by its owner.
+fn write_private(path: &str, text: &str) -> std::io::Result<()> {
+    use std::io::Write as _;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    options.open(path)?.write_all(text.as_bytes())
 }
 
 /// The sanity of one state document.

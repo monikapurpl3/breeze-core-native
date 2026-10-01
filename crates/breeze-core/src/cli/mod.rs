@@ -47,6 +47,8 @@ pub enum Command {
     },
     Diag {
         client: ClientOpts,
+        /// `--nerd [PATH]`: `Some(None)` saves to a generated name.
+        nerd: Option<Option<String>>,
     },
     Login {
         base_url: Option<String>,
@@ -151,7 +153,8 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
 
         "diag" => {
             let mut client = ClientOpts::default();
-            let mut it = rest.iter();
+            let mut nerd = None;
+            let mut it = rest.iter().peekable();
             while let Some(flag) = it.next() {
                 match flag.as_str() {
                     "--base-url" => client.base_url = Some(need(&mut it, "--base-url")?),
@@ -159,10 +162,18 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
                     // Accepted and ignored, so a script written against the
                     // reference keeps working. This one never prompts anyway.
                     "--auto" => {}
+                    // The path is optional: a following word that is not a
+                    // flag is where to save it.
+                    "--nerd" => {
+                        nerd = Some(match it.peek() {
+                            Some(next) if !next.starts_with("--") => it.next().cloned(),
+                            _ => None,
+                        })
+                    }
                     other => return Err(format!("unexpected argument '{other}'")),
                 }
             }
-            Ok(Command::Diag { client })
+            Ok(Command::Diag { client, nerd })
         }
 
         // `pair` is deliberately NOT an alias here — it belongs to the units.
@@ -240,7 +251,7 @@ usage:
   breeze-core serve [--host HOST] [--port PORT] [--behind-proxy]
   breeze-core pair [--ip ADDRESS] [--out PATH] [--no-prompt]
   breeze-core control 'NAME' [TYPE] [TEMPERATURE] [FLAP] [FAN] [EXTRA] [TIMER]
-  breeze-core diag [--base-url URL] [--config PATH]
+  breeze-core diag [--base-url URL] [--config PATH] [--nerd [FILE]]
   breeze-core units [--config PATH]
   breeze-core approve [CODE] [--config PATH]
   breeze-core devices [--config PATH]
@@ -485,12 +496,32 @@ mod tests {
         ))
         .unwrap()
         {
-            Command::Diag { client } => {
+            Command::Diag { client, nerd } => {
                 assert_eq!(client.base_url.as_deref(), Some("http://127.0.0.1:8420"));
                 assert!(client.config.is_some());
+                assert_eq!(nerd, None, "no --nerd, no file");
             }
             _ => panic!("expected diag"),
         }
+    }
+
+    #[test]
+    fn diag_nerd_takes_an_optional_path() {
+        let nerd = |line: &str| match parse(&args(line)).unwrap() {
+            Command::Diag { nerd, .. } => nerd,
+            _ => panic!("expected diag"),
+        };
+        assert_eq!(nerd("diag --nerd"), Some(None));
+        assert_eq!(
+            nerd("diag --nerd /tmp/n.json"),
+            Some(Some("/tmp/n.json".into()))
+        );
+        // A flag after it is a flag, not a file name.
+        assert_eq!(nerd("diag --nerd --base-url http://h:8420"), Some(None));
+        assert_eq!(
+            nerd("diag --base-url http://h:8420 --nerd out.json"),
+            Some(Some("out.json".into()))
+        );
     }
 
     #[test]

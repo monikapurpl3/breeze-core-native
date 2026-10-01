@@ -35,11 +35,13 @@ fn main() {
         cli::Command::Pair { ip, out, prompt } => {
             cli::pair::run(cli::pair::Options { ip, out, prompt })
         }
-        cli::Command::Diag { client } => match cli::diag::run(&client) {
-            // The exit code is the point of a diagnostic in a script.
-            Ok(code) => std::process::exit(code),
-            Err(e) => Err(e),
-        },
+        cli::Command::Diag { client, nerd } => {
+            match cli::diag::run(&client, nerd.as_ref().map(|p| p.as_deref())) {
+                // The exit code is the point of a diagnostic in a script.
+                Ok(code) => std::process::exit(code),
+                Err(e) => Err(e),
+            }
+        }
         cli::Command::Login { base_url } => cli::profile::enrol(base_url).map(|_| ()),
         cli::Command::Approve { code, client } => cli::approve(code, &client),
         cli::Command::Devices { client } => cli::admin::devices(&client),
