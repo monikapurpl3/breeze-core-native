@@ -11,6 +11,7 @@
 - [On Windows](Installing-on-Windows)
 - [On the BSDs](Installing-on-the-BSDs)
 - [On OPNsense](Installing-on-OPNsense)
+- [On Termux (Android)](Installing-on-Termux)
 - [From source (any OS/init/libc)](Installing-from-source)
 
 **Use it**

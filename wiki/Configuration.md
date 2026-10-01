@@ -7,7 +7,8 @@ itself; the variables are read **once at startup**, so a change means a restart.
 ## The four store files
 
 All four live in one directory. `AC_CONFIG_DIR` names it (default
-`/etc/breeze-core`), and each file can be moved individually if you need to.
+`/etc/breeze-core`, or `$PREFIX/etc/breeze-core` in Termux), and each file can
+be moved individually if you need to.
 
 | File | Mode | Written by | Holds |
 |---|---|---|---|
@@ -46,7 +47,7 @@ admin approval restricted to the LAN, proxy headers distrusted.
 
 | Var | Default | Purpose |
 |---|---|---|
-| `AC_CONFIG_DIR` | `/etc/breeze-core` | the directory the four stores default into |
+| `AC_CONFIG_DIR` | `/etc/breeze-core` (Termux: `$PREFIX/etc/breeze-core`) | the directory the four stores default into |
 | `AC_CONFIG` | `<dir>/config.json` | config file path |
 | `AC_DEVICES` | `<dir>/devices.json` | per-device credential store |
 | `AC_PROGRAMS` | `<dir>/programs.json` | favourites/schedules/curves |

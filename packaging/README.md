@@ -19,6 +19,7 @@ maintainer's workstation. Nothing is signed on the server that serves it.
 | `packaging/out/bin/<arch>/breeze-core` | the executable, always under that name |
 | `packaging/out/dist/*.tar.zst` | one archive per architecture, for people who do not want a package |
 | `packaging/out/pkg/` | 30 packages: 6 architectures × deb/rpm/arch/apk, plus ipk per OpenWrt target |
+| `packaging/out/termux/` | 3 Termux packages (aarch64, arm, x86_64), from `packaging/termux/` |
 | `packaging/out/aspic/` | the whole published tree — pages, keys, five signed repositories |
 
 ## Decisions worth knowing before changing anything here
@@ -89,6 +90,17 @@ does download NSSM and the updater during setup, checked against pinned
 SHA-256s, because antivirus products flag installers that carry NSSM; an
 upgrade reuses the installed copy, and an offline machine can have
 `nssm-2.24.zip` put beside the installer. See `packaging/windows/`.
+
+## Termux
+
+`build-binaries.sh` does not build these either: Termux needs an Android
+binary, not the static musl one (which would run, and believe it was in UTC,
+because Android has no `/etc/localtime`). `packaging/termux/build-packages.sh`
+links them with the Android NDK on stable Rust, packages them with nfpm, then
+repacks them with `dpkg-deb` as xz, because nfpm always gzips `control.tar` and
+32-bit arm Termux's apt rejected that. `verify-termux.sh` installs and runs them
+in termux-docker. They go to their own apt repository, `/termux`, signed with
+the same key as `/deb`.
 
 ## The BSDs
 

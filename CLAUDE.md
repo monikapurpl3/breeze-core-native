@@ -235,6 +235,17 @@ pydantic models.
 - **MIPS links with the OpenWrt SDK toolchain**, not zig: zig 0.16's bundled
   `mipsel` musl emits references to its own std internals it then fails to
   provide.
+- **Termux is an Android build, linked by the NDK** (`packaging/termux/`), not
+  the musl binary: on Android musl finds no `/etc/localtime` and runs in UTC, so
+  schedules fire hours out. Android-only code is `cfg(target_os = "android")`;
+  the config directory default lives in ONE place, `breeze_store::config_dir()`.
+- **Termux debs are xz in both members.** nfpm always gzips `control.tar`, and
+  32-bit arm Termux's apt rejects that as "Corrupted archive" while `dpkg -i`
+  accepts it, so `dpkg-deb -f` passing proves nothing. The build repacks with
+  `dpkg-deb -Zxz`.
+- **termux-docker drops `-e` variables** (its entrypoint switches user with
+  `env -i`) and has no `/tmp` (use `$TMPDIR`); the 32-bit image needs
+  `--security-opt seccomp=unconfined` for bionic's `personality()` call.
 - Pin the Zig version in CI. `setup-zig@v1` could not fetch 0.16 at all — Zig
   renamed release artifacts (arch before OS, under `/download/` not `/builds/`).
 

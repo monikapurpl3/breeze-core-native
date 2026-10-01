@@ -21,7 +21,8 @@ package published on every release, or is listed here as absent with the reason.
 repository · † keyworded with a guard, see below
 
 Plus a native package each for **FreeBSD**, **NetBSD** and **OpenBSD**, an
-**OPNsense** plugin, and a **Windows** installer.
+**OPNsense** plugin, a **Windows** installer, and **Termux** packages for
+Android (aarch64, arm, x86_64), below.
 
 **`×2` is glibc and musl.** Void treats the two libcs as separate
 architectures with separate package indexes, so each gets its own package — the
@@ -115,14 +116,37 @@ want it, these are the traps waiting:
 
 ## Termux
 
-**Not shipped either, and this one is nearly free.** `aarch64-linux-android` is
-a **tier 2** Rust target, so `std` is prebuilt and there is no interpreter or
-ABI tag to satisfy. A Termux build is one target line away; nobody has asked
-for one.
+**Shipped: aarch64, arm and x86_64**, as Termux packages in their own signed
+apt repository at `/termux`. See [Installing on Termux](Installing-on-Termux).
 
-The one Android-specific trap in the area is not one this project can hit:
-Android's linker refuses undefined symbols in a shared object, and a static
-binary has no shared objects to get wrong.
+These are **Android builds**, linked by the NDK, not the static musl binaries.
+The musl build does run on a phone, because the kernel is Linux, but it looks
+for its timezone in `/etc/localtime`, which Android doesn't have. So it believes
+it is in UTC, and every schedule and timer fires hours out. Built for Android,
+chrono reads the phone's zone and Android's own timezone database.
+
+Android is a **tier 2** Rust target, so `std` is prebuilt and stable Rust is
+enough. Zig can't link it, because it ships no bionic. The NDK's clang does,
+both for rustc and for ring's C, at API 24, Termux's own floor.
+
+Traps found getting there:
+
+- **The config directory had to move.** No app may write to `/etc` on Android,
+  and the server, `pair` and the admin commands each had their own copy of
+  `/etc/breeze-core`. There is one default now, and on Android it is Termux's
+  prefix.
+- **The packages are xz, not zstd like every other deb here.** nfpm compresses
+  `data.tar` as asked but always gzips `control.tar`. apt on 32-bit arm Termux
+  rejected that member, and a zstd one, as `Corrupted archive`, while `dpkg -i`
+  installed the same file. xz is what Termux's own packages use, so the build
+  repacks with `dpkg-deb`.
+- **nfpm renames architectures.** It turns Termux's `aarch64` and `x86_64` into
+  Debian's `arm64` and `amd64`, which Termux's dpkg refuses as foreign. Debian's
+  dpkg in turn warns that `x86_64` is not a valid architecture name; Termux's
+  dpkg is patched to accept it.
+- **32-bit bionic calls `personality()` first thing**, and Docker's default
+  seccomp profile refuses the value it asks for. The arm verification
+  container runs without seccomp. Only that architecture needs it.
 
 ## The honest cost
 

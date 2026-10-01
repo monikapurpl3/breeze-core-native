@@ -23,7 +23,8 @@ Debian 12, Alpine and RHEL 8 alike.
 | OpenWrt | `opkg` | x86_64, 3 × aarch64, arm_cortex-a7, riscv64 |
 
 Plus [the BSDs](Installing-on-the-BSDs), [OPNsense](Installing-on-OPNsense),
-[Windows](Installing-on-Windows) and [containers](Installing-with-containers).
+[Termux](Installing-on-Termux), [Windows](Installing-on-Windows) and
+[containers](Installing-with-containers).
 
 **Void gets two packages per architecture**, glibc and musl, holding the same
 bytes — the binary is static and does not care which libc the host has, but

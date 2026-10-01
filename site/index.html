@@ -42,6 +42,7 @@
     <a class="t-arch" href="#arch">Arch</a>
     <a class="t-alpine" href="#alpine">Alpine</a>
     <a class="t-owrt" href="#openwrt">OpenWrt</a>
+    <a class="t-termux" href="#termux">Termux</a>
     <a class="t-fbsd" href="#freebsd">FreeBSD</a>
     <a class="t-nbsd" href="#netbsd">NetBSD</a>
     <a class="t-obsd" href="#openbsd">OpenBSD</a>
@@ -147,6 +148,26 @@ opkg update</pre>
       aarch64_cortex-a72 · arm_cortex-a7_neon-vfpv4 · riscv64_riscv64. The key
       file has to be <i>named</i> after its own fingerprint — opkg looks it up by
       that name, so a sensible filename silently fails to verify.</p>
+  </section>
+
+  <section id="termux" class="s-termux">
+    <h2>Termux</h2>
+    <span class="who">Android, inside the Termux app — Termux's own
+      <code>apt</code>, the same key as Debian</span>
+<pre><span class="c"># no sudo: everything belongs to the Termux app, under $PREFIX</span>
+mkdir -p $PREFIX/etc/apt/keyrings $PREFIX/etc/apt/sources.list.d
+curl -fsSL https://aspic.salataputarica.hr.eu.org/aspic.asc \
+  -o $PREFIX/etc/apt/keyrings/aspic.asc
+echo "deb [signed-by=$PREFIX/etc/apt/keyrings/aspic.asc] https://aspic.salataputarica.hr.eu.org/termux stable main" \
+  &gt; $PREFIX/etc/apt/sources.list.d/aspic.list
+pkg update &amp;&amp; pkg install breeze-core</pre>
+    <p class="dim">aarch64 · arm · x86_64. A real Android build rather than the
+      static Linux one, so it reads the phone's own timezone and schedules fire
+      at the right hour. It runs under <b>termux-services</b> and is installed
+      <b>switched off</b>: pair a unit, then <code>sv-enable breeze-core</code>.</p>
+    <div class="note"><b>Android stops background apps.</b> Run
+      <code>termux-wake-lock</code> so it keeps running with the screen off, and
+      add the Termux:Boot add-on to start it after a reboot.</div>
   </section>
 
   <section id="freebsd" class="s-fbsd">

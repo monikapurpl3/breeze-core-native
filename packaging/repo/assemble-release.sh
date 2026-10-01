@@ -75,6 +75,21 @@ for f in "$TREE"/alpine/*/breeze-core-"$VER"-r*.apk; do
   cp "$f" "$OUT/breeze-core_${VER}-${rel}_${arch}.apk"
 done
 
+# Termux's packages are debs too, and in a flat list of assets its architecture
+# names sit beside Debian's -- aarch64 next to arm64, arm next to armhf -- with
+# nothing to say which is which. So the release names them termux-<arch>.
+n=0
+for f in "$TREE"/termux/pool/main/b/breeze-core/breeze-core_"$VER"-*_*.deb; do
+  # breeze-core_<ver>-<rel>_<arch>, split from the front: the architecture can
+  # itself contain an underscore (x86_64), so splitting on the last one would
+  # give x86_termux-64.
+  rest="$(basename "$f" .deb)"; rest="${rest#breeze-core_"$VER"-}"
+  cp "$f" "$OUT/breeze-core_${VER}-${rest%%_*}_termux-${rest#*_}.deb"
+  n=$((n + 1))
+done
+printf '  %-10s %2d\n' termux "$n"
+[ "$n" -gt 0 ] || { echo "  !! no termux packages for $VER"; missing=1; }
+
 rename freebsd "$TREE/freebsd/breeze-core-$VER.pkg" "breeze-core-$VER-freebsd-amd64.pkg"
 rename netbsd  "$TREE/netbsd/All/breeze-core-$VER.tgz" "breeze-core-$VER-netbsd-amd64.tgz"
 obsd="$(ls "$TREE"/openbsd/*/packages/*/breeze-core-"$VER".tgz 2>/dev/null | head -1 || true)"

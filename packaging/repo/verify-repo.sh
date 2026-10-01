@@ -79,7 +79,10 @@ run_case() {
   selected "$name" || return 0
   echo
   echo "=== $name ($image)"
-  if printf '%s' "$script" \
+  # BASE and VER as the script's first lines as well as -e: termux-docker's
+  # entrypoint switches to the app user through `env -i`, which drops every
+  # variable it does not list itself. Harmless everywhere else.
+  if printf 'BASE=%s\nVER=%s\n%s' "$BASE" "$VER" "$script" \
      | timeout 900 docker run --rm -i ${NETARG} -e BASE="$BASE" -e VER="$VER" \
          "$image" sh -eu -s 2>&1 | sed 's/^/    /'; then
     report 0 "$name"
@@ -106,6 +109,33 @@ run_case debian debian:12 '
   curl -fsSL "$BASE/aspic.asc" | gpg --dearmor -o /usr/share/keyrings/aspic.gpg
   echo "deb [signed-by=/usr/share/keyrings/aspic.gpg] $BASE/deb stable main" \
     > /etc/apt/sources.list.d/aspic.list
+  apt-get -qq update >/dev/null
+  apt-get -qq install -y breeze-core >/dev/null
+  breeze-core --version | grep -q "breeze-core $VER"
+  echo "   installed $(breeze-core --version | head -1) from the signed repo"
+'
+
+# --- Termux -----------------------------------------------------------------
+# Termux's own apt, as the app user, in a real Android userland. x86_64 only:
+# the three architectures share one index and one signature, and
+# packaging/termux/verify-termux.sh runs the packages themselves on all three.
+# termux-services comes from Termux's own repository, so this needs the
+# internet as well as the repo container.
+run_case termux termux/termux-docker:x86_64 '
+  L=$PREFIX/etc/apt/sources.list.d/aspic.list
+  mkdir -p $PREFIX/etc/apt/sources.list.d $PREFIX/etc/apt/keyrings
+  echo "deb $BASE/termux stable main" > $L
+
+  echo "-- without the key, apt must refuse the repository"
+  if apt-get update 2>&1 | grep -q "NO_PUBKEY\|not signed\|no longer signed\|Missing key"; then
+    echo "   refused, as it should"
+  else
+    echo "   !! apt accepted an unverifiable repository"; exit 1
+  fi
+
+  echo "-- with the key, it installs"
+  curl -fsSL "$BASE/aspic.asc" -o $PREFIX/etc/apt/keyrings/aspic.asc
+  echo "deb [signed-by=$PREFIX/etc/apt/keyrings/aspic.asc] $BASE/termux stable main" > $L
   apt-get -qq update >/dev/null
   apt-get -qq install -y breeze-core >/dev/null
   breeze-core --version | grep -q "breeze-core $VER"

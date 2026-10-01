@@ -14,6 +14,7 @@
 #   ├── breeze-core/index.html                  one page per project
 #   ├── aspic.asc  aspic-alpine.rsa.pub  aspic-usign.pub  aspic-xbps.fingerprint
 #   ├── deb/     dists/stable/… + pool/         (apt,  GPG InRelease)
+#   ├── termux/  dists/stable/… + pool/         (Termux's apt, same key)
 #   ├── rpm/     <arch>/repodata/ + aspic.repo  (dnf/zypper, signed rpms)
 #   ├── arch/    <arch>/aspic.db…               (pacman, signed db + packages)
 #   ├── alpine/  <arch>/APKINDEX.tar.gz         (apk, RSA-signed index)
@@ -79,6 +80,9 @@ stage() {
 # here reported "no packages for 4.0.2" about a directory that was full of them.
 ls "$PKG"/breeze-core_"${VER}"*_amd64.deb >/dev/null 2>&1 || {
   echo "no packages for $VER — run packaging/nfpm/build-packages.sh first"; exit 1; }
+# Termux is tier 1: a release without it is incomplete, not a smaller release.
+ls packaging/out/termux/breeze-core_"${VER}"-*_aarch64.deb >/dev/null 2>&1 || {
+  echo "no Termux packages for $VER — run packaging/termux/build-packages.sh first"; exit 1; }
 
 # Refuse to build a repository out of two versions at once.
 #
@@ -110,6 +114,7 @@ OBSD_STAGE="$(ls -d packaging/out/bsd/openbsd/*/packages/* 2>/dev/null | head -1
 # directory scaffolding.
 STAGING="
 $PKG|./packaging/nfpm/build-packages.sh|
+packaging/out/termux|./packaging/termux/build-packages.sh|
 packaging/out/bsd/freebsd|./packaging/bsd/build-freebsd.sh|data.pkg packagesite.pkg digests.pkg filesite.pkg meta meta.conf packagesite.yaml aspic-freebsd.pub
 packaging/out/bsd/netbsd/All|./packaging/bsd/build-netbsd.sh|pkg_summary pkg_summary.gz pkg_summary.bz2
 $OBSD_STAGE|./packaging/bsd/build-openbsd.sh|
@@ -298,6 +303,44 @@ stage debian:bookworm-slim '
     release . > Release
   # Both forms: InRelease is what a modern apt fetches, Release.gpg is what an
   # older one falls back to, and shipping only the first quietly excludes it.
+  gpg --batch --yes --clearsign -o InRelease Release
+  gpg --batch --yes -abs -o Release.gpg Release
+'
+
+# --- Termux (apt, under Termux's prefix) -------------------------------------
+# A second apt repository, not three more architectures in /deb. Termux's
+# packages install under /data/data/com.termux and depend on Termux packages,
+# and its architecture names (aarch64, arm, x86_64) are not Debian's, so
+# putting them in one suite would offer a Debian machine packages it can never
+# install. Same key, same layout, its own tree.
+echo "=== Termux repo ==="
+stage debian:bookworm-slim '
+  apt-get -qq update >/dev/null && apt-get -qq install -y apt-utils gnupg >/dev/null
+  export GNUPGHOME=$(mktemp -d)
+  gpg --batch --quiet --import /work/packaging/repo/keys/gpg-private.asc
+
+  R=/out/termux
+  mkdir -p "$R/pool/main/b/breeze-core"
+  cp /work/packaging/out/termux/*.deb "$R/pool/main/b/breeze-core/"
+  cd "$R"
+  ARCHES="aarch64 arm x86_64"
+  for a in $ARCHES; do
+    mkdir -p "dists/stable/main/binary-$a"
+    apt-ftparchive --arch "$a" packages pool > "dists/stable/main/binary-$a/Packages"
+    gzip -9kf "dists/stable/main/binary-$a/Packages"
+    # An empty index would publish cleanly and install nothing.
+    grep -q "^Architecture: $a$" "dists/stable/main/binary-$a/Packages" || {
+      echo "!! no $a package in the Termux index"; exit 1; }
+  done
+  cd dists/stable
+  apt-ftparchive \
+    -o APT::FTPArchive::Release::Origin=Aspic \
+    -o APT::FTPArchive::Release::Label=Aspic \
+    -o APT::FTPArchive::Release::Suite=stable \
+    -o APT::FTPArchive::Release::Codename=stable \
+    -o APT::FTPArchive::Release::Architectures="$ARCHES" \
+    -o APT::FTPArchive::Release::Components=main \
+    release . > Release
   gpg --batch --yes --clearsign -o InRelease Release
   gpg --batch --yes -abs -o Release.gpg Release
 '

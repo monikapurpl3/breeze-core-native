@@ -15,6 +15,7 @@ cargo test --workspace                       521 tests, 18 suites
 packaging/build-binaries.sh                  one static executable per target
 packaging/nfpm/build-packages.sh             deb, rpm, pacman, apk, ipk
 packaging/xbps/build-xbps.sh                 Void
+packaging/termux/build-packages.sh           Termux (Android, with the NDK)
 packaging/portage/build-overlay.sh           Gentoo
 packaging/container/build-images.sh          the two images
 packaging/bsd/build-{free,net,open}bsd.sh    on real BSD machines
@@ -65,6 +66,7 @@ to the fix:
 
 ```sh
 BC_RELEASE=2          ./packaging/nfpm/build-packages.sh
+BC_RELEASE=2          ./packaging/termux/build-packages.sh
 BC_XBPS_REVISION=2    ./packaging/xbps/build-xbps.sh
 BC_PORTAGE_REVISION=1 ./packaging/portage/build-overlay.sh   # Gentoo -r1
 ```
@@ -80,7 +82,7 @@ agree:
 
 | Key | For | Why its own |
 |---|---|---|
-| GPG RSA-4096 | apt, dnf, pacman | **RSA, not ed25519** — rpm 4.14 (RHEL/Alma/Rocky 8) cannot *import* an ed25519 public key at all, and every signature then reads as NOKEY. rpm 4.16 is fine, which is what makes it a trap: the machine you test on works |
+| GPG RSA-4096 | apt (Debian and Termux), dnf, pacman | **RSA, not ed25519** — rpm 4.14 (RHEL/Alma/Rocky 8) cannot *import* an ed25519 public key at all, and every signature then reads as NOKEY. rpm 4.16 is fine, which is what makes it a trap: the machine you test on works |
 | RSA-4096 | apk | apk-tools has no ed25519 option |
 | usign ed25519 | opkg | OpenWrt's own signer; GPG is useless to it |
 | RSA-4096 | xbps | all `xbps-rindex` signs with |
@@ -97,8 +99,8 @@ fail with unrelated histories for everyone who had already added the overlay.
 ## Verification is the point
 
 `verify-repo.sh` installs from the built tree in clean containers of each
-distribution — Debian 12, AlmaLinux 9, AlmaLinux 8, Arch, Alpine, Void and
-Gentoo — served over HTTP by an nginx container, because that is the only way
+distribution — Debian 12, Termux, AlmaLinux 9, AlmaLinux 8, Arch, Alpine, Void
+and Gentoo — served over HTTP by an nginx container, because that is the only way
 to exercise the URL layout and the index fetch as a real client does.
 
 **Both directions, every time.** Every one of those clients will happily
@@ -113,6 +115,9 @@ Alongside it:
 
 - `packaging/nfpm/verify-packages.sh` — every package installed and started in
   a container of its distribution;
+- `packaging/termux/verify-termux.sh` — 39 checks per architecture in
+  termux-docker (x86_64 natively, aarch64 and arm under QEMU): installed with
+  apt, run under termux-services, paired, upgraded, removed and purged;
 - `packaging/xbps/verify-xbps.sh` — 38 checks in a Void container, ending in a
   live HTTP request to a server running as the service account;
 - `packaging/portage/verify-portage.sh` — a real `emerge`, plus the ebuild's
@@ -149,6 +154,7 @@ cargo test --workspace
 ./packaging/build-binaries.sh
 ./packaging/nfpm/build-packages.sh
 ./packaging/xbps/build-xbps.sh
+./packaging/termux/build-packages.sh && ./packaging/termux/verify-termux.sh
 ./packaging/portage/build-overlay.sh
 ./packaging/container/build-images.sh
 # and, on the real machines
