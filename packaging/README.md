@@ -102,6 +102,19 @@ repacks them with `dpkg-deb` as xz, because nfpm always gzips `control.tar` and
 in termux-docker. They go to their own apt repository, `/termux`, signed with
 the same key as `/deb`.
 
+## MIPS and OpenWrt
+
+The two MIPS binaries come from `packaging/mips/build-mips.sh`, in an image
+with a pinned nightly (every MIPS target is tier 3: `-Z build-std`) and OpenWrt
+25.12.5's own toolchains. They are static: `+crt-static`,
+`-C link-self-contained=no`, and a `libunwind.a` that is the toolchain's
+`libgcc_eh.a`. nfpm wraps them as ipk only. OpenWrt 25.12 uses apk-tools 3, so
+`packaging/openwrt-apk/build-apk.sh` also makes apk v3 packages for every
+OpenWrt architecture with `apk mkpkg` (Alpine 3.24), and build-repo.sh signs
+`/openwrt-apk` with a P-256 key. `packaging/mips/prepare-qemu.sh` makes MIPS
+runnable for the verify-repo OpenWrt cases; run it again after Docker Desktop
+restarts.
+
 ## Source packages
 
 `packaging/source/build-source.sh` makes the SRPM, the Debian source package

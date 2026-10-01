@@ -20,7 +20,8 @@ Debian 12, Alpine and RHEL 8 alike.
 | Alpine | `apk` | x86_64, aarch64, armv7, riscv64, ppc64le, s390x |
 | Void | `xbps` | x86_64, aarch64, armv7l, riscv64, ppc64le — each in **glibc and musl** |
 | Gentoo · Funtoo | `emerge` | an overlay: `~amd64 ~arm ~arm64 ~ppc64 ~riscv ~s390` |
-| OpenWrt | `opkg` | x86_64, 3 × aarch64, arm_cortex-a7, riscv64 |
+| OpenWrt 25.12+ | `apk` (v3) | x86_64, 3 × aarch64, arm_cortex-a7, riscv64, **mipsel_24kc, mips_24kc** |
+| OpenWrt 24.10 and older | `opkg` | the same eight |
 
 Plus [the BSDs](Installing-on-the-BSDs), [OPNsense](Installing-on-OPNsense),
 [Termux](Installing-on-Termux), [Windows](Installing-on-Windows) and
@@ -56,6 +57,7 @@ signature is:
 | apt, dnf, zypper, pacman | GPG (RSA-4096) |
 | apk | its own RSA key — apk has no ed25519 option |
 | opkg | `usign`, OpenWrt's own signer |
+| OpenWrt apk | P-256 ECDSA, as OpenWrt signs its own apk indexes |
 | FreeBSD `pkg` | RSA, verifying the catalogue |
 | OpenBSD `pkg_add` | `signify` |
 

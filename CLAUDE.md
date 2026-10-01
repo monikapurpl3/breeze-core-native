@@ -246,6 +246,18 @@ pydantic models.
 - **termux-docker drops `-e` variables** (its entrypoint switches user with
   `env -i`) and has no `/tmp` (use `$TMPDIR`); the 32-bit image needs
   `--security-opt seccomp=unconfined` for bionic's `personality()` call.
+- **OpenWrt has no addgroup, adduser, useradd or getent.** The shared
+  preinstall uses `/lib/functions.sh` there (and creates `/var/lock`, which only
+  a booted system has); never reach for getent in a maintainer script without a
+  fallback to `/etc/passwd`. Until 4.3.0 every OpenWrt package installed with no
+  service account, so procd could not start it -- no verifier covered OpenWrt.
+- **OpenWrt 25.12 is apk-tools 3, not opkg**: a separate apk v3 feed
+  (`packaging/openwrt-apk/`). `apk mkndx` needs `--allow-untrusted` because the
+  packages are unsigned by design (the index carries their hashes and is
+  signed). `apk --print-arch` says `mipsel`; the package architecture is
+  `/etc/apk/arch` / `DISTRIB_ARCH` (`mipsel_24kc`).
+- **MIPS is static by three flags** (`packaging/mips/build-mips.sh`); a
+  `-Z build-std-features=llvm-libunwind` does NOT build a libunwind.
 - **Source packages paste in the nfpm scripts**, so editing
   `packaging/nfpm/scripts/` changes four package formats, not one. The spec
   doubles every `%` in them (rpm expands macros inside comments too), and sets

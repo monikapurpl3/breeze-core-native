@@ -27,7 +27,8 @@ sudo pacman -S breeze-core          <span class="c"># Arch family</span>
 sudo apk add breeze-core            <span class="c"># Alpine</span>
 sudo xbps-install -S breeze-core    <span class="c"># Void</span>
 sudo emerge -av app-misc/breeze-core-bin   <span class="c"># Gentoo (the -bin ebuild)</span>
-opkg install breeze-core            <span class="c"># OpenWrt</span>
+apk add breeze-core                 <span class="c"># OpenWrt 25.12+</span>
+opkg install breeze-core            <span class="c"># OpenWrt 24.10 and older</span>
 pkg install breeze-core             <span class="c"># Termux (Android)</span>
 pkgin -y install breeze-core        <span class="c"># NetBSD</span>
 pkg install breeze-core             <span class="c"># FreeBSD</span></pre>
@@ -248,13 +249,13 @@ breeze-core control 'back room' none none none none none 30m</pre>
       <tr><td>an Android app</td><td><a
         href="https://github.com/monikapurpl3/breeze/releases">Breeze</a>, which
         talks to the same API</td></tr>
-      <tr><td>architectures</td><td>x86-64, arm64, armv7, riscv64, ppc64le,
+      <tr><td>architectures</td><td>x86-64, arm64, armv7, riscv64, ppc64le, MIPS (both endiannesses),
         s390x — and routers, which the previous line could not fit on, and
         Android phones under Termux</td></tr>
       <tr><td>package managers</td><td><code>apt</code> · <code>dnf</code> ·
         <code>zypper</code> · <code>pacman</code> · <code>apk</code> ·
         <code>xbps</code> (Void, glibc <i>and</i> musl) · <code>emerge</code>
-        (a Gentoo overlay) · <code>opkg</code> · <code>pkg</code> ·
+        (a Gentoo overlay) · <code>opkg</code> and OpenWrt's apk · <code>pkg</code> ·
         <code>pkgin</code> · <code>pkg_add</code> · Termux's <code>apt</code>,
         plus a Windows installer, an
         OPNsense plugin and container images</td></tr>
@@ -351,7 +352,8 @@ sudo sh migrate.sh --yes   <span class="c"># does it</span></pre>
     <a href="/aspic.asc">GPG</a> (apt · dnf · zypper · pacman · Termux) ·
     <a href="/aspic-alpine.rsa.pub">RSA</a> (apk) ·
     <a href="/aspic-xbps.fingerprint">fingerprint</a> (xbps) ·
-    <a href="/aspic-usign.pub">usign</a> (OpenWrt) ·
+    <a href="/aspic-usign.pub">usign</a> (OpenWrt opkg) ·
+    <a href="/aspic-openwrt.pem">P-256</a> (OpenWrt apk) ·
     <a href="/freebsd/aspic-freebsd.pub">RSA</a> (FreeBSD pkg) ·
     <a href="/openbsd/aspic-pkg.pub">signify</a> (OpenBSD)<br>
     <b>Downloads:</b>
@@ -361,7 +363,8 @@ sudo sh migrate.sh --yes   <span class="c"># does it</span></pre>
     <b>Browse:</b> <a href="/deb/">deb</a> · <a href="/rpm/">rpm</a> ·
     <a href="/arch/">arch</a> · <a href="/alpine/">alpine</a> ·
     <a href="/xbps/">xbps</a> · <a href="/portage/">portage</a> ·
-    <a href="/openwrt/">openwrt</a> · <a href="/termux/">termux</a> ·
+    <a href="/openwrt/">openwrt</a> · <a href="/openwrt-apk/">openwrt-apk</a> ·
+    <a href="/termux/">termux</a> ·
     <a href="/freebsd/">freebsd</a> ·
     <a href="/netbsd/">netbsd</a> · <a href="/openbsd/">openbsd</a> ·
     <a href="/opnsense/">opnsense</a> · <a href="/windows/">windows</a><br>

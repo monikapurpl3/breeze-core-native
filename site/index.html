@@ -134,20 +134,30 @@ sudo apk update</pre>
 
   <section id="openwrt" class="s-owrt">
     <h2>OpenWrt</h2>
-    <span class="who">opkg, verified with <code>usign</code> — OpenWrt's own
-      signer, which is why this is a third key</span>
-<pre><span class="c"># check your architecture first; it has to match exactly</span>
-. /etc/openwrt_release &amp;&amp; echo "$DISTRIB_ARCH"
+    <span class="who">Two feeds, because OpenWrt 25.12 replaced opkg with
+      apk-tools 3 — each signed with OpenWrt's own kind of key</span>
+<pre><span class="c"># OpenWrt 25.12 and later: apk</span>
+. /etc/openwrt_release
+wget -qO /etc/apk/keys/aspic-openwrt.pem https://aspic.salataputarica.hr.eu.org/aspic-openwrt.pem
+echo "https://aspic.salataputarica.hr.eu.org/openwrt-apk/$DISTRIB_ARCH/packages.adb" \
+  &gt;&gt; /etc/apk/repositories.d/customfeeds.list
+apk update &amp;&amp; apk add breeze-core
 
+<span class="c"># OpenWrt 24.10 and older: opkg</span>
+. /etc/openwrt_release
 wget -qO /tmp/aspic-usign.pub https://aspic.salataputarica.hr.eu.org/aspic-usign.pub
 cp /tmp/aspic-usign.pub /etc/opkg/keys/$(usign -F -p /tmp/aspic-usign.pub)
 echo "src/gz aspic https://aspic.salataputarica.hr.eu.org/openwrt/$DISTRIB_ARCH" \
   &gt;&gt; /etc/opkg/customfeeds.conf
-opkg update</pre>
+opkg update &amp;&amp; opkg install breeze-core</pre>
     <p class="dim">x86_64 · aarch64_generic · aarch64_cortex-a53 ·
-      aarch64_cortex-a72 · arm_cortex-a7_neon-vfpv4 · riscv64_riscv64. The key
-      file has to be <i>named</i> after its own fingerprint — opkg looks it up by
-      that name, so a sensible filename silently fails to verify.</p>
+      aarch64_cortex-a72 · arm_cortex-a7_neon-vfpv4 · riscv64_riscv64 ·
+      <b>mipsel_24kc</b> (MediaTek: MT7621, MT76x8) · <b>mips_24kc</b> (Atheros:
+      ath79) — the last two being what most routers are. <code>$DISTRIB_ARCH</code>
+      is your router's exact package architecture, which is what both feeds are
+      laid out by. For opkg, the key file has to be <i>named</i> after its own
+      fingerprint: opkg looks it up by that name, so a sensible filename silently
+      fails to verify. apk does not care what the key file is called.</p>
   </section>
 
   <section id="termux" class="s-termux">

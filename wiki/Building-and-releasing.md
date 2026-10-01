@@ -13,7 +13,9 @@ Everything runs from one workstation, in containers, with no CI:
 ```
 cargo test --workspace                       521 tests, 18 suites
 packaging/build-binaries.sh                  one static executable per target
+packaging/mips/build-mips.sh                 the two MIPS ones (nightly, OpenWrt toolchain)
 packaging/nfpm/build-packages.sh             deb, rpm, pacman, apk, ipk
+packaging/openwrt-apk/build-apk.sh           OpenWrt 25.12's apk v3 packages
 packaging/xbps/build-xbps.sh                 Void
 packaging/termux/build-packages.sh           Termux (Android, with the NDK)
 packaging/source/build-source.sh             SRPM, Debian source, Arch source
@@ -68,6 +70,7 @@ to the fix:
 ```sh
 BC_RELEASE=2          ./packaging/nfpm/build-packages.sh
 BC_RELEASE=2          ./packaging/termux/build-packages.sh
+BC_RELEASE=2          ./packaging/openwrt-apk/build-apk.sh        # OpenWrt -r2
 BC_RELEASE=2          ./packaging/source/build-source.sh
 BC_XBPS_REVISION=2    ./packaging/xbps/build-xbps.sh
 BC_PORTAGE_REVISION=1 ./packaging/portage/build-overlay.sh   # Gentoo -r1
@@ -76,10 +79,10 @@ BC_PORTAGE_REVISION=1 ./packaging/portage/build-overlay.sh   # Gentoo -r1
 The Windows installer, the BSD packages and the OPNsense plugin have no release
 field in this setup: re-downloading gets the new one.
 
-## The four signing keys
+## The five signing keys
 
 They live in `packaging/repo/keys/`, are git-ignored, are generated on first
-run, and **must be backed up.** There are four because no two package managers
+run, and **must be backed up.** There are five because no two package managers
 agree:
 
 | Key | For | Why its own |
@@ -88,6 +91,7 @@ agree:
 | RSA-4096 | apk | apk-tools has no ed25519 option |
 | usign ed25519 | opkg | OpenWrt's own signer; GPG is useless to it |
 | RSA-4096 | xbps | all `xbps-rindex` signs with |
+| ECDSA P-256 | OpenWrt apk (25.12+) | what OpenWrt itself signs its apk indexes with; apk-tools 3 reads neither GPG nor usign |
 
 FreeBSD and OpenBSD are signed **on their own machines** — `pkg repo` and
 `signify` respectively — and those keys are shredded (`rm -P`) after use rather
@@ -101,8 +105,9 @@ fail with unrelated histories for everyone who had already added the overlay.
 ## Verification is the point
 
 `verify-repo.sh` installs from the built tree in clean containers of each
-distribution — Debian 12, Termux, AlmaLinux 9, AlmaLinux 8, Arch, Alpine, Void
-and Gentoo — served over HTTP by an nginx container, because that is the only way
+distribution — Debian 12, Termux, AlmaLinux 9, AlmaLinux 8, Arch, Alpine, Void,
+Gentoo, and OpenWrt 24.10 (opkg) and 25.12 (apk), the latter two on x86_64 and on
+both MIPS endiannesses under QEMU (`packaging/mips/prepare-qemu.sh` first) — served over HTTP by an nginx container, because that is the only way
 to exercise the URL layout and the index fetch as a real client does.
 
 **Both directions, every time.** Every one of those clients will happily
@@ -158,7 +163,9 @@ $EDITOR crates/breeze-core/Cargo.toml && cargo update -p breeze-core --offline
 # 2. everything, in order
 cargo test --workspace
 ./packaging/build-binaries.sh
+./packaging/mips/build-mips.sh
 ./packaging/nfpm/build-packages.sh
+./packaging/openwrt-apk/build-apk.sh
 ./packaging/xbps/build-xbps.sh
 ./packaging/termux/build-packages.sh && ./packaging/termux/verify-termux.sh
 ./packaging/source/build-source.sh && ./packaging/source/verify-source.sh   # a committed tree

@@ -16,9 +16,12 @@ package published on every release, or is listed here as absent with the reason.
 | riscv64 | ✅ | ✅ | ⬇ | ✅ | ✅ ×2 | ✅ `riscv64_riscv64` | ✅ `~riscv` | ✅ |
 | ppc64le | ✅ `ppc64el` | ✅ | ⬇ | ✅ | ✅ ×2 | — | ✅ `~ppc64` † | ✅ |
 | s390x | ✅ | ✅ | ⬇ | ✅ | — | — | ✅ `~s390` | ✅ |
+| MIPS (little-endian) | — | — | — | — | — | ✅ `mipsel_24kc` ‡ | — | ✅ |
+| MIPS (big-endian) | — | — | — | — | — | ✅ `mips_24kc` ‡ | — | ✅ |
 
 ✅ in a signed repository · ⬇ built and attached to the release, but not in a
 repository · † keyworded with a guard, see below
+· ‡ OpenWrt only, in both feeds (see [MIPS](#mips))
 
 Plus a native package each for **FreeBSD**, **NetBSD** and **OpenBSD**, an
 **OPNsense** plugin, a **Windows** installer, and **Termux** packages for
@@ -39,6 +42,10 @@ armv4 through armv7 and both float ABIs, and `ppc64` spans both endiannesses,
 while these binaries are armv7 hard-float and little-endian only. The ebuild
 checks `CHOST` and refuses with an explanation rather than installing something
 that cannot run.
+
+**The ipk column is OpenWrt 24.10 and older.** OpenWrt 25.12 uses apk-tools 3
+instead, and every architecture in that column is also in the apk v3 feed;
+see [OpenWrt: two feeds](#openwrt-two-feeds-and-the-account-that-was-never-made).
 
 **OpenWrt needs an exact match.** Its package architecture is not a family
 name, so the three ARM64 targets — `aarch64_generic`, `aarch64_cortex-a53` and
@@ -90,29 +97,80 @@ way from where you would look for the cause.
 
 ## MIPS
 
-**Not shipped.** Rust has no prebuilt `std` for any MIPS target — they are all
-tier 3 — so the whole program would need `-Z build-std` on a nightly toolchain.
+**Shipped: mipsel_24kc and mips_24kc**, the two architectures most OpenWrt
+routers are. mipsel_24kc is MediaTek (MT7621, MT76x8); mips_24kc is Qualcomm
+Atheros (ath79). They are in both OpenWrt feeds: opkg for 24.10 and older, and
+apk for 25.12 and later. No other packager gets them, because no distribution
+that uses deb, rpm or pacman still ships 32-bit MIPS. There are also plain
+tarballs.
 
-That is a well-trodden route with either Zig or the OpenWrt SDK, and the case
-for it is decent: 2 MB against a router's 8–16 MB of flash is a comfortable
-fit. It is absent because nobody has asked, not because it is blocked. If you
-want it, these are the traps waiting:
+Every MIPS target is **tier 3** in Rust, with no prebuilt `std`.
+`packaging/mips/build-mips.sh` therefore builds `std` from source
+(`-Z build-std`), in an image with a pinned nightly and OpenWrt 25.12.5's own
+toolchains, checked against OpenWrt's SHA-256s. It links with the OpenWrt
+toolchain, not Zig: Zig 0.16's bundled mipsel musl emits references to its own
+std internals and then fails to provide them.
 
-- **`libc` is not installable from any OpenWrt feed** — musl is baked into the
-  firmware image. Assembling a test userland means taking the loader out of the
-  SDK toolchain, or QEMU stops with `Could not open
-  '/lib/ld-musl-mipsel-sf.so.1'`, which reads as an emulator fault rather than
-  a missing file.
-- **Big- and little-endian 32-bit MIPS artifacts have identical filenames**,
-  because `uname -m` reports `mips` for both. Never merge staging directories.
-- Soft-float triples are pedantic about their suffixes (`…-muslsf`, not
-  `…-musl`), and getting one wrong produces a package a router accepts and then
-  will not run.
-- `mips64_octeonplus` was built once and **never verified**: it died with
-  SIGILL under emulation before the artifact was reached, and
-  `QEMU_CPU=Octeon68XX` was necessary but not sufficient. It was deliberately
-  not published, on the grounds that an unverified artifact for an exotic
-  architecture is worse than none — it looks exactly like the verified ones.
+They are **static, like every other Linux build**, which took three things a
+tier 3 target does not get from a prebuilt std:
+
+- `+crt-static`, because Rust's mips*-musl targets default to linking
+  dynamically against the router's own `/lib/ld-musl-*-sf.so.1`;
+- `-C link-self-contained=no`, so `crt1.o`, `crti.o` and `libc.a` come from
+  the toolchain's sysroot;
+- a `libunwind.a` that is the toolchain's `libgcc_eh.a`. gcc's static unwinder
+  has the same `_Unwind_*` API these targets use as `libgcc_s` when linked
+  dynamically. `-Z build-std-features=llvm-libunwind` does **not** build one:
+  the unwind crate has no build script, and LLVM's libunwind is built by
+  rustc's own bootstrap.
+
+One code change, too. 32-bit MIPS has no 64-bit atomics, and the SSE
+subscriber counter was an `AtomicU64`. It is a mutex now; a client subscribes
+once per connection.
+
+**Verified in OpenWrt's own root filesystems under QEMU**, both endiannesses,
+both feeds (`packaging/repo/verify-repo.sh openwrt-mipsel openwrt-mips
+openwrt-mipsel-opkg`). Each is refused unsigned, then installed, gets its
+service account and serves. Docker Hub has big-endian `mips_24kc` OpenWrt
+images but no little-endian MIPS at all, so `packaging/mips/prepare-qemu.sh`
+imports OpenWrt's malta-le root filesystem, whose package architecture is
+mipsel_24kc. It also registers `qemu-mips` and `qemu-mipsel` with binfmt_misc.
+**That registration does not survive Docker Desktop's VM restarting**, so run
+the script again after a restart.
+
+The traps still worth knowing:
+
+- **Big- and little-endian 32-bit MIPS report the same `uname -m`** (`mips`).
+  Packages and binaries are named by OpenWrt architecture, never by uname.
+- Soft-float triples are pedantic about their suffixes, and getting one wrong
+  produces a package a router accepts and then cannot run.
+- `mips64_octeonplus` is still **not shipped**. It was built once and died with
+  SIGILL under emulation before the artifact was reached;
+  `QEMU_CPU=Octeon68XX` was necessary but not sufficient. An unverified
+  artifact for an exotic architecture is worse than none.
+
+## OpenWrt: two feeds, and the account that was never made
+
+**OpenWrt 25.12 replaced opkg with apk-tools 3.** Its packages are apk v3,
+in the ADB format, which is neither the `.ipk` opkg reads nor the apk v2
+Alpine uses, and nfpm cannot write it. So `packaging/openwrt-apk/build-apk.sh`
+makes them with apk-tools 3 itself (`apk mkpkg`), from Alpine 3.24; OpenWrt's
+own apk is built without `mkpkg` and `mkndx`. They hold the same binaries,
+procd script and maintainer scripts as the `.ipk`.
+
+The index is signed with a P-256 key, which is OpenWrt's own algorithm. The
+packages are not signed, which is how OpenWrt's own are made: the index
+records each package's hash, and the index is what is signed. `/openwrt` (opkg)
+stays as it was, for 24.10 and older.
+
+Building the first OpenWrt verification for either feed found a bug in every
+OpenWrt package published until then. **OpenWrt has no `addgroup`, `adduser`,
+`useradd` or `getent`.** The pre-install script exited 127, so the package
+never had its `breeze` account, and procd, told to start the service as
+`breeze`, could not. The scripts now check `/etc/passwd` where there is no
+`getent`, and create the account with `/lib/functions.sh`, as OpenWrt's own
+packages do (uid from 32768). Its helpers lock `/var/lock/passwd`, which only
+a booted system has, so they create `/var/lock` first.
 
 ## Termux
 

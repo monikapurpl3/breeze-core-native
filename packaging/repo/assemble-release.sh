@@ -53,7 +53,7 @@ rename() {
 echo "=== release assets for $VER"
 shopt -s nullglob
 take deb      "$TREE"/deb/pool/*/*/*/breeze-core_"$VER"-*_*.deb "$TREE"/deb/pool/*/*/breeze-core_"$VER"-*_*.deb
-take rpm      "$TREE"/rpm/*/breeze-core-"$VER"-*.rpm
+take rpm      "$TREE"/rpm/[!S]*/breeze-core-"$VER"-*.rpm   # not SRPMS/: the source rpm is under "source"
 # From staging, not the tree: the pacman repository serves only the
 # architectures Arch has (x86_64, aarch64, armv7h), while the release has
 # always carried all six. The repository signs these with a detached .sig
@@ -67,7 +67,7 @@ take opnsense "$TREE"/opnsense/os-breeze-core-"$VER".pkg
 take tarballs "$DIST"/breeze-core-"$VER"-*.tar.zst "$DIST"/breeze-core-"$VER"-*.zip
 # The source, and every crate it needs: the two tarballs the SRPM, the Debian
 # source package and the PKGBUILD are all built from, byte for byte.
-take source   packaging/out/source/breeze-core-"$VER".tar.xz packaging/out/source/breeze-core-"$VER"-vendor.tar.xz
+take source   packaging/out/source/breeze-core-"$VER".tar.xz packaging/out/source/breeze-core-"$VER"-vendor.tar.xz "$TREE"/rpm/SRPMS/breeze-core-"$VER"-*.src.rpm
 
 # Alpine packages are named <name>-<ver>-r<rel>.apk inside the repository; the
 # release has always used nfpm's own spelling, which names the architecture.
@@ -92,6 +92,19 @@ for f in "$TREE"/termux/pool/main/b/breeze-core/breeze-core_"$VER"-*_*.deb; do
 done
 printf '  %-10s %2d\n' termux "$n"
 [ "$n" -gt 0 ] || { echo "  !! no termux packages for $VER"; missing=1; }
+
+# OpenWrt's apk packages are all breeze-core-<ver>-r<rel>.apk, one per
+# architecture directory -- and Alpine's are .apk too, in another format. The
+# release names them openwrt-<arch> so neither is mistaken for the other.
+n=0
+for f in "$TREE"/openwrt-apk/*/breeze-core-"$VER"-r*.apk; do
+  arch="$(basename "$(dirname "$f")")"
+  rel="$(basename "$f" .apk)"; rel="${rel##*-}"
+  cp "$f" "$OUT/breeze-core_${VER}-${rel}_openwrt-${arch}.apk"
+  n=$((n + 1))
+done
+printf '  %-10s %2d\n' openwrt-apk "$n"
+[ "$n" -gt 0 ] || { echo "  !! no OpenWrt apk packages for $VER"; missing=1; }
 
 rename freebsd "$TREE/freebsd/breeze-core-$VER.pkg" "breeze-core-$VER-freebsd-amd64.pkg"
 rename netbsd  "$TREE/netbsd/All/breeze-core-$VER.tgz" "breeze-core-$VER-netbsd-amd64.tgz"
