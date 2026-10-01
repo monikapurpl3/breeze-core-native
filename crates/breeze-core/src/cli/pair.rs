@@ -137,7 +137,10 @@ pub fn run(options: Options) -> Result<(), String> {
                     "  {} is a V3 unit: it needs a token and key before it can be driven.",
                     device.ip
                 );
-                println!("  Paste them if you have them, or press enter to add the unit anyway.");
+                println!(
+                    "  Paste them if you have them, or press enter to add the unit anyway and \
+                     get them from your Midea account afterwards with `breeze-core fetch`."
+                );
                 let typed_token = ask("  token (128 hex chars): ")?.unwrap_or_default();
                 if !typed_token.is_empty() {
                     let typed_key = ask("  key   (64 hex chars): ")?.unwrap_or_default();
@@ -154,8 +157,9 @@ pub fn run(options: Options) -> Result<(), String> {
                 }
             } else {
                 println!(
-                    "Note: {} is a V3 unit with no stored credentials — add its token and key \
-                     with `breeze-core pair` interactively, or POST /api/units.",
+                    "Note: {} is a V3 unit with no stored credentials — get them from your \
+                     Midea account with `breeze-core fetch`, add them with `breeze-core pair` \
+                     interactively, or POST /api/units.",
                     device.ip
                 );
             }

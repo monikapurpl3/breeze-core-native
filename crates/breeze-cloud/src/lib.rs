@@ -225,6 +225,16 @@ impl Cloud {
         }
     }
 
+    /// The same in plain ASCII, for a column: a terminal draws 美的美居 two
+    /// cells per character, and the table no longer lines up.
+    pub fn short_name(self) -> &'static str {
+        match self {
+            Self::SmartHome => "MSmartHome",
+            Self::Meiju => "Meiju",
+            Self::NetHomePlus => "NetHome Plus",
+        }
+    }
+
     /// Whether this cloud has the account, asked without the password.
     ///
     /// NetHome Plus answers the same question the same way, but has nothing to

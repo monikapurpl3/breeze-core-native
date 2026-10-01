@@ -28,7 +28,12 @@ pub(crate) fn account_known_at(account: &str, base: Option<&str>) -> Result<bool
     }
     match client.login_id(account) {
         Ok(_) => Ok(true),
-        Err(CloudError::Api { code: 3102, .. }) => Ok(false),
+        // 1006 is how Meiju answers an account it cannot even read as one --
+        // seen live for an email address: "mobile=… value is illegal". Either
+        // way it has no such account.
+        Err(CloudError::Api {
+            code: 3102 | 1006, ..
+        }) => Ok(false),
         Err(e) => Err(e),
     }
 }

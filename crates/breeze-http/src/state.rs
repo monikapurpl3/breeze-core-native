@@ -420,7 +420,7 @@ impl AppState {
 ///
 /// A unit with an unparseable address or a malformed key is skipped rather than
 /// fatal: one bad entry in `config.json` must not stop the other units working.
-pub(crate) fn to_device_unit(unit: &breeze_store::UnitConfig) -> Option<DeviceUnit> {
+pub fn to_device_unit(unit: &breeze_store::UnitConfig) -> Option<DeviceUnit> {
     let ip = unit.ip.parse().ok()?;
     let key = unit
         .key

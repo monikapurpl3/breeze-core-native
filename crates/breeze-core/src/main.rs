@@ -35,6 +35,11 @@ fn main() {
         cli::Command::Pair { ip, out, prompt } => {
             cli::pair::run(cli::pair::Options { ip, out, prompt })
         }
+        // Exit 1 when some unit is still without its token, so a script can tell.
+        cli::Command::Fetch(options) => match cli::fetch::run(options) {
+            Ok(code) => std::process::exit(code),
+            Err(e) => Err(e),
+        },
         cli::Command::Diag { client, nerd } => {
             match cli::diag::run(&client, nerd.as_ref().map(|p| p.as_deref())) {
                 // The exit code is the point of a diagnostic in a script.

@@ -21,9 +21,13 @@ serde_json = "1"
 # feature is on, the shared ureq has it and an https base URL works; without it
 # the CLI is http-only, which is what a LAN deployment is anyway.
 ureq = { version = "2", default-features = false, features = ["json"] }
+# `breeze-core fetch`: the clouds themselves, and a password prompt that does
+# not echo. Both only in a build that has TLS to reach Midea with.
+breeze-cloud = { path = "../breeze-cloud", optional = true }
+rpassword = { version = "7", optional = true }
 
 [features]
 default = ["cloud"]
 # Passed through to breeze-http. `--no-default-features` drops the TLS stack,
 # which is 1.2 MB -- the difference between fitting on a router and not.
-cloud = ["breeze-http/cloud"]
+cloud = ["breeze-http/cloud", "dep:breeze-cloud", "dep:rpassword"]

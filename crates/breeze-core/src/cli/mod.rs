@@ -25,6 +25,7 @@ pub mod admin;
 pub mod client;
 pub mod control;
 pub mod diag;
+pub mod fetch;
 pub mod pair;
 pub mod profile;
 
@@ -45,6 +46,8 @@ pub enum Command {
         out: Option<String>,
         prompt: bool,
     },
+    /// A V3 unit's token and key, from the Midea account it is paired with.
+    Fetch(fetch::Options),
     Diag {
         client: ClientOpts,
         /// `--nerd [PATH]`: `Some(None)` saves to a generated name.
@@ -151,6 +154,36 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
             Ok(Command::Pair { ip, out, prompt })
         }
 
+        // Like `pair`, it works on config.json directly rather than through the
+        // API: the server only reads that file at start-up.
+        "fetch" => {
+            let mut options = fetch::Options {
+                units: Vec::new(),
+                config: None,
+                cloud: None,
+                account: None,
+                password_stdin: false,
+            };
+            let mut it = rest.iter();
+            while let Some(arg) = it.next() {
+                match arg.as_str() {
+                    "--config" => options.config = Some(need(&mut it, "--config")?),
+                    "--cloud" => options.cloud = Some(need(&mut it, "--cloud")?),
+                    "--account" => options.account = Some(need(&mut it, "--account")?),
+                    "--password-stdin" => options.password_stdin = true,
+                    flag if flag.starts_with("--") => {
+                        return Err(format!("unexpected argument '{flag}'"))
+                    }
+                    unit => options.units.push(unit.to_string()),
+                }
+            }
+            // A script feeding the password has nobody to answer the questions.
+            if options.password_stdin && (options.cloud.is_none() || options.account.is_none()) {
+                return Err("--password-stdin needs --cloud and --account as well".into());
+            }
+            Ok(Command::Fetch(options))
+        }
+
         "diag" => {
             let mut client = ClientOpts::default();
             let mut nerd = None;
@@ -251,6 +284,8 @@ usage:
   breeze-core serve [--host HOST] [--port PORT] [--behind-proxy]
   breeze-core pair [--ip ADDRESS] [--out PATH] [--no-prompt]
   breeze-core control 'NAME' [TYPE] [TEMPERATURE] [FLAP] [FAN] [EXTRA] [TIMER]
+  breeze-core fetch [UNIT...] [--cloud smarthome|meiju|nethome] [--account EMAIL]
+                    [--config PATH] [--password-stdin]
   breeze-core diag [--base-url URL] [--config PATH] [--nerd [FILE]]
   breeze-core units [--config PATH]
   breeze-core approve [CODE] [--config PATH]
