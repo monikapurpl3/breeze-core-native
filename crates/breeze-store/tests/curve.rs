@@ -1,9 +1,8 @@
 //! The curve maths, checked against Breeze Core's own scheduler.
 //!
-//! `fixtures/curve-vectors.json` is produced by running the *reference*
-//! implementation (see `fixtures/generate-curve-vectors.py`), so these tests
-//! compare against what Python actually returns rather than against my reading
-//! of it. That distinction has already earned its keep: Python's `round()` is
+//! `fixtures/curve-vectors.json` was produced once by running the *reference*
+//! implementation, Breeze Core 3.x's scheduler, so these tests compare against
+//! what Python actually returned rather than against my reading of it. That distinction has already earned its keep: Python's `round()` is
 //! banker's rounding and Rust's `f64::round` is not, which moved every exact
 //! midpoint by half a degree.
 

@@ -111,8 +111,8 @@ from the same reading as the code:
   their parsed objects;
 - `/api/auth/whoami` re-verified the request inside the route, spending the v2
   nonce a second time and rejecting **every Ed25519 client** as a replay — caught
-  by writing a client that actually signs (`tools/verify-v2-auth.py`); a bearer
-  token exercises none of that path;
+  by writing a client that actually signs; a bearer token exercises none of that
+  path;
 - `last_used` was written as `null` at enrolment and never touched again, so
   `whoami` reported a device as never seen while answering its own request —
   caught by diffing whoami against the reference;
@@ -357,8 +357,10 @@ size one.
 
 Two places where this server does not match the reference. Both are recorded here
 so nobody "fixes" them by accident or, worse, meets them in a bug report. Every
-*other* difference found so far turned out to be a defect and got fixed — see
-`tools/README.md` for how they were found.
+*other* difference found so far turned out to be a defect and got fixed. They
+were found by running this server and 3.2.0 side by side and diffing every
+endpoint; the Python tools that did it were removed after 4.3.0, and git
+history has them.
 
 **Validation errors are a flat message, not pydantic's error list.** FastAPI
 answers a bad request body with `{"detail": [{"type", "loc", "msg", "input",

@@ -9,9 +9,9 @@
 //! stored file on first start gives you nothing to compare against if something
 //! later goes wrong.
 //!
-//! So the tests here round-trip fixtures generated from Breeze Core's own
-//! pydantic models (see `tests/fixtures/generate-fixtures.py`) and assert the
-//! bytes are unchanged — not merely that the values survive.
+//! So the tests here round-trip fixtures generated once from Breeze Core 3.x's
+//! own pydantic models and assert the bytes are unchanged — not merely that the
+//! values survive.
 //!
 //! Three details carry that guarantee:
 //!

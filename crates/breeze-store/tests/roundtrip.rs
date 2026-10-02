@@ -1,7 +1,7 @@
 //! Byte-for-byte round-trip against Breeze Core's own output.
 //!
-//! The fixtures in `fixtures/` were produced by Breeze Core's real pydantic
-//! models via `model_dump_json(indent=2)` — see `fixtures/generate-fixtures.py`.
+//! The fixtures in `fixtures/` were produced once by Breeze Core 3.x's real
+//! pydantic models via `model_dump_json(indent=2)`, and are kept as they came out.
 //! Each test loads one, serialises it back, and compares **bytes**, not values.
 //!
 //! Values-only equality is not enough for a drop-in replacement. A server that

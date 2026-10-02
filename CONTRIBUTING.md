@@ -71,18 +71,14 @@ rustup component add clippy rustfmt --toolchain stable
 loopback — the protocol layer is pure codec, bytes in and bytes out, and the
 connection layer is tested against a fake unit listening on `127.0.0.1`.
 
-Two kinds are worth knowing about:
-
-- **Reference vectors** (`crates/breeze-proto/tests/vectors.rs`) are captured
-  messages with the values a known-good implementation decodes from them. They
-  are the closest thing this protocol has to a specification, and they have
-  caught real bugs that review did not — a transposed swing axis, and a session
-  key that is AES-256 rather than AES-128. **Check protocol changes against
-  these, not against your reading of the spec.**
-- **`packaging/test/differential.py`** runs this server and a Python 3.2.0 side
-  by side against the same configuration and diffs every endpoint. It catches a
-  *misunderstanding* of the contract, which no unit test can, because a unit
-  test agrees with whatever the code does.
+One kind is worth knowing about: **reference vectors**
+(`crates/breeze-proto/tests/vectors.rs`), captured messages with the values a
+known-good implementation decodes from them. They are the closest thing this
+protocol has to a specification, and they have caught real bugs that review did
+not — a transposed swing axis, and a session key that is AES-256 rather than
+AES-128. **Check protocol changes against these, not against your reading of the
+spec.** The store and signing fixtures are the same idea, generated once by the
+Python implementation.
 
 When a real unit misbehaves, `crates/breeze-device/examples/wire.rs` watches
 one unit's connection packet by packet — reply times, anything it sends

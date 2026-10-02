@@ -13,6 +13,6 @@ breeze-proto = { path = "../breeze-proto" }
 # The fake unit implements the device side of the handshake, so it needs the same
 # digest the real protocol uses.
 sha2 = "0.10"
-# The probe example reads config.json. Not a dependency of the library itself --
+# The wire example reads config.json. Not a dependency of the library itself --
 # parsing configuration belongs to the server crate, not the device layer.
 serde_json = "1"

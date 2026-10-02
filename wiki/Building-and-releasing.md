@@ -134,25 +134,25 @@ Alongside it:
 - `packaging/portage/verify-portage.sh` — a real `emerge`, plus the ebuild's
   CHOST guard exercised against seven CHOST values;
 - `packaging/bsd/verify-*.sh` — on the real machines;
-- `packaging/opnsense/verify-plugin.sh` — 18 checks, and it states plainly
+- `packaging/opnsense/verify-plugin.sh` — 28 checks, and it states plainly
   which parts it cannot check;
-- `packaging/test/differential.py` — the interesting one, below.
+- `packaging/test/verify-proxy.sh` — `breeze-core proxy` run for real against
+  nginx, Caddy and Apache, including a forged `X-Forwarded-For` and the undo.
 
-### The differential harness
+### The differential harness, retired
 
-Runs 4.x and a live 3.2.0 against the same configuration and diffs every
-endpoint: status, JSON type, shape and value. An `EXPECTED` dict documents
-every deliberate difference, so anything not in it is a finding. It drove the
-contract deviations from 142 to zero unexplained.
+Until 4.3.0, `packaging/test/differential.py` ran 4.x and a live 3.2.0 against
+the same configuration and diffed every endpoint: status, JSON type, shape and
+value, with an `EXPECTED` dict for every deliberate difference. It drove the
+contract deviations from 142 to zero unexplained — the kind of finding no unit
+test can make, because a unit test agrees with whatever the code does. With the
+Python line frozen at 3.2.0 it had nothing left to compare against, so it and
+the other Python parity tools were removed; git history has them.
 
-This is the test that catches a *misunderstanding* of the contract, which no
-amount of unit testing can — a unit test agrees with whatever the code does.
-
-It enrols a credential on each server to do its work, and **revokes it in a
-`finally`**. It did not always: an earlier version left one behind per run, and
-thirty-two real, working, non-expiring credentials accumulated in a production
-`devices.json` before anyone noticed `breeze-core devices` had become pages
-long.
+One lesson from it outlives it: **a harness that enrols a credential must
+revoke it.** An early version did not, and thirty-two real, working,
+non-expiring credentials piled up in a production `devices.json` before anyone
+noticed `breeze-core devices` had become pages long.
 
 ## Cutting a release
 
