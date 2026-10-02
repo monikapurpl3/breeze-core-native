@@ -169,8 +169,12 @@ jobs:
           for i in $(seq 1 20); do [ -S "/run/user/$(id -u)/bus" ] && break; sleep 1; done
           ls -l "/run/user/$(id -u)/"
       - name: A tap holding the generated formula
+        # brew update first: users' Homebrew updates itself, and the formula
+        # uses post_install_steps, which an image's older brew may not know.
         run: |
           set -eux
+          brew update --quiet
+          brew --version
           ver=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/breeze-core/Cargo.toml | head -1)
           bash packaging/homebrew/make-formula.sh "$ver" "file://$PWD/dist" dist > breeze-core.rb
           brew tap-new --no-git local/breeze
@@ -224,8 +228,8 @@ jobs:
       matrix:
         runner: [macos-26, macos-15-intel, ubuntu-latest, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
+    # Auto-update left on, as it is for a user.
     env:
-      HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_ENV_HINTS: 1
     steps:
       - if: runner.os == 'Linux'

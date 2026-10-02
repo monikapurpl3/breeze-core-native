@@ -3,6 +3,9 @@
 class BreezeCore < Formula
   desc "LAN-first control for Midea air conditioners"
   homepage "https://aspic.salataputarica.hr.eu.org/breeze-core/"
+  # Stated, not left to Homebrew to guess: from ".../breeze-core-4.3.1-macos-
+  # arm64.tar.zst" it guesses "64".
+  version "@VER@"
   license "AGPL-3.0-or-later"
 
   # Prebuilt, the same tarballs the GitHub release carries. The Linux ones are
@@ -49,18 +52,18 @@ class BreezeCore < Formula
       exec "#{libexec}/breeze-core" "$@"
     SH
     chmod 0755, bin/"breeze-core"
-    (pkgshare/"breeze-core.env").write <<~ENV
-@ENV@
-    ENV
     doc.install "README.md"
   end
 
-  def post_install
-    (etc/"breeze-core").mkpath
-    (var/"log").mkpath
+  post_install_steps do
+    mkdir_p "breeze-core", base: :etc
+    mkdir_p "log", base: :var
     # Never over an existing one: it holds the address you chose.
-    env = etc/"breeze-core/breeze-core.env"
-    cp pkgshare/"breeze-core.env", env unless env.exist?
+    unless_path_exists "breeze-core/breeze-core.env", base: :etc do
+      write_file "breeze-core/breeze-core.env", <<~ENV, base: :etc
+@ENV@
+      ENV
+    end
   end
 
   def caveats

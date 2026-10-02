@@ -70,3 +70,6 @@ packaging/openwrt-apk/** text eol=lf
 # The macOS link stub: a .tbd is YAML read by zig's linker, which is not the
 # place to find out whether it tolerates a CR on every line.
 packaging/macos/**       text eol=lf
+
+# The Homebrew formula template: Ruby read by brew on macOS and Linux.
+packaging/homebrew/**     text eol=lf
