@@ -24,8 +24,9 @@ repository · † keyworded with a guard, see below
 · ‡ OpenWrt only, in both feeds (see [MIPS](#mips))
 
 Plus a native package each for **FreeBSD**, **NetBSD** and **OpenBSD**, an
-**OPNsense** plugin, a **Windows** installer, and **Termux** packages for
-Android (aarch64, arm, x86_64), below.
+**OPNsense** plugin, a **Windows** installer, **Termux** packages for Android
+(aarch64, arm, x86_64), and **macOS** tarballs for Apple silicon and Intel,
+below.
 
 **`×2` is glibc and musl.** Void treats the two libcs as separate
 architectures with separate package indexes, so each gets its own package — the
@@ -206,6 +207,41 @@ Traps found getting there:
   seccomp profile refuses the value it asks for. The arm verification
   container runs without seccomp. Only that architecture needs it.
 
+## macOS
+
+Two tarballs, **`macos-arm64`** (Apple silicon) and **`macos-x86_64`** (Intel),
+about 2 and 2.4 MB, for **macOS 13 or newer**. They are cross-built on the same
+Windows machine as everything above, with the same `cargo zigbuild`, and carried
+by releases after 4.3.0.
+
+zig carries macOS's C library but no Apple frameworks, and one dependency
+needs one: the local time zone (`chrono`, through `iana-time-zone`) asks
+CoreFoundation for it, using seven functions. `packaging/macos/` holds a link
+stub naming just those, written here rather than copied from Apple's SDK. At
+run time macOS loads its own CoreFoundation. The binaries need nothing a Mac
+does not have: `libSystem`, `libiconv`, `libcharset` and CoreFoundation.
+
+**They run on real Macs on every change** that could affect them:
+`.github/workflows/macos.yml` cross-builds them on Linux, then runs them on
+Apple silicon (macOS 26) and Intel (macOS 15). Each run unpacks with macOS's
+own `tar`, serves, pairs the CLI, runs `diag --nerd`, and checks the server's
+UTC offset against macOS's own in a zone that is not UTC. The time zone is the
+one thing CoreFoundation is there for.
+
+They are **not notarised**. Apple silicon runs nothing unsigned, so zig's
+linker gives the arm64 binary an ad-hoc signature; that is enough to run it,
+not to satisfy Gatekeeper. A copy fetched with `curl` runs as it is. A copy
+downloaded with a browser is quarantined, and Gatekeeper refuses it until the
+quarantine is cleared:
+
+```sh
+xattr -d com.apple.quarantine breeze-core
+```
+
+There is no package and no Homebrew formula. The launchd template is in
+`deploy/init/com.breeze.core.plist`; see
+[Installing from source](Installing-from-source#on-macos).
+
 ## The honest cost
 
 **Cross-built binaries are less obviously trustworthy than natively built
@@ -221,6 +257,8 @@ is not:
 - The OPNsense plugin's binary is compiled **inside a FreeBSD 14 root** and
   run both there and on FreeBSD 15, since OPNsense 26.1 is 14 and 26.7 is 15,
   and FreeBSD binaries run forward rather than backward.
+- The two macOS binaries are cross-built, and **run on real Macs** in CI on
+  every change that could affect them; see [macOS](#macos).
 - **riscv64, ppc64le and s390x are cross-built and executed nowhere.** That is
   the remaining gap, and it is stated rather than hidden. The mitigation is that
   they come off the same one-step toolchain as amd64, from the same source, with

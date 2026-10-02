@@ -184,7 +184,12 @@ if cargo complains it cannot write there.
 
 ## On macOS
 
-Builds and runs. There is no package, so use the launchd template at
+Builds and runs, and releases after 4.3.0 also carry ready-built tarballs for
+Apple silicon and Intel, for macOS 13 or newer. They are not notarised: see
+[Ports and architectures](Ports-and-architectures#macos) for what that means
+when you download one.
+
+There is no package either way, so use the launchd template at
 `deploy/init/com.breeze.core.plist` — a LaunchDaemon rather than a
 LaunchAgent, because an agent only runs while its user is logged in, which is
 the wrong lifetime for something a phone talks to.

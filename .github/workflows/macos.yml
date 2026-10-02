@@ -9,7 +9,7 @@ name: macOS
 on:
   workflow_dispatch:
   push:
-    branches: [macos]
+    branches: [main]
     paths:
       - .github/workflows/macos.yml
       - packaging/build-binaries.sh

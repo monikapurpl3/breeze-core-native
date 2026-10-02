@@ -137,7 +137,13 @@ Alongside it:
 - `packaging/opnsense/verify-plugin.sh` — 28 checks, and it states plainly
   which parts it cannot check;
 - `packaging/test/verify-proxy.sh` — `breeze-core proxy` run for real against
-  nginx, Caddy and Apache, including a forged `X-Forwarded-For` and the undo.
+  nginx, Caddy and Apache, including a forged `X-Forwarded-For` and the undo;
+- `.github/workflows/macos.yml` — the one check that is not on the workstation,
+  because it needs a Mac: the macOS binaries, cross-built the same way, run on
+  GitHub's Apple-silicon and Intel runners (see
+  [macOS](Ports-and-architectures#macos)). `build-binaries.sh` builds them with
+  everything else; the Dell needs `rustup target add aarch64-apple-darwin
+  x86_64-apple-darwin` once.
 
 ### The differential harness, retired
 
