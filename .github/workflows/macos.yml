@@ -1,13 +1,19 @@
-name: macOS
+name: macOS and Homebrew
 
 # The Mac binaries are cross-built on Linux, the way the workstation builds the
 # release (packaging/build-binaries.sh: cargo zigbuild, plus the CoreFoundation
 # stub in packaging/macos/). This builds them that way, then RUNS them on real
 # Macs, Apple silicon and Intel. Nothing is compiled on the Macs: they only show
-# whether what the release ships runs. The repository is public, so the macOS
-# runners cost nothing.
+# whether what the release ships runs. It then installs the Homebrew formula
+# build-repo.sh publishes, on those Macs and under Homebrew on Linux (amd64 and
+# arm64). The repository is public, so none of these runners cost anything.
 on:
   workflow_dispatch:
+    inputs:
+      live:
+        description: "Also install from the published tap on aspic"
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths:
@@ -15,6 +21,8 @@ on:
       - packaging/build-binaries.sh
       - packaging/dist-archive.sh
       - packaging/macos/**
+      - packaging/homebrew/**
+      - packaging/nfpm/breeze-core.env
       - crates/**
       - Cargo.lock
 
@@ -32,17 +40,21 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin,x86_64-apple-darwin,x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-zigbuild --locked
-      - run: bash packaging/build-binaries.sh macos-arm64 macos-x86_64
+      # The four the Homebrew formula installs.
+      - run: bash packaging/build-binaries.sh macos-arm64 macos-x86_64 amd64 arm64
       - uses: actions/upload-artifact@v7
         with:
           name: macos-binaries
-          path: packaging/out/dist/*-macos-*.tar.zst
+          path: |
+            packaging/out/dist/*-macos-*.tar.zst
+            packaging/out/dist/*-linux-amd64.tar.zst
+            packaging/out/dist/*-linux-arm64.tar.zst
           if-no-files-found: error
           retention-days: 7
 
@@ -121,3 +133,110 @@ jobs:
           if [ "$theirs" != "$ours" ]; then echo "the server's local time zone is wrong"; exit 1; fi
           cat serve.log
           kill %1
+
+  # The formula as build-repo.sh writes it, pointed at these tarballs instead of
+  # aspic, installed and run with Homebrew the way the wiki says to.
+  homebrew:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-26, macos-15-intel, ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_ENV_HINTS: 1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: macos-binaries
+          path: dist
+      - name: Homebrew on Linux, and a user session for brew services
+        if: runner.os == 'Linux'
+        # brew services on Linux is a systemd *user* unit, which needs the
+        # runner's user manager running: lingering starts it without a login.
+        run: |
+          set -eux
+          if [ ! -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+            NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          fi
+          echo /home/linuxbrew/.linuxbrew/bin >> "$GITHUB_PATH"
+          echo /home/linuxbrew/.linuxbrew/sbin >> "$GITHUB_PATH"
+          sudo loginctl enable-linger "$USER"
+          echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+          for i in $(seq 1 20); do [ -S "/run/user/$(id -u)/bus" ] && break; sleep 1; done
+          ls -l "/run/user/$(id -u)/"
+      - name: A tap holding the generated formula
+        run: |
+          set -eux
+          ver=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/breeze-core/Cargo.toml | head -1)
+          bash packaging/homebrew/make-formula.sh "$ver" "file://$PWD/dist" dist > breeze-core.rb
+          brew tap-new --no-git local/breeze
+          cp breeze-core.rb "$(brew --repository local/breeze)/Formula/"
+          # Reported, not enforced: a style nit should not hide whether it installs.
+          brew style "$(brew --repository local/breeze)/Formula/breeze-core.rb" || true
+          brew audit --formula local/breeze/breeze-core || true
+      - name: brew install
+        run: |
+          set -eux
+          brew install local/breeze/breeze-core
+          brew test local/breeze/breeze-core
+          command -v breeze-core
+          breeze-core --version
+          grep -q '^BREEZE_HOST=127.0.0.1$' "$(brew --prefix)/etc/breeze-core/breeze-core.env"
+      - name: brew services start, reading breeze-core.env
+        # The port is moved off the default, so an answer on 8431 shows the
+        # wrapper read the env file rather than the binary's own default.
+        run: |
+          set -eux
+          etc="$(brew --prefix)/etc/breeze-core"
+          # What `breeze-core pair` writes, without the units it needs to find.
+          printf '{"api_key": "%s", "units": []}\n' "$(openssl rand -hex 16)" > "$etc/config.json"
+          # Not sed -i: BSD and GNU sed disagree on its argument.
+          sed 's/^BREEZE_PORT=.*/BREEZE_PORT=8431/' "$etc/breeze-core.env" > env.new
+          cat env.new > "$etc/breeze-core.env"
+          brew services start breeze-core
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8431/api/health && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8431/api/health | grep -q '"ok"'
+          brew services list | grep breeze-core
+          # The CLI finds the same config.json through the wrapper.
+          breeze-core login --base-url http://127.0.0.1:8431 < /dev/null
+          breeze-core diag || true
+          cat "$(brew --prefix)/var/log/breeze-core.log"
+      - name: Reinstall keeps the settings, uninstall keeps the store
+        run: |
+          set -eux
+          etc="$(brew --prefix)/etc/breeze-core"
+          brew reinstall local/breeze/breeze-core
+          grep -q '^BREEZE_PORT=8431$' "$etc/breeze-core.env"
+          brew services stop breeze-core
+          brew uninstall breeze-core
+          test -s "$etc/config.json"
+          if command -v breeze-core; then exit 1; fi
+
+  # After a release: the tap exactly as published, from aspic.
+  homebrew-live:
+    if: github.event_name == 'workflow_dispatch' && inputs.live
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-26, macos-15-intel, ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_ENV_HINTS: 1
+    steps:
+      - if: runner.os == 'Linux'
+        run: |
+          if [ ! -x /home/linuxbrew/.linuxbrew/bin/brew ]; then
+            NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          fi
+          echo /home/linuxbrew/.linuxbrew/bin >> "$GITHUB_PATH"
+      - run: |
+          set -eux
+          brew tap aspic/breeze https://aspic.salataputarica.hr.eu.org/homebrew/breeze.git
+          brew install breeze-core
+          breeze-core --version
+          brew test breeze-core

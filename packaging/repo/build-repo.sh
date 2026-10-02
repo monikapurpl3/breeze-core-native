@@ -23,7 +23,9 @@
 #   ├── openwrt/ <arch>/Packages + Packages.sig (opkg, usign: OpenWrt 24.10 and older)
 #   ├── openwrt-apk/ <arch>/packages.adb        (apk v3, P-256: OpenWrt 25.12 and later)
 #   ├── xbps/    <arch>-repodata + .xbps        (Void, RSA-signed, trust-on-first-use)
-#   └── portage/breeze.git/                     (Gentoo overlay, dumb-HTTP git)
+#   ├── portage/breeze.git/                     (Gentoo overlay, dumb-HTTP git)
+#   └── homebrew/ breeze.git/ + dist/            (Homebrew tap, dumb-HTTP git, macOS
+#                                               and Linux; dist/ is what it downloads)
 #
 # **One repository per package-manager family, at the root — not one per
 # project.** Somebody who has added aspic gets everything published here, and a
@@ -50,6 +52,9 @@ OWRT_APK_KEY="aspic-openwrt-apk.pem"
 # to remove and re-add it every time. So the history lives here, next to the
 # keys, and needs backing up for the same reason they do.
 PORTAGE_GIT="packaging/repo/portage-git"
+# The Homebrew tap, for the same reason: `brew update` pulls it like any git
+# remote, and a rewritten history would break every Mac that had tapped it.
+HOMEBREW_GIT="packaging/repo/homebrew-git"
 
 MOUNT="$REPO"
 case "$MOUNT" in /[a-z]/*) MOUNT="$(echo "$MOUNT" | sed -E 's#^/([a-z])/#\U\1:/#')" ;; esac
@@ -601,6 +606,56 @@ if [ -f packaging/out/portage/app-misc/breeze-core-bin/Manifest ]; then
 else
   echo "  !! nothing in packaging/out/portage"
   echo "     run packaging/portage/build-overlay.sh, or that section will 404"
+fi
+
+# --- Homebrew tap (macOS and Linux) -----------------------------------------
+# The same shape as the overlay: a git repository served as static files, its
+# history kept in $HOMEBREW_GIT. It holds one formula, generated for this
+# release, which downloads one of four tarballs from /homebrew/dist (macOS
+# arm64/x86_64, Linux arm64/amd64 -- the static musl ones) and pins each by
+# SHA-256. That hash is the formula's whole trust in them, and the formula
+# itself arrives over aspic's HTTPS. Users tap it by URL:
+#
+#   brew tap aspic/breeze https://aspic.salataputarica.hr.eu.org/homebrew/breeze.git
+#
+# The macOS workflow installs exactly this formula, pointed at file:// copies of
+# the same tarballs, on real Macs and under Homebrew on Linux.
+echo "=== Homebrew tap (macOS and Linux) ==="
+brew_dist=""
+for t in macos-arm64 macos-x86_64 linux-arm64 linux-amd64; do
+  f="packaging/out/dist/breeze-core-$VER-$t.tar.zst"
+  [ -f "$f" ] && brew_dist="$brew_dist $f"
+done
+if [ "$(echo $brew_dist | wc -w)" -eq 4 ]; then
+  mkdir -p "$OUT/homebrew/dist"
+  cp $brew_dist "$OUT/homebrew/dist/"
+  if [ ! -d "$HOMEBREW_GIT/.git" ]; then
+    echo "  creating the tap history (first run) — BACK $HOMEBREW_GIT UP"
+    mkdir -p "$HOMEBREW_GIT"
+    git -C "$HOMEBREW_GIT" init -q -b main
+  fi
+  git -C "$HOMEBREW_GIT" config core.autocrlf false
+  git -C "$HOMEBREW_GIT" config user.name "Aspic Repository"
+  git -C "$HOMEBREW_GIT" config user.email "$GPG_EMAIL"
+  mkdir -p "$HOMEBREW_GIT/Formula"
+  bash packaging/homebrew/make-formula.sh "$VER" "https://aspic.salataputarica.hr.eu.org/homebrew/dist" \
+    "$OUT/homebrew/dist" > "$HOMEBREW_GIT/Formula/breeze-core.rb"
+  git -C "$HOMEBREW_GIT" add -A
+  if git -C "$HOMEBREW_GIT" diff --cached --quiet; then
+    echo "  formula unchanged since the last release, history untouched"
+  else
+    git -C "$HOMEBREW_GIT" commit -q -m "breeze-core $VER"
+    echo "  committed breeze-core $VER"
+  fi
+  mkdir -p "$OUT/homebrew"
+  rm -rf "$OUT/homebrew/breeze.git"
+  git clone -q --bare "$HOMEBREW_GIT" "$OUT/homebrew/breeze.git"
+  git -C "$OUT/homebrew/breeze.git" update-server-info
+  git -C "$OUT/homebrew/breeze.git" remote remove origin 2>/dev/null || true
+  echo "  $(git -C "$HOMEBREW_GIT" rev-list --count HEAD) commit(s); four tarballs in /homebrew/dist"
+else
+  echo "  !! the $VER tarballs for Homebrew are not all in packaging/out/dist"
+  echo "     run packaging/build-binaries.sh amd64 arm64 macos-arm64 macos-x86_64, or the tap will 404"
 fi
 
 # --- opkg feed (OpenWrt) ----------------------------------------------------

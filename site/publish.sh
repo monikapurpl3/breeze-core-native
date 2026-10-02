@@ -205,6 +205,12 @@ paths="/ /aspic.css /favicon.svg /breeze-core/"
 # And this release's update feed, which no page links to either: without it
 # every installed updater's "Check for updates" reports a 404.
 [ -n "$TREE" ] && paths="$paths /windows/update/$(grep -m1 '^version' "$REPO/crates/breeze-core/Cargo.toml" | cut -d'"' -f2).xml"
+# The Homebrew tap (git needs info/refs) and what its formula downloads: a
+# formula pointing at a missing tarball fails every `brew install` with a 404.
+[ -n "$TREE" ] && for f in "$TREE"/homebrew/dist/*.tar.zst; do
+  [ -e "$f" ] && paths="$paths /homebrew/dist/$(basename "$f")"
+done
+[ -n "$TREE" ] && paths="$paths /homebrew/breeze.git/info/refs"
 for u in $paths; do
   printf '  %-34s ' "$u"
   curl -fsS --max-time 20 -o /dev/null -w '%{http_code}\n' "$URL$u" \

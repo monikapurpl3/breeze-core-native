@@ -19,3 +19,4 @@ Cargo.lock.bak
 /packaging/windows/vendor/
 /packaging/windows/Breeze-Core-Setup.exe
 packaging/repo/portage-git/
+packaging/repo/homebrew-git/
