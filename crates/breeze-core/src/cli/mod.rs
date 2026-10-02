@@ -322,13 +322,19 @@ usage:
 start here:
   pair       find the air conditioners on your LAN and write config.json.
              The only command that does not need a running server.
+  fetch      get a V3 unit's token and key from the Midea account it is
+             paired with (MSmartHome or Meiju), when pair could not. Explains
+             what to do if your units came with NetHome Plus.
   serve      run the server. This is what the service does for you.
   login      enrol this machine's CLI, so the commands below need no flags.
+  proxy      put nginx, Apache or Caddy in front of it, with a name and a
+             certificate. Asks before every step; --undo takes it all back.
 
 day to day:
   control    set a unit:  breeze-core control 'living room' heat 22
   units      list the configured units and their state
-  diag       check a running server, end to end
+  diag       check a running server, end to end. --nerd also saves
+             everything it saw to a JSON file, for a bug report.
 
 admin, from the local network only:
   approve    approve a pairing code somebody is looking at

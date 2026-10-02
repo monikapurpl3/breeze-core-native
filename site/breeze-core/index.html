@@ -69,7 +69,11 @@ sudo breeze-core pair
 sudoedit /etc/breeze-core/breeze-core.env
 
 <span class="c"># 3. start it</span>
-sudo systemctl enable --now breeze-core</pre>
+sudo systemctl enable --now breeze-core
+
+<span class="c"># and, if you want it reachable by name over HTTPS: nginx, Apache or
+# Caddy, set up step by step, with --undo to take it all back out</span>
+sudo breeze-core proxy</pre>
     <p class="dim">Step 2's file moves with the platform's prefix:
       <code>/usr/local/etc/breeze-core</code> on FreeBSD and OPNsense,
       <code>/usr/pkg/etc/breeze-core</code> on NetBSD,
@@ -195,10 +199,13 @@ sudo breeze-core diag        <span class="c"># is anything wrong</span></pre>
     <div class="note"><b>A V3 unit needs a token and key.</b> Nearly every unit
       sold now is V3, and Midea will only issue those credentials to the account
       the unit is registered to — its cloud stopped handing them out to anyone
-      else. <code>pair</code> takes a token and key if you already have them, and
-      there is a last-resort path that asks for your Midea account once and
-      forgets it. <b>Keep a copy of <code>config.json</code> somewhere else:</b>
-      those credentials are not re-issuable.</div>
+      else. <code>pair</code> takes a token and key if you already have them;
+      if you don't, <code>sudo breeze-core fetch</code> asks for that account
+      (MSmartHome, or Meiju in China) once, checks each token on the unit, and
+      forgets the password. It also explains what to do if your units came with
+      NetHome Plus, which no longer hands tokens out at all. <b>Keep a copy of
+      <code>config.json</code> somewhere else:</b> those credentials may not
+      be issued again.</div>
   </section>
 
   <section id="control" class="s-arch">

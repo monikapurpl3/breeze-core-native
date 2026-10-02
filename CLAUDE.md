@@ -278,13 +278,13 @@ pydantic models.
   what an appliance is.
 - **V1 devices** (XML discovery, separate TCP query).
 - **Anything that needs Midea's cloud.** Discovery here is LAN-only: a unit
-  supplies its id, address, port and type, and that is enough to add it. The V3
-  `token`/`key` come from pairing and are never fetched. That is a real
-  limitation — a brand-new V3 unit added by address is recorded with
-  `has_v3_credentials: false` and cannot be driven until credentials are supplied
-  — and it is also why this server can add a unit at all right now, while the
-  reference cannot: its probe asks the cloud for a token and that call is
-  currently failing.
+  supplies its id, address, port and type, and that is enough to add it. A
+  brand-new V3 unit added by address is recorded with
+  `has_v3_credentials: false` and cannot be driven until credentials are
+  supplied — typed in, or got with `breeze-core fetch` (4.3.0+), which is
+  opt-in and the only part that talks to Midea. That split is also why this
+  server can add a unit at all while the reference cannot: its probe asks the
+  cloud for a token first, and that call fails.
 
 Everything the reference advertises is otherwise implemented; `FEATURES` is
 compared against its list, member for member, by a test.
@@ -305,10 +305,23 @@ All of this is measured, not assumed:
 | NetHome Plus (`mapp.appsmb.com`, app 1017), shared account | logs in, then `9999 system error` for every udpid, both byte orders, with and without `applianceCodes` |
 | the same, with a udpid of `""` or `"hello"` | *identical* error, which is how we know the account is being refused rather than the format |
 
-So token fetching is already withdrawn on Meiju and SmartHome, NetHome Plus is
-the last one answering, and it only answers for **the account the unit is
-registered to**. That is what `breeze-cloud` implements, and it is a last resort
-rather than the happy path.
+So tokens are issued **only to the account the unit is paired with**. A shared
+account gets nothing anywhere. As of October 2026, MSmartHome and Meiju still
+issue to the paired account. NetHome Plus logs in and then answers `9999` for
+everyone, owners included, since about August 2026. `breeze-cloud` implements
+all three:
+
+- `smarthome.rs`: route lookup, `loginId`, `/mj/user/login`, `getToken` with
+  `applianceCodes`.
+- `meiju.rs`: v2 `getToken` with `homegroupId`.
+- `nethome.rs`: the old flow, kept in case it comes back.
+
+`breeze-core fetch` (`cli/fetch.rs`) is the guided front end. It asks which
+cloud *knows* the account through the `loginId` lookup, which takes no
+password, so the password only ever goes to a cloud that has the account.
+Meiju's `1006` means "no such account". A NetHome Plus user is told how to move
+the unit to MSmartHome, not handed an error code. Never test it with the
+maintainer's real Midea credentials: `mock_cloud.rs` is what the tests use.
 
 **The durable path is holding the credentials.** `POST /api/units` takes a
 `token` and `key` directly, and `config.json` is the backup. When Midea finishes

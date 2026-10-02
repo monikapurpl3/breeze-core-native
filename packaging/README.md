@@ -126,6 +126,23 @@ in clean containers and diffs its file list against the nfpm package's.
 build-repo.sh signs them into `/rpm/SRPMS`, the apt `Sources` index and
 `/arch/sources`.
 
+## `breeze-core proxy`, tested for real
+
+`packaging/test/verify-proxy.sh [nginx|caddy|apache]` installs each web server
+in a clean Debian container. It runs the wizard with the answers given on
+stdin, as a person would type them. Then it checks four things:
+
+- the configuration serves the name through the proxy;
+- Breeze Core ends up on 127.0.0.1 with `--behind-proxy`;
+- a forged `X-Forwarded-For: 192.168.1.5` sent from a *second* container is
+  logged with that container's real address;
+- `--undo` leaves every file as it was.
+
+Apache gets a stand-in `certbot` that writes and enables
+`breeze-core-le-ssl.conf` the way the real one does, because that is the file
+an undo used to leave behind. The test needs only the amd64 binary, not the
+packages.
+
 ## The BSDs
 
 `build-binaries.sh` does not build them: Zig bundles no FreeBSD, NetBSD or

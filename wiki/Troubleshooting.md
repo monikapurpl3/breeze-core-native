@@ -44,7 +44,8 @@ no units can only produce confusing `401`s. Run `sudo breeze-core pair`.
 defaulted to `/etc/meow-ac/config.json`, and 4.x looks in `/etc/breeze-core`.
 The startup message says so if it spots one. **Do not run `pair` in that
 situation** — pairing writes a fresh `config.json` and cannot recover a paired
-V3 unit's token and key, which are not re-issuable. Copy the old file across,
+V3 unit's token and key. `breeze-core fetch` can get them again only from an
+MSmartHome or Meiju account the unit is paired with. Copy the old file across,
 or point `AC_CONFIG_DIR` at the old directory.
 
 ### "`cannot bind 192.168.1.10:8420`"
@@ -72,7 +73,9 @@ In order of likelihood:
    accepts one control connection at a time, so the vendor app in the
    foreground on a phone can lock out the server, and vice versa. Close it.
 4. **The V3 credentials are stale.** Rarer, and it looks like a unit that
-   authenticates and then refuses everything.
+   authenticates and then refuses everything. It happens when the unit was
+   paired again in Midea's app. `sudo breeze-core fetch NAME` gets the new
+   token and checks it on the unit before saving it.
 
 `GET /api/units/{id}/state` on an unreachable unit returns its **last known
 values with `online: false`** rather than an error, because clients render it
@@ -243,7 +246,10 @@ tightened the next time the server saves it.
 ## Turning up the logging
 
 An **access log is on by default**: one line per request with its status and
-how long it took. `BREEZE_LOG=0` silences it.
+how long it took. `BREEZE_LOG=0` silences it. Behind a reverse proxy with
+`--behind-proxy`, each line names the client the server believed and the proxy
+it came through, as `203.0.113.9 (via 127.0.0.1)` (4.3.0+; earlier versions
+logged only the proxy).
 
 `BREEZE_DEBUG=1` adds a full trace of every control command — what the client
 sent, what was applied, and what the unit echoed back:
@@ -268,7 +274,8 @@ that omission rather than trusting it.
 Include, at minimum:
 
 - `breeze-core --version`
-- the output of `breeze-core diag`
+- the output of `breeze-core diag`, or, from 4.3.0, the file
+  `breeze-core diag --nerd` writes, which holds that and `/api/system` together
 - `GET /api/system` (safe to paste — no secrets in it)
 - the relevant lines from the access log
 

@@ -8,6 +8,8 @@ and shipping one file is the whole point.
 ```
 breeze-core serve      run the API + web panel (foreground)
 breeze-core pair       discover units and write config.json
+breeze-core fetch      get V3 units' tokens from the Midea account   (4.3.0+)
+breeze-core proxy      put nginx, Apache or Caddy in front, with TLS  (4.3.0+)
 breeze-core control    set a unit from the shell, positionally
 breeze-core diag       run the diagnostic battery against the server
 breeze-core units      list the units the server knows about
@@ -33,6 +35,73 @@ The one command that needs **no running server**. It writes `config.json`, and
 the broadcast needs the same layer-2 network as the units — so in a container
 that means host networking. Full walkthrough:
 [First run and pairing](First-run-and-pairing).
+
+## `fetch`
+
+New in 4.3.0. A V3 unit answers nothing without a token and a key, and only
+Midea hands them out — these days only to the account the unit is paired with.
+`fetch` signs in to that account once, asks for the tokens, checks each one
+on the unit, and saves it to `config.json`.
+
+```sh
+sudo breeze-core fetch                          # every unit still without a token
+sudo breeze-core fetch kitchen                  # one, by name, address or id
+sudo breeze-core fetch --cloud smarthome --account you@example.com
+```
+
+It explains what it is doing at every step, so the short version is enough
+here:
+
+1. **It asks each unit what it is.** It sends the same unicast probe as
+   `pair --ip`, and skips a unit that turns out not to be V3. It also notices
+   when a different unit now answers at that address.
+2. **It asks which app the unit is paired with**: MSmartHome (outside China),
+   NetHome Plus (the older app many units came with), Meiju (美的美居, in
+   mainland China), or *not sure*.
+3. **It asks which of Midea's clouds knows your account, by name only.** No
+   password is sent for this lookup. So it can tell you "MSmartHome does not
+   know this account" before you type a password, and which app does know it.
+4. **It signs in** to a cloud that knows the account. The password is read
+   without echo. It is used for that one sign-in, then dropped, and it is
+   never saved, logged or shown. A mistyped password can be typed again,
+   twice.
+5. **It lists the units on the account**, so a unit paired to someone else's
+   account is explained rather than reported as a bare refusal.
+6. **It checks each token on the unit itself**: a V3 handshake and a state
+   read, which change nothing on the unit. A token the unit refuses is not
+   saved unless you say so.
+7. **It backs up `config.json`** to `config.json.before-fetch`, saves the
+   tokens, and prints the restart command for your init system.
+
+It exits `0` when every unit it was asked about got a token, `1` otherwise,
+and `2` on bad flags. For a script, `--password-stdin` reads the password as
+one line of standard input.
+
+### If your units came with NetHome Plus
+
+NetHome Plus still lets you sign in, but **since August 2026 it has refused to
+hand out tokens** — for every unit, its owners' included. `fetch` tries once
+anyway, in case that changes, and then says what does work:
+
+- **If MSmartHome knows the same account**, it offers to use MSmartHome
+  instead. That works if the unit is paired there too.
+- **Otherwise the unit has to move to MSmartHome.** A NetHome Plus login is not
+  an MSmartHome account: Midea keeps them on separate systems. So you install
+  MSmartHome and sign in, or create an account (the same email is fine). Then
+  you add the air conditioner there and run `fetch` again.
+
+**Only move the units that need a token now.** Pairing a unit again gives it a
+new token, so the one Breeze Core already holds for it will most likely stop
+working. `fetch` lists the units that already have their token and key, so you
+know which ones to leave alone.
+
+If you already have a unit's token and key from somewhere else (an old Home
+Assistant setup, or `msmart-ng`'s output), `breeze-core pair --ip ADDRESS` takes
+them typed in, and no cloud is involved.
+
+> **Keep a copy of `config.json` off the machine.** A unit never forgets its
+> token, but Midea may stop handing them out altogether. If that happens, your
+> copy is the only one there is.
 
 ## `control`
 
@@ -78,6 +147,24 @@ units genuinely share a prefix.
 
 `breeze-core control --help` prints the grammar.
 
+## `proxy`
+
+New in 4.3.0. It puts nginx, Apache or Caddy in front of Breeze Core, with a
+name and a Let's Encrypt certificate. It asks before every step and records
+every change, so that `--undo` can take all of it back out.
+
+```sh
+sudo breeze-core proxy                                   # asks everything
+sudo breeze-core proxy --server caddy --domain breeze.example.org
+breeze-core proxy --dry-run                              # the plan, changing nothing
+sudo breeze-core proxy --undo
+```
+
+On Linux it does the whole job. On Windows it opens the installer's Caddy
+wizard, and anywhere else it points to the wiki. What it does, step by step,
+and what it writes:
+[Reverse proxy and TLS](Reverse-proxy-and-TLS#or-let-breeze-core-proxy-do-it).
+
 ## `diag`
 
 The closest thing to a test suite: connectivity, auth posture (that a missing key
@@ -101,6 +188,26 @@ Each finding is `ok`, `warn` or `fail`, and the distinction is deliberate:
   `IntEnum` bug, and it stays checked because a client seeing `2` instead of
   `COOL` breaks silently.
 - **A state missing its fields fails rather than passing quietly.**
+
+### `--nerd`: everything it saw, in a file
+
+New in 4.3.0. This runs the same checks and also writes what `diag` saw to a
+JSON file:
+
+- every check, with its verdict;
+- the summary counts;
+- the server's `/api/version` and `/api/system`;
+- how long the round trip took.
+
+```sh
+breeze-core diag --nerd                     # breeze-core-nerd-<host>-<date>-<time>.json, here
+breeze-core diag --nerd /tmp/report.json    # or a name of your own
+```
+
+This is the file to attach to a bug report. It contains **no keys or tokens**:
+`/api/system` never contains a secret, and `diag` checks that. It does contain
+the server's hostname, LAN addresses and file paths, so look it over before
+posting it anywhere public. The file is created readable by you only.
 
 > **`diag` posts a deliberately out-of-range temperature** as part of checking
 > input validation. That is a control request, which the unit refuses — but if

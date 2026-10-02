@@ -61,10 +61,10 @@ Some units use the V3 protocol, which needs a per-unit `token` and `key` before
 the server can talk to them. `pair` asks for them, and you can press enter to
 add the unit anyway and supply them later.
 
-> **These are the irreplaceable part of your configuration.** They were issued
-> once by a vendor cloud that no longer hands them out. If you lose
-> `config.json`, a V3 unit has to be re-paired through the vendor app to get
-> new ones.
+> **These are the irreplaceable part of your configuration.** Midea's cloud
+> hands them out only to the account the unit is paired with, and NetHome Plus
+> no longer hands them out at all. If you lose `config.json`, a unit may have
+> to be paired again in Midea's app to get new ones.
 >
 > **Back up `/etc/breeze-core` before you do anything else**, and again
 > whenever you add a unit:
@@ -73,9 +73,15 @@ add the unit anyway and supply them later.
 > sudo cp -a /etc/breeze-core /root/breeze-core-backup
 > ```
 
-Breeze Core can fetch them from the vendor cloud once, as a last resort, and
-that is the only step on this page that touches the internet. Everything
-afterwards is local.
+If you don't have them, run **`sudo breeze-core fetch`** after `pair`. It
+signs in to the Midea account the units are paired with (MSmartHome, or Meiju
+in mainland China), gets each unit's token and key, checks them on the unit
+and saves them. It explains each step as it goes, including what to do if
+your units came with **NetHome Plus**, which stopped handing out tokens in
+August 2026. Details: [Command-line tools](Command-line-tools#fetch).
+
+That is the only step on this page that touches the internet, and it is
+needed once. Everything afterwards is local.
 
 ## 2. Set the bind address and start it
 

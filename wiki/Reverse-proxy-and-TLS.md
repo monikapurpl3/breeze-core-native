@@ -11,6 +11,69 @@ So if you want HTTPS, something goes in front. This page is the configuration.
 > [Exposing it safely](Exposing-it-safely). **A VPN is a better answer than
 > everything here**, and this page assumes you have already decided against it.
 
+## Or let `breeze-core proxy` do it
+
+New in 4.3.0, on Linux. It sets up any of the three servers below, asking before
+each step and saying what it is about to do:
+
+```sh
+sudo breeze-core proxy                                # asks everything
+sudo breeze-core proxy --server nginx --domain breeze.example.org
+breeze-core proxy --dry-run                           # the whole plan, changing nothing
+sudo breeze-core proxy --undo                         # take it all back out
+```
+
+1. **The web server.** It shows which of nginx, Apache and Caddy are installed
+   and what is already on ports 80 and 443. If none is installed, it offers to
+   install one with the system's package manager.
+2. **The name.** It explains the DNS record you need at your DNS host: a CNAME
+   to a name that already points home (a dynamic-DNS name, say), or an A record
+   with your public address. It also explains the router: ports 80 and 443
+   forwarded to this machine. Then it checks what the name resolves to. To
+   compare that with your public address it asks `api.ipify.org`, and only if
+   you say yes. If the record is not there yet, you can check again, carry on,
+   or stop.
+3. **The configuration.** It writes the configuration on this page, sets for
+   your name and port, and shows it to you first. Then it validates it
+   (`nginx -t`, `apachectl configtest`, `caddy validate`) and reloads the
+   server. A configuration that does not validate is removed again rather than
+   left behind.
+4. **The certificate.** For nginx and Apache it runs `certbot` interactively, so
+   Let's Encrypt asks for your email and the terms itself; certbot is offered
+   if it is missing. Caddy gets its certificate on its own.
+5. **Breeze Core behind it.** It sets `BREEZE_HOST=127.0.0.1` and
+   `--behind-proxy` in `breeze-core.env`, shows the change, and restarts the
+   service. Then it checks the name through the proxy. If you choose to keep
+   the direct LAN address as well, it warns you never to forward port 8420
+   on the router. With `--behind-proxy` on, anyone who reaches that port
+   directly can claim to be on your network.
+
+**Every file it creates or replaces, and every command it runs, is recorded in
+`/etc/breeze-core/proxy-undo.json`.** A file it replaces is backed up first,
+beside it, as `<file>.before-breeze-proxy`. `--undo` reads that record and puts
+everything back as it was:
+
+- the original files restored, and the new ones removed, including certbot's
+  separate HTTPS site on Apache;
+- the sites disabled and the web server reloaded;
+- Breeze Core back on its old address.
+
+Two things stay. Packages it installed stay installed. A certificate stays in
+`/etc/letsencrypt`, and the undo prints the `certbot delete` line for it.
+
+It is tested for real against all three servers on Debian
+(`packaging/test/verify-proxy.sh`). The test includes a client forging
+`X-Forwarded-For` from another machine, and an undo after certbot's Apache
+file. A container cannot get a real certificate, so certbot is a stand-in
+there. The Apache part supports the Debian
+(`/etc/apache2`) and Fedora (`/etc/httpd/conf.d`) layouts, and nginx's
+`conf.d` and Alpine's `http.d`.
+
+On **Windows** the same command opens the installer's Caddy wizard (also in
+the Start menu: *Breeze Core > Set up Caddy reverse proxy*). On the BSDs and
+OPNsense it points to this page. The configurations below are what it writes,
+so you can also do it by hand.
+
 ## The four things a proxy in front of this must get right
 
 Any proxy, in any configuration:
@@ -18,7 +81,9 @@ Any proxy, in any configuration:
 1. **`X-Forwarded-For`, overwritten — not appended.** This is the one the
    server reads, and the only one. `X-Real-IP` is ignored entirely.
 2. **`AC_BEHIND_PROXY=1` on the server**, or that header is not trusted and the
-   LAN-only admin check decides on the proxy's own address.
+   LAN-only admin check decides on the proxy's own address. With it on, only
+   the proxy may be able to reach the server's port. Bind it to `127.0.0.1`,
+   or anyone who reaches the port directly can write the header themselves.
 3. **No buffering on `/api/units/stream`.** Server-Sent Events are one response
    that never ends.
 4. **Security headers in exactly one place.** Two `Content-Security-Policy`
@@ -242,6 +307,17 @@ What you want to see, from a phone on mobile data:
 **If `client_ip` reads `127.0.0.1`, this is broken right now**, and the
 LAN-only admin check is currently passing every proxied request.
 
+From 4.3.0 the access log shows the same thing on every line. Behind a proxy it
+names the client the server believed, then the proxy:
+
+```
+203.0.113.9 (via 127.0.0.1) GET /api/health -> 200 (0.4ms)
+```
+
+Send one request with a made-up `X-Forwarded-For: 192.168.1.5` from outside.
+The line should still show your real address. If it shows `192.168.1.5`, the
+proxy is passing the client's header through.
+
 Then check the stream really streams:
 
 ```sh
@@ -257,7 +333,7 @@ arrive at once, something is buffering.
 | Symptom | Cause |
 |---|---|
 | pairing approval `403`s from the LAN | proxy not sending `X-Forwarded-For`, or `--behind-proxy` not set |
-| **anyone** can approve a pairing | `X-Forwarded-For` appended rather than overwritten, or a `trusted_proxies` that includes the internet |
+| **anyone** can approve a pairing | the client's `X-Forwarded-For` passed through untouched; or `--behind-proxy` on while port 8420 is reachable directly, not only through the proxy; or a `trusted_proxies` that includes the internet. Before 4.3.0, also an *appended* header |
 | live updates arrive in bursts, or never | buffering on the stream route |
 | the stream dies after a minute | `proxy_read_timeout` too low — the response is meant never to end |
 | the panel loads but is unstyled, console full of CSP errors | security headers set in **both** places and intersected |
