@@ -42,7 +42,8 @@ pass=0; fail=0
 for server in "${want[@]}"; do
   case "$server" in
     nginx)  packages="nginx curl procps";   answers='n c y n y y' ;;
-    apache) packages="apache2 curl procps"; answers='n c y n y y' ;;
+    # Apache gets a stand-in certbot (below), so its answers include starting it.
+    apache) packages="apache2 curl procps"; answers='n c y y y y' ;;
     caddy)  packages="caddy curl procps";   answers='n c y y y' ;;
     *) echo "unknown server $server"; exit 1 ;;
   esac
@@ -76,7 +77,22 @@ SUP
     # would be on a server.
     case "$SERVER" in
       nginx) nginx ;;
-      apache) apache2ctl -k start ;;
+      apache)
+        apache2ctl -k start
+        # A stand-in for certbot --apache, as far as files go: it writes the
+        # HTTPS half as a file of its own beside the wizard'"'"'s and enables it.
+        # That file is the one --undo used to leave behind.
+        cat > /usr/local/bin/certbot <<'"'"'CB'"'"'
+#!/bin/sh
+cat > /etc/apache2/sites-available/breeze-core-le-ssl.conf <<EOF
+<VirtualHost *:8443>
+    ServerName $3
+    ProxyPass / http://127.0.0.1:8420/
+</VirtualHost>
+EOF
+a2ensite -q breeze-core-le-ssl
+CB
+        chmod +x /usr/local/bin/certbot ;;
       caddy)
         # A Caddyfile that already has content -- a global block -- which the
         # wizard must keep. local_certs stands in for Lets Encrypt.
@@ -139,7 +155,9 @@ SUP
     [ ! -e /etc/breeze-core/proxy-undo.json ] && ok "undo: the journal is gone" || bad "undo: journal left"
     case "$SERVER" in
       nginx)  [ ! -e /etc/nginx/conf.d/breeze-core.conf ] && ok "undo: the nginx file is gone" || bad "undo: nginx file left"; nginx -t 2>/dev/null && ok "undo: nginx still validates" || bad "undo: nginx broken" ;;
-      apache) [ ! -e /etc/apache2/sites-available/breeze-core.conf ] && [ ! -e /etc/apache2/sites-enabled/breeze-core.conf ] && ok "undo: the site is gone and disabled" || bad "undo: apache site left"; apache2ctl configtest 2>/dev/null && ok "undo: apache still validates" || bad "undo: apache broken" ;;
+      apache) [ ! -e /etc/apache2/sites-available/breeze-core.conf ] && [ ! -e /etc/apache2/sites-enabled/breeze-core.conf ] && ok "undo: the site is gone and disabled" || bad "undo: apache site left"
+              [ ! -e /etc/apache2/sites-available/breeze-core-le-ssl.conf ] && [ ! -e /etc/apache2/sites-enabled/breeze-core-le-ssl.conf ] && ok "undo: certbot'"'"'s HTTPS site is gone too" || bad "undo: certbot'"'"'s le-ssl site left"
+              apache2ctl configtest 2>/dev/null && ok "undo: apache still validates" || bad "undo: apache broken" ;;
       caddy)  printf "{\n\tlocal_certs\n}\n\n" | cmp -s - /etc/caddy/Caddyfile && ok "undo: the Caddyfile is as it was" || bad "undo: Caddyfile differs" ;;
     esac
   ' 2>&1)"

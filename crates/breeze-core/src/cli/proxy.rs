@@ -586,6 +586,11 @@ mod linux {
         }
     }
 
+    /// Where certbot's Apache plugin puts the HTTPS half of `conf`.
+    fn le_ssl_path(conf: &str) -> String {
+        format!("{}-le-ssl.conf", conf.strip_suffix(".conf").unwrap_or(conf))
+    }
+
     fn configure(
         ctx: &mut Ctx,
         kind: Kind,
@@ -862,11 +867,27 @@ mod linux {
         } else {
             "--apache"
         };
+        // nginx's HTTPS half goes into the file written above, which --undo
+        // removes. Apache's is a file of certbot's own beside it, which certbot
+        // also enables -- left alone, --undo would leave Apache serving HTTPS
+        // for a Breeze Core that has moved. So it is recorded here, if new.
+        let le_ssl = (kind == Kind::Apache)
+            .then(|| le_ssl_path(&target(kind).0))
+            .filter(|p| !Path::new(p).exists());
         let ok = run_cmd(
             ctx,
             &["certbot", plugin, "-d", domain, "--redirect", "--hsts"].map(String::from),
             false,
         )?;
+        if let Some(path) = le_ssl.filter(|p| !ctx.dry_run && Path::new(p).exists()) {
+            ctx.journal.steps.push(Step::Created { path });
+            if Path::new("/etc/apache2").is_dir() {
+                ctx.journal.steps.push(Step::Ran {
+                    command: vec!["a2ensite".into(), "breeze-core-le-ssl".into()],
+                    undo: vec!["a2dissite".into(), "-q".into(), "breeze-core-le-ssl".into()],
+                });
+            }
+        }
         if !ok {
             say(
                 "certbot did not get a certificate (its own explanation is above). The usual \
@@ -1300,6 +1321,19 @@ mod linux {
             assert!(!c
                 .lines()
                 .any(|l| !l.trim_start().starts_with('#') && l.contains("trusted_proxies")));
+        }
+
+        #[test]
+        fn certbots_apache_file_is_found_where_certbot_writes_it() {
+            assert_eq!(
+                le_ssl_path("/etc/apache2/sites-available/breeze-core.conf"),
+                "/etc/apache2/sites-available/breeze-core-le-ssl.conf"
+            );
+            // conf.d in the directory must not be mistaken for the extension.
+            assert_eq!(
+                le_ssl_path("/etc/httpd/conf.d/breeze-core.conf"),
+                "/etc/httpd/conf.d/breeze-core-le-ssl.conf"
+            );
         }
 
         #[test]
