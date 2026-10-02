@@ -174,11 +174,13 @@ mod imp {
         let cloud = match decide(choice, &known)? {
             Some(cloud) => cloud,
             None => {
-                say(&format!(
-                    "None of them has {account}. Check how it is spelled -- it has to be exactly \
-                     what you sign in to the app with -- or use the account of whoever set the \
-                     unit up."
-                ));
+                // Not echoed: this output is what people paste into a bug
+                // report, and the address is theirs, not the report's.
+                say(
+                    "None of them has that account. Check how it is spelled -- it has to be \
+                     exactly what you sign in to the app with -- or use the account of whoever \
+                     set the unit up.",
+                );
                 return Ok(1);
             }
         };
@@ -571,7 +573,8 @@ mod imp {
         let smarthome_known = knows(known, Cloud::SmartHome);
         println!("  1. Install MSmartHome on your phone.");
         if smarthome_known {
-            println!("  2. Sign in with {account} -- MSmartHome already knows it.");
+            println!("  2. Sign in with the same email or phone number -- MSmartHome already");
+            println!("     knows it.");
         } else {
             println!("  2. Create an account in it. The same email is fine; it is a new account.");
         }
