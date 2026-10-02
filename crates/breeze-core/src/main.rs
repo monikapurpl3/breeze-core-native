@@ -36,6 +36,10 @@ fn main() {
             cli::pair::run(cli::pair::Options { ip, out, prompt })
         }
         // Exit 1 when some unit is still without its token, so a script can tell.
+        cli::Command::Proxy(options) => match cli::proxy::run(options) {
+            Ok(code) => std::process::exit(code),
+            Err(e) => Err(e),
+        },
         cli::Command::Fetch(options) => match cli::fetch::run(options) {
             Ok(code) => std::process::exit(code),
             Err(e) => Err(e),

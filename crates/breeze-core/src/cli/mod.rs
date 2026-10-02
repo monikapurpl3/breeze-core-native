@@ -28,6 +28,7 @@ pub mod diag;
 pub mod fetch;
 pub mod pair;
 pub mod profile;
+pub mod proxy;
 
 use admin::ClientOpts;
 
@@ -48,6 +49,8 @@ pub enum Command {
     },
     /// A V3 unit's token and key, from the Midea account it is paired with.
     Fetch(fetch::Options),
+    /// The reverse-proxy wizard.
+    Proxy(proxy::Options),
     Diag {
         client: ClientOpts,
         /// `--nerd [PATH]`: `Some(None)` saves to a generated name.
@@ -156,6 +159,26 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
 
         // Like `pair`, it works on config.json directly rather than through the
         // API: the server only reads that file at start-up.
+        "proxy" => {
+            let mut options = proxy::Options {
+                dry_run: false,
+                undo: false,
+                server: None,
+                domain: None,
+            };
+            let mut it = rest.iter();
+            while let Some(arg) = it.next() {
+                match arg.as_str() {
+                    "--dry-run" => options.dry_run = true,
+                    "--undo" => options.undo = true,
+                    "--server" => options.server = Some(need(&mut it, "--server")?),
+                    "--domain" => options.domain = Some(need(&mut it, "--domain")?),
+                    other => return Err(format!("unexpected argument '{other}'")),
+                }
+            }
+            Ok(Command::Proxy(options))
+        }
+
         "fetch" => {
             let mut options = fetch::Options {
                 units: Vec::new(),
@@ -284,6 +307,8 @@ usage:
   breeze-core serve [--host HOST] [--port PORT] [--behind-proxy]
   breeze-core pair [--ip ADDRESS] [--out PATH] [--no-prompt]
   breeze-core control 'NAME' [TYPE] [TEMPERATURE] [FLAP] [FAN] [EXTRA] [TIMER]
+  breeze-core proxy [--server nginx|apache|caddy] [--domain NAME] [--dry-run]
+  breeze-core proxy --undo
   breeze-core fetch [UNIT...] [--cloud smarthome|meiju|nethome] [--account EMAIL]
                     [--config PATH] [--password-stdin]
   breeze-core diag [--base-url URL] [--config PATH] [--nerd [FILE]]
