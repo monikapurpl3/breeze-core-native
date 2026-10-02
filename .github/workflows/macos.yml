@@ -1,0 +1,114 @@
+name: macOS
+
+# The Mac binaries are cross-built on Linux, the way the workstation builds the
+# release (packaging/build-binaries.sh: cargo zigbuild, plus the CoreFoundation
+# stub in packaging/macos/). This builds them that way, then RUNS them on real
+# Macs, Apple silicon and Intel. Nothing is compiled on the Macs: they only show
+# whether what the release ships runs. The repository is public, so the macOS
+# runners cost nothing.
+on:
+  workflow_dispatch:
+  push:
+    branches: [macos]
+    paths:
+      - .github/workflows/macos.yml
+      - packaging/build-binaries.sh
+      - packaging/dist-archive.sh
+      - packaging/macos/**
+      - crates/**
+      - Cargo.lock
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-zigbuild --locked
+      - run: bash packaging/build-binaries.sh macos-arm64 macos-x86_64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-binaries
+          path: packaging/out/dist/*-macos-*.tar.zst
+          if-no-files-found: error
+          retention-days: 7
+
+  run:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-26, label: macos-arm64 }
+          - { runner: macos-15-intel, label: macos-x86_64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: macos-binaries
+      - name: Unpack, as a user would
+        # macOS's own tar, not GNU tar: whether it reads .tar.zst is part of
+        # what is being checked.
+        run: |
+          set -eux
+          uname -a; sw_vers
+          mkdir bc && tar -xf breeze-core-*-${{ matrix.label }}.tar.zst -C bc
+          ls -l bc
+          test -x bc/breeze-core
+      - name: What it is
+        run: |
+          set -eux
+          file bc/breeze-core
+          otool -L bc/breeze-core
+          codesign -dv bc/breeze-core 2>&1 || true
+          spctl --assess --type execute -vv bc/breeze-core 2>&1 || true
+      - name: It runs
+        run: |
+          set -eux
+          bc/breeze-core --version
+          bc/breeze-core --help | head -5
+          # Linux only: on a Mac it must say so, not fail obscurely.
+          bc/breeze-core proxy --dry-run 2>&1 | tee proxy.txt || true
+          grep -q "wiki" proxy.txt
+      - name: It serves, pairs a client, and knows the time zone
+        # The local time zone is the one thing that needed CoreFoundation, so it
+        # is checked against the Mac's own clock -- in a zone that is not UTC,
+        # where falling back to UTC by mistake would show. TZ stays unset: with
+        # it set, the time zone would never be asked of CoreFoundation at all.
+        run: |
+          set -eux
+          unset TZ
+          sudo systemsetup -settimezone Pacific/Auckland || sudo ln -sf /usr/share/zoneinfo/Pacific/Auckland /etc/localtime
+          d=$(mktemp -d)
+          printf '{"api_key": "%s", "units": []}\n' "$(openssl rand -hex 16)" > "$d/config.json"
+          for f in programs devices timers; do printf '{"%s": []}' "$f" > "$d/$f.json"; done
+          export AC_CONFIG="$d/config.json" AC_DEVICES="$d/devices.json" AC_PROGRAMS="$d/programs.json" \
+            AC_TIMERS="$d/timers.json" BREEZE_CLI_PROFILE="$d/cli.json"
+          bc/breeze-core serve --host 127.0.0.1 --port 8420 > serve.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8420/api/health && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8420/api/health | grep -q '"ok"'
+          # login reads the key from AC_CONFIG and approves itself from 127.0.0.1.
+          bc/breeze-core login --base-url http://127.0.0.1:8420 < /dev/null
+          bc/breeze-core diag --nerd nerd.json || true
+          bc/breeze-core units --config "$d/config.json"
+          test -s nerd.json
+          theirs=$(sed -n 's/.*"utc_offset_seconds": *\(-\{0,1\}[0-9]*\).*/\1/p' nerd.json | head -1)
+          z=$(date +%z); sign=${z:0:1}; hh=$((10#${z:1:2})); mm=$((10#${z:3:2}))
+          ours=$(( hh * 3600 + mm * 60 )); [ "$sign" = "-" ] && ours=$(( -ours ))
+          echo "server says $theirs s, macOS says $ours s ($z)"
+          [ "$ours" != 0 ] && [ "$theirs" = "$ours" ]
+          cat serve.log
+          kill %1
