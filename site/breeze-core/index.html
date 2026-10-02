@@ -231,17 +231,31 @@ breeze-core control 'back room' none none none none none 30m</pre>
       <code>NSSM</code> as <code>LOCAL SERVICE</code>, locks down
       <code>%ProgramData%\breeze-core</code>, and opens one firewall rule
       restricted to your local subnet.</p>
-    <p>It <b>needs no internet</b>: the whole server is that one file, so there
-      is nothing to download during setup. Public HTTPS is a separate, optional
-      component — a guided <b>Caddy</b> wizard that fetches Caddy, writes a
-      hardened config with automatic certificates and a LAN-only admin gate, and
-      can install a fail2ban-style watcher that bans abusive addresses through
-      Windows Firewall. Your LAN is never banned.</p>
-    <p class="dim">Then: <code>Pair AC units</code> from the Start menu (or
-      <code>breeze-core pair</code>), edit <code>breeze-core.env</code> if you
-      want it on the LAN rather than loopback, and
-      <code>nssm start BreezeCore</code>. Uninstalling keeps your configuration
-      unless you ask it not to.</p>
+    <p><b>A first install needs the internet.</b> Setup downloads two small
+      helpers, each checked against a checksum pinned in the installer:
+      <code>NSSM</code>, which runs the server as a service, and the updater.
+      NSSM is fetched rather than carried because antivirus products flag
+      installers that embed it. An upgrade reuses the NSSM already installed,
+      so it needs no internet. On a machine that never has any, put
+      <a href="/windows/vendor/nssm-2.24.zip">nssm-2.24.zip</a> next to the installer.
+      Once installed, it checks aspic for a newer release when an administrator
+      signs in, and asks before downloading anything; you can turn that
+      off.</p>
+    <p>Public HTTPS is a separate, optional component — a guided <b>Caddy</b>
+      wizard that fetches Caddy, writes a hardened config with automatic
+      certificates and a LAN-only admin gate, and can install a fail2ban-style
+      watcher that bans abusive addresses through Windows Firewall. Your LAN is
+      never banned.</p>
+    <p class="dim">Setup asks <b>Simple</b> or <b>Advanced</b>. Simple serves
+      your local network on port 8420; Advanced lets you choose the folder, the
+      port, whether the network or only this PC can reach it, the firewall rule
+      and the update check. Then: <code>Pair AC units</code>
+      from the Start menu (or <code>breeze-core pair</code>), and
+      <code>Start-Service BreezeCore</code>. To change the address or port
+      later, run the installer again and choose to review the settings.
+      Uninstalling always keeps <code>%ProgramData%\breeze-core</code>, with
+      your units' tokens in it; remove that folder by hand for a full
+      wipe.</p>
   </section>
 
   <section id="what" class="s-rpm">
