@@ -226,10 +226,7 @@ pub fn serve(state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error>> {
                 Some(mut request) => {
                     let started = std::time::Instant::now();
                     let line = format!("{} {}", request.method(), request.url());
-                    let peer = request
-                        .remote_addr()
-                        .map(|a| a.ip().to_string())
-                        .unwrap_or_else(|| "-".into());
+                    let peer = logged_client(&request, state.settings.behind_proxy);
                     match handle(&state, &mut request) {
                         Outcome::Reply(reply) => {
                             // Logged before responding, so a client that hangs up
@@ -262,6 +259,40 @@ pub fn serve(state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error>> {
         let _ = h.join();
     }
     Ok(())
+}
+
+/// Who to name in the access log: the client the server believes, which is
+/// what every decision was made on.
+///
+/// Behind a proxy the socket peer is always the proxy, so the log used to read
+/// `127.0.0.1` for every request -- with `--behind-proxy` on or off -- and said
+/// nothing about who was actually asking. It now names the client the auth
+/// code resolved (`breeze_auth::client_ip`, the same function the LAN check
+/// uses), and the proxy alongside: `203.0.113.9 (via 127.0.0.1)`.
+fn logged_client(request: &tiny_http::Request, behind_proxy: bool) -> String {
+    let forwarded = request
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv("x-forwarded-for"))
+        .map(|h| h.value.as_str());
+    describe_client(
+        request.remote_addr().map(|a| a.ip()),
+        forwarded,
+        behind_proxy,
+    )
+}
+
+fn describe_client(
+    peer: Option<std::net::IpAddr>,
+    forwarded: Option<&str>,
+    behind_proxy: bool,
+) -> String {
+    let client = breeze_auth::client_ip(peer, forwarded, behind_proxy);
+    match (client, peer) {
+        (Some(c), Some(p)) if c != p => format!("{c} (via {p})"),
+        (Some(c), _) => c.to_string(),
+        (None, _) => "-".into(),
+    }
 }
 
 /// One line per request: who, what, the status, and how long it took.
@@ -1035,6 +1066,25 @@ mod tests {
             Resolved::Route(g, _) => g,
             other => panic!("{method} {path} did not route: {other:?}"),
         }
+    }
+
+    #[test]
+    fn the_access_log_names_the_client_the_server_believed() {
+        let proxy = Some("127.0.0.1".parse().unwrap());
+        // Behind a proxy: the proxy-appended (right-most) entry, never a forged
+        // one the client put in front of it.
+        assert_eq!(
+            describe_client(proxy, Some("192.168.1.5, 203.0.113.9"), true),
+            "203.0.113.9 (via 127.0.0.1)"
+        );
+        // Not trusting the header: the socket peer, whatever the header says.
+        assert_eq!(
+            describe_client(proxy, Some("192.168.1.5"), false),
+            "127.0.0.1"
+        );
+        // A direct client looks as it always did.
+        assert_eq!(describe_client(proxy, None, true), "127.0.0.1");
+        assert_eq!(describe_client(None, None, false), "-");
     }
 
     #[test]
