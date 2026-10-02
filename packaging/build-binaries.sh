@@ -44,6 +44,8 @@ armv7|armv7-unknown-linux-musleabihf|static musl, hard float (Pi 2/3, routers)
 riscv64|riscv64gc-unknown-linux-musl|static musl
 ppc64le|powerpc64le-unknown-linux-musl|static musl
 s390x|s390x-unknown-linux-gnu.2.17|glibc 2.17 floor (no musl std upstream)
+macos-arm64|aarch64-apple-darwin|Apple silicon, macOS 13+ (see packaging/macos/)
+macos-x86_64|x86_64-apple-darwin|Intel, macOS 13+ (see packaging/macos/)
 windows|x86_64-pc-windows-msvc|native build, no Zig
 "
 
@@ -81,6 +83,16 @@ while IFS='|' read -r label target note; do
       cargo build --release --target "$target"
       exe=".exe"
       ;;
+    *-apple-darwin)
+      # zig has no Apple frameworks, and iana-time-zone needs CoreFoundation:
+      # link against the stub in packaging/macos/ (its README says why that is
+      # enough). For this target only, so no other target's flags change. A
+      # Windows path, because cargo hands it to zig without MSYS converting it.
+      fw="$REPO/packaging/macos"
+      command -v cygpath >/dev/null 2>&1 && fw="$(cygpath -m "$fw")"
+      env "CARGO_TARGET_$(echo "$target" | tr 'a-z-' 'A-Z_')_RUSTFLAGS=-C link-arg=-F$fw" \
+        cargo zigbuild --release --target "$target"
+      ;;
     *)
       # RUSTFLAGS is deliberately not set here: +crt-static is already the
       # default for musl targets, and forcing it on the glibc one produces a
@@ -103,8 +115,10 @@ while IFS='|' read -r label target note; do
   # bare download: a stray `breeze-core` in a browser's downloads folder is
   # indistinguishable from any other, and the licence has to travel with it.
   if [ -z "$exe" ]; then
-    "$REPO/packaging/dist-archive.sh" "$DIST/breeze-core-$VERSION-linux-$label.tar.zst" "$OUT/$label"
-    echo "  -> $DIST/breeze-core-$VERSION-linux-$label.tar.zst"
+    # macos-arm64 names its own OS; every other label is a Linux architecture.
+    case "$label" in macos-*) name="$label" ;; *) name="linux-$label" ;; esac
+    "$REPO/packaging/dist-archive.sh" "$DIST/breeze-core-$VERSION-$name.tar.zst" "$OUT/$label"
+    echo "  -> $DIST/breeze-core-$VERSION-$name.tar.zst"
   else
     # A zip for Windows, not a zstd tarball: Explorer opens one and not the
     # other, and a Windows user should not need a second tool to unpack the

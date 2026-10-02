@@ -66,3 +66,7 @@ packaging/source/**     text eol=lf
 # continue with backslashes, and scripts run in Linux containers.
 packaging/mips/**        text eol=lf
 packaging/openwrt-apk/** text eol=lf
+
+# The macOS link stub: a .tbd is YAML read by zig's linker, which is not the
+# place to find out whether it tolerates a CR on every line.
+packaging/macos/**       text eol=lf
