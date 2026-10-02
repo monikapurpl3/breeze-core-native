@@ -22,7 +22,8 @@ short version.
 | run **FreeBSD, NetBSD or OpenBSD** | [Installing on the BSDs](Installing-on-the-BSDs) |
 | run **OPNsense** | [Installing on OPNsense](Installing-on-OPNsense) |
 | want it on an **Android** phone, in Termux | [Installing on Termux](Installing-on-Termux) |
-| run **macOS, NixOS, or anything unusual** | [Installing from source](Installing-from-source) |
+| run **macOS**, or use **Homebrew** on Linux | [Installing with Homebrew](Installing-with-Homebrew) |
+| run **NixOS, or anything unusual** | [Installing from source](Installing-from-source) |
 | have it installed and want to pair your units | [First run and pairing](First-run-and-pairing) |
 | are writing a client, or automating it | [REST API](REST-API) · [Control schema](Control-schema) |
 | want to reach it from outside the house | [Exposing it safely](Exposing-it-safely) — read this **first** |

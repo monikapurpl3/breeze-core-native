@@ -34,7 +34,7 @@ env_file="$(mktemp)"
 trap 'rm -f "$env_file"' EXIT
 tr -d '\r' < "$here/../nfpm/breeze-core.env" \
   | sed '1s/.*/# Breeze Core service configuration, read when `brew services` starts it./' \
-  | sed 's/^/      /; s/^ *$//' > "$env_file"
+  | sed 's/^/        /; s/^ *$//' > "$env_file"
 
 out="$(tr -d '\r' < "$here/breeze-core.rb.in" | awk -v envf="$env_file" '
   $0 == "@ENV@" { while ((getline line < envf) > 0) print line; next }

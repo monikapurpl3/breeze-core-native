@@ -12,6 +12,7 @@
 - [On the BSDs](Installing-on-the-BSDs)
 - [On OPNsense](Installing-on-OPNsense)
 - [On Termux (Android)](Installing-on-Termux)
+- [With Homebrew (macOS, Linux)](Installing-with-Homebrew)
 - [From source (any OS/init/libc)](Installing-from-source)
 
 **Use it**

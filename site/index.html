@@ -49,6 +49,7 @@
     <a class="t-opn" href="#opnsense">OPNsense</a>
     <a class="t-void" href="#void">Void</a>
     <a class="t-gentoo" href="#gentoo">Gentoo</a>
+    <a class="t-brew" href="#homebrew">Homebrew</a>
     <a class="t-host" href="#host">About this host</a>
   </nav>
 
@@ -317,6 +318,25 @@ sudo emerge -av app-misc/breeze-core-bin</pre>
       prebuilt binaries are armv7 hard-float and little-endian only. The ebuild
       checks your CHOST and refuses with an explanation rather than installing
       something that cannot run.</div>
+  </section>
+
+  <section id="homebrew" class="s-brew">
+    <h2>Homebrew</h2>
+    <span class="who">macOS, Apple silicon and Intel · Linux, x86-64 and ARM64
+      — <code>brew</code></span>
+<pre>brew tap aspic/breeze https://aspic.salataputarica.hr.eu.org/homebrew/breeze.git
+brew install breeze-core</pre>
+    <p class="dim">One formula for both systems, installing a prebuilt binary:
+      on a Mac one built for macOS 13 or newer, on Linux the same static binary
+      the packages above carry, so any distribution will do. The formula pins
+      each download by its SHA-256 and itself comes over this site's HTTPS, and
+      <code>brew upgrade</code> picks up each release.</p>
+    <p class="dim">Its files live in <code>$(brew --prefix)/etc/breeze-core</code>,
+      and <code>brew services start breeze-core</code> runs it while you are
+      logged in. Setting it up:
+      <a href="/breeze-core/#homebrew">the breeze-core page</a>. Like the Gentoo
+      overlay, the tap is a plain static git repository; there is no git server
+      here.</p>
   </section>
 
   <section id="opnsense" class="s-opn">

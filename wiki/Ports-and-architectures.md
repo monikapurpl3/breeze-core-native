@@ -211,8 +211,8 @@ Traps found getting there:
 
 Two tarballs, **`macos-arm64`** (Apple silicon) and **`macos-x86_64`** (Intel),
 about 2 and 2.4 MB, for **macOS 13 or newer**. They are cross-built on the same
-Windows machine as everything above, with the same `cargo zigbuild`, and carried
-by releases after 4.3.0.
+Windows machine as everything above, with the same `cargo zigbuild`, from 4.3.1
+on, and installed with [Homebrew](Installing-with-Homebrew).
 
 zig carries macOS's C library but no Apple frameworks, and one dependency
 needs one: the local time zone (`chrono`, through `iana-time-zone`) asks
@@ -229,18 +229,20 @@ UTC offset against macOS's own in a zone that is not UTC. The time zone is the
 one thing CoreFoundation is there for.
 
 They are **not notarised**. Apple silicon runs nothing unsigned, so zig's
-linker gives the arm64 binary an ad-hoc signature; that is enough to run it,
-not to satisfy Gatekeeper. A copy fetched with `curl` runs as it is. A copy
-downloaded with a browser is quarantined, and Gatekeeper refuses it until the
-quarantine is cleared:
+linker gives the arm64 binary an ad-hoc signature. That is enough to run it,
+not to satisfy Gatekeeper. Homebrew and `curl` downloads run as they are. A
+tarball downloaded with a browser is quarantined, and Gatekeeper refuses it
+until the quarantine is cleared:
 
 ```sh
 xattr -d com.apple.quarantine breeze-core
 ```
 
-There is no package and no Homebrew formula. The launchd template is in
-`deploy/init/com.breeze.core.plist`; see
-[Installing from source](Installing-from-source#on-macos).
+**The Homebrew tap on aspic is the way to install them**, and the same
+formula installs the static Linux binary under Homebrew on Linux. The workflow
+installs it on both Macs, and on x86-64 and ARM64 Linux, each time it changes:
+see [Installing with Homebrew](Installing-with-Homebrew). Without Homebrew, the
+launchd template is in `deploy/init/com.breeze.core.plist`.
 
 ## The honest cost
 

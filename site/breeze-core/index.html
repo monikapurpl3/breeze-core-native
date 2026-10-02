@@ -258,6 +258,34 @@ breeze-core control 'back room' none none none none none 30m</pre>
       wipe.</p>
   </section>
 
+  <section id="homebrew" class="s-brew">
+    <h2>On a Mac, or with Homebrew on Linux</h2>
+    <span class="who">One formula, prebuilt for Apple silicon, Intel Macs, and
+      x86-64 and ARM64 Linux</span>
+<pre>brew tap aspic/breeze https://aspic.salataputarica.hr.eu.org/homebrew/breeze.git
+brew install breeze-core
+
+<span class="c"># 1. find the units on your network and write the config</span>
+breeze-core pair
+
+<span class="c"># 2. bind somewhere useful: this machine's LAN address, for phones</span>
+"${EDITOR:-vi}" "$(brew --prefix)/etc/breeze-core/breeze-core.env"
+
+<span class="c"># 3. start it, now and at every login</span>
+brew services start breeze-core</pre>
+    <p>The settings file is the same <code>breeze-core.env</code> the Linux
+      packages use, kept in <code>$(brew --prefix)/etc/breeze-core</code>
+      with the rest of the store, and <code>brew upgrade</code> never overwrites
+      it. <code>brew services</code> runs Breeze Core as you, while you are
+      logged in: a launchd agent on macOS, a systemd user unit on Linux. On a
+      Linux server, the distribution packages above are the better fit, because
+      they run it as its own account from boot.</p>
+    <p class="dim">The Mac binaries need macOS 13 or newer. They are ad-hoc
+      signed, not notarised, which Homebrew does not mind: it downloads with
+      <code>curl</code>, so nothing is quarantined. Uninstalling keeps the
+      store, as every package here does.</p>
+  </section>
+
   <section id="what" class="s-rpm">
     <h2>What you get</h2>
     <table class="facts">

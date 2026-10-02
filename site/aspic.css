@@ -130,7 +130,7 @@ footer b{color:#dde5ee;font-weight:650}
   --deb:#e0507c; --rpm:#4d97ea; --suse:#5fc768; --arch:#48bdf2;
   --alpine:#7b8cf0; --owrt:#f2982f; --src:#b189f2;
   --fbsd:#e2504a; --nbsd:#f0ad45; --obsd:#f4d03f; --opn:#d9622a;
-  --void:#5aa85a; --gentoo:#9b7cc4; --termux:#cfd8e3;
+  --void:#5aa85a; --gentoo:#9b7cc4; --termux:#cfd8e3; --brew:#e8b04b;
 }
 .s-deb{--c:var(--deb)}
 .s-rpm{--c:var(--rpm)}
@@ -146,6 +146,7 @@ footer b{color:#dde5ee;font-weight:650}
 .s-gentoo{--c:var(--gentoo)}
 .s-termux{--c:var(--termux)}
 .s-opn{--c:var(--opn)}
+.s-brew{--c:var(--brew)}
 .t-deb{background:var(--deb);color:#26060f!important}
 .t-rpm{background:var(--rpm);color:#04121f!important}
 .t-suse{background:var(--suse);color:#04140a!important}
@@ -159,6 +160,7 @@ footer b{color:#dde5ee;font-weight:650}
 .t-void{background:var(--void);color:#04140a!important}
 .t-gentoo{background:var(--gentoo);color:#150a1f!important}
 .t-termux{background:var(--termux);color:#0b0f14!important}
+.t-brew{background:var(--brew);color:#1a1000!important}
 
 /* Project cards on the index: the roster of what this repository carries. Each
  * links to that project's own page, which is where its documentation lives —

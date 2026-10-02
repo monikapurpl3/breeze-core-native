@@ -179,9 +179,10 @@ jobs:
           bash packaging/homebrew/make-formula.sh "$ver" "file://$PWD/dist" dist > breeze-core.rb
           brew tap-new --no-git local/breeze
           cp breeze-core.rb "$(brew --repository local/breeze)/Formula/"
-          # Reported, not enforced: a style nit should not hide whether it installs.
-          brew style "$(brew --repository local/breeze)/Formula/breeze-core.rb" || true
-          brew audit --formula local/breeze/breeze-core || true
+          # Enforced: brew's own lint is what keeps the formula loadable as
+          # Homebrew changes (post_install is already rejected by it).
+          brew style "$(brew --repository local/breeze)/Formula/breeze-core.rb"
+          brew audit --formula local/breeze/breeze-core
       - name: brew install
         run: |
           set -eux
