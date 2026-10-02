@@ -91,7 +91,13 @@ jobs:
         run: |
           set -eux
           unset TZ
-          sudo systemsetup -settimezone Pacific/Auckland || sudo ln -sf /usr/share/zoneinfo/Pacific/Auckland /etc/localtime
+          # systemsetup can fail without saying so (it did on macOS 26), so the
+          # link it would have made is made as well, from wherever this macOS
+          # keeps its zone files.
+          sudo systemsetup -settimezone Pacific/Auckland || true
+          zi=/var/db/timezone/zoneinfo; [ -e "$zi/Pacific/Auckland" ] || zi=/usr/share/zoneinfo
+          sudo ln -sf "$zi/Pacific/Auckland" /etc/localtime
+          ls -l /etc/localtime; date
           d=$(mktemp -d)
           printf '{"api_key": "%s", "units": []}\n' "$(openssl rand -hex 16)" > "$d/config.json"
           for f in programs devices timers; do printf '{"%s": []}' "$f" > "$d/$f.json"; done
@@ -109,6 +115,9 @@ jobs:
           z=$(date +%z); sign=${z:0:1}; hh=$((10#${z:1:2})); mm=$((10#${z:3:2}))
           ours=$(( hh * 3600 + mm * 60 )); [ "$sign" = "-" ] && ours=$(( -ours ))
           echo "server says $theirs s, macOS says $ours s ($z)"
-          [ "$ours" != 0 ] && [ "$theirs" = "$ours" ]
+          # An if, not `a && b`: set -e ignores a failure on the left of &&,
+          # which is how a UTC-only run once passed this.
+          if [ "$ours" = 0 ]; then echo "the zone never changed, so this proves nothing"; exit 1; fi
+          if [ "$theirs" != "$ours" ]; then echo "the server's local time zone is wrong"; exit 1; fi
           cat serve.log
           kill %1
