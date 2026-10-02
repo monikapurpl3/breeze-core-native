@@ -4,6 +4,74 @@ The 4.x line. For 3.x and earlier, see the Python project's own
 [version history](https://github.com/monikapurpl3/breeze-core/wiki/Version-history) —
 everything published for it stays where it is and keeps installing.
 
+## 4.3.0
+
+Four new places to run it: Termux, MIPS routers, OpenWrt 25.12's new package
+manager, and source packages you build yourself. And three new commands: one
+that gets a V3 unit's token from your Midea account, one that sets up a
+reverse proxy for you, and one that turns `diag` into a file for a bug report.
+**Plus a security fix for anyone running behind a reverse proxy, Apache above
+all. Upgrade if you are.**
+
+**Security**
+
+- **Behind a reverse proxy, the server now trusts the *right-most*
+  `X-Forwarded-For` entry**, the one the proxy itself added. It used to take
+  the left-most. The wiki's Apache configuration until October 2026 *appended*
+  to the client's header rather than replacing it. Behind it, a request sent
+  with `X-Forwarded-For: 192.168.1.5` passed the LAN-only check from anywhere,
+  and could approve its own pairing. nginx with `$remote_addr` and Caddy were
+  never affected. 4.3.0 is safe behind the old Apache configuration too, but
+  change the configuration anyway: see
+  [Reverse proxy and TLS](Reverse-proxy-and-TLS#apache).
+- **The access log names the real client behind a proxy**, as
+  `203.0.113.9 (via 127.0.0.1)`. It used to read `127.0.0.1` for every
+  request.
+
+**New commands**
+
+- **`breeze-core fetch`** gets a V3 unit's token and key from the account the
+  unit is paired with, on MSmartHome or Meiju. It checks each one on the unit
+  before saving it. It asks which cloud knows your account before any password
+  is sent, and the password is never stored. **NetHome Plus has refused every
+  token since August 2026**, so for units that came with it, `fetch` explains
+  how to move them to MSmartHome, and which units to leave alone. The panel's
+  *add unit* form uses the same clouds. See
+  [Command-line tools](Command-line-tools#fetch).
+- **`breeze-core proxy`** puts nginx, Apache or Caddy in front, with the DNS
+  record explained and checked, a Let's Encrypt certificate, and Breeze Core
+  moved behind it. It asks before every step. It has `--dry-run`, and
+  `--undo` takes every change back out. On Linux; on Windows it opens the
+  installer's Caddy wizard. See
+  [Reverse proxy and TLS](Reverse-proxy-and-TLS#or-let-breeze-core-proxy-do-it).
+- **`breeze-core diag --nerd [FILE]`** writes every check, `/api/system` and
+  the version to one JSON file, with no keys or tokens in it, for attaching to
+  a bug report.
+
+**New ports**
+
+- **Termux**, on aarch64, arm and x86_64 Android: a real Android build with
+  termux-services, from its own signed apt repository. See
+  [Installing on Termux](Installing-on-Termux).
+- **MIPS OpenWrt routers** (`mipsel_24kc` and `mips_24kc`), static, in both
+  OpenWrt feeds.
+- **An apk v3 feed for OpenWrt 25.12**, alongside the opkg feed for 24.10.
+- **The OpenWrt packages work at last.** OpenWrt has no `addgroup`,
+  `adduser` or `getent`, so every OpenWrt package before this one failed to
+  create its `breeze` account, and procd could not start the service. They
+  now use OpenWrt's own `/lib/functions.sh`, and are tested installing,
+  serving and removing on 24.10 and 25.12.
+- **Source packages**: an SRPM, a Debian source package and an Arch source
+  tarball. You can get them through `dnf download --source`, `apt source` or
+  aspic, and build them offline with `rpmbuild`, `dpkg-buildpackage` or
+  `makepkg`. See [Installing from source](Installing-from-source).
+
+**Fixed**
+
+- **Removing the package on Arch or Alpine stopped nothing.** The service
+  stayed enabled, running a deleted binary. pacman and apk pass the old
+  version to the remove script, which only recognised `remove` and `0`.
+
 ## 4.2.0
 
 Timers switch a unit **on** as well as off: "on in 3 days at 07:30", beside

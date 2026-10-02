@@ -17,7 +17,7 @@ page under **Services → Breeze Core**.
 > never read where the plugin wrote its enable setting, and OPNsense deletes
 > accounts it does not manage — including the plugin's service account — at
 > every boot. On the 4.1.1 plugin, after a reboot, only reinstalling brings it
-> back; upgrade to 4.2.0 instead (below). The 4.2.0 plugin has been tested by
+> back; upgrade instead (below). Every plugin since 4.2.0 has been tested by
 > rebooting the firewall.
 >
 > On **OPNsense 26.1** (FreeBSD 14), only the binary and the package have been
@@ -27,7 +27,7 @@ page under **Services → Breeze Core**.
 ## Install
 
 ```sh
-pkg add https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.2.0.pkg
+pkg add https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.3.0.pkg
 ```
 
 Then: **Services → Breeze Core**, set the listen address, and enable it.
@@ -35,7 +35,7 @@ Then: **Services → Breeze Core**, set the listen address, and enable it.
 To **upgrade**, the same with `-f`:
 
 ```sh
-pkg add -f https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.2.0.pkg
+pkg add -f https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.3.0.pkg
 ```
 
 Without it, `pkg add` refuses whenever any version is installed — with the

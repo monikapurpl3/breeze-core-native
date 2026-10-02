@@ -11,7 +11,7 @@ For building it to *use*, see
 Everything runs from one workstation, in containers, with no CI:
 
 ```
-cargo test --workspace                       521 tests, 18 suites
+cargo test --workspace                       546 tests, 18 suites
 packaging/build-binaries.sh                  one static executable per target
 packaging/mips/build-mips.sh                 the two MIPS ones (nightly, OpenWrt toolchain)
 packaging/nfpm/build-packages.sh             deb, rpm, pacman, apk, ipk
@@ -180,10 +180,11 @@ powershell -File packaging/windows/build-installer.ps1 -OutDir packaging/out/win
 # 3. the repository, and prove it
 ./packaging/repo/build-repo.sh
 ./packaging/repo/verify-repo.sh
+./packaging/test/verify-proxy.sh          # breeze-core proxy, against all three servers
 
 # 4. publish
 ./packaging/repo/assemble-release.sh      # the GitHub assets, from the signed tree
-gh release create v4.2.0 --notes-file NOTES.md packaging/out/release/*
+gh release create v4.3.0 --notes-file NOTES.md packaging/out/release/*
 ./packaging/container/build-images.sh --push
 ./site/publish.sh --tree packaging/out/aspic
 ./packaging/repo/verify-repo.sh --live
