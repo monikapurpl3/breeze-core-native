@@ -444,6 +444,9 @@ mod imp {
                 Ok(token) => {
                     if check(&unit, &token)? {
                         got.push((index, token));
+                    } else {
+                        // Refused by the unit and not kept: still without one.
+                        missing += 1;
                     }
                 }
                 Err(e) => {
