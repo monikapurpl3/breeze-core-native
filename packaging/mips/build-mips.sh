@@ -87,8 +87,7 @@ while IFS='|' read -r label target owrt note; do
           tar -cf - -C target/$target/release breeze-core >&3
         " | tar -xf - -C "$OUT/$label"
 
-  tar --zstd -cf "$DIST/breeze-core-$VERSION-linux-$label.tar.zst" \
-      -C "$OUT/$label" breeze-core -C "$REPO" LICENSE README.md
+  "$REPO/packaging/dist-archive.sh" "$DIST/breeze-core-$VERSION-linux-$label.tar.zst" "$OUT/$label"
   printf '  %s KB -> %s\n' "$(( ($(wc -c < "$OUT/$label/breeze-core") + 1023) / 1024 ))" \
       "$DIST/breeze-core-$VERSION-linux-$label.tar.zst"
 done <<< "$TARGETS"

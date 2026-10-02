@@ -76,8 +76,8 @@ echo "=== fetching the artifacts back"
 mkdir -p packaging/out/bin/openbsd-amd64 "$PKGDIR" packaging/out/dist
 scp -q "$TARGET:~/$WORK/out/*.tgz" "$PKGDIR/"
 scp -q "$TARGET:~/$WORK/target/release/breeze-core" packaging/out/bin/openbsd-amd64/breeze-core
-tar --zstd -cf "packaging/out/dist/breeze-core-$VER-openbsd-amd64.tar.zst" \
-    -C packaging/out/bin/openbsd-amd64 breeze-core -C "$REPO" LICENSE README.md
+"$REPO/packaging/dist-archive.sh" "packaging/out/dist/breeze-core-$VER-openbsd-amd64.tar.zst" \
+    packaging/out/bin/openbsd-amd64
 
 # The public half travels with the package it verifies.
 cp packaging/repo/keys/aspic-openbsd.pub packaging/out/bsd/openbsd/aspic-pkg.pub

@@ -66,8 +66,8 @@ echo "=== fetching the artifacts back"
 mkdir -p packaging/out/bin/freebsd-amd64 packaging/out/bsd/freebsd packaging/out/dist
 scp -q "$TARGET:~/$WORK/out/*" packaging/out/bsd/freebsd/
 scp -q "$TARGET:~/$WORK/target/release/breeze-core" packaging/out/bin/freebsd-amd64/breeze-core
-tar --zstd -cf "packaging/out/dist/breeze-core-$VER-freebsd-amd64.tar.zst" \
-    -C packaging/out/bin/freebsd-amd64 breeze-core -C "$REPO" LICENSE README.md
+"$REPO/packaging/dist-archive.sh" "packaging/out/dist/breeze-core-$VER-freebsd-amd64.tar.zst" \
+    packaging/out/bin/freebsd-amd64
 
 # The public half belongs in the tree, next to the repository it verifies.
 cp packaging/repo/keys/aspic-freebsd.pub packaging/out/bsd/freebsd/aspic-freebsd.pub

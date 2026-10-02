@@ -71,6 +71,9 @@ all. Upgrade if you are.**
 - **Removing the package on Arch or Alpine stopped nothing.** The service
   stayed enabled, running a deleted binary. pacman and apk pass the old
   version to the remove script, which only recognised `remove` and `0`.
+- **The `.tar.zst` downloads hold a `breeze-core` you can run.** Every one
+  before this stored it without the execute bit, so it needed a `chmod +x`
+  after unpacking. Packages were never affected.
 
 ## 4.2.0
 

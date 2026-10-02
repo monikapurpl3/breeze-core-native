@@ -103,8 +103,7 @@ while IFS='|' read -r label target note; do
   # bare download: a stray `breeze-core` in a browser's downloads folder is
   # indistinguishable from any other, and the licence has to travel with it.
   if [ -z "$exe" ]; then
-    tar --zstd -cf "$DIST/breeze-core-$VERSION-linux-$label.tar.zst" \
-        -C "$OUT/$label" breeze-core -C "$REPO" LICENSE README.md
+    "$REPO/packaging/dist-archive.sh" "$DIST/breeze-core-$VERSION-linux-$label.tar.zst" "$OUT/$label"
     echo "  -> $DIST/breeze-core-$VERSION-linux-$label.tar.zst"
   else
     # A zip for Windows, not a zstd tarball: Explorer opens one and not the
