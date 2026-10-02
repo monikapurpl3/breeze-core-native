@@ -449,13 +449,22 @@ run_case ubuntu-src ubuntu:26.04 '
     "$BASE" > /etc/apt/sources.list.d/aspic.sources
   apt-get -qq update >/dev/null
 
-  echo "-- apt source fetches it, and dpkg-source checks the .dsc signature"
-  # dpkg-source verifies against the keys in trustedkeys.gpg, so trust the
-  # repository key there first; without it, it only warns.
+  echo "-- apt source fetches it; dpkg-source takes the .dsc only with the key"
+  # Asked, not grepped for. dpkg 1.23 (Ubuntu 26.04) prints nothing at all for
+  # a good signature, only a warning for a bad one, and apt-get source unpacked
+  # here without verifying -- so a grep for "Good signature" failed on a
+  # correctly signed .dsc. --require-valid-signature turns the warning into an
+  # error, and it is checked in both directions.
+  cd /tmp && apt-get source --download-only breeze-core > src.log 2>&1 || { tail -20 src.log; exit 1; }
+  dsc=$(ls breeze-core_${VER}-*.dsc)
+  if dpkg-source --require-valid-signature -x "$dsc" untrusted >/dev/null 2>&1; then
+    echo "   !! the .dsc was accepted with no key trusted"; exit 1
+  fi
+  # dpkg-source verifies against the keys in trustedkeys.gpg.
   gpg --batch --quiet --no-default-keyring --keyring trustedkeys.gpg --import /usr/share/keyrings/aspic.gpg
-  cd /tmp && apt-get source breeze-core > src.log 2>&1 || { tail -20 src.log; exit 1; }
-  grep -q "Good signature" src.log || { echo "   !! no good signature on the .dsc"; tail -10 src.log; exit 1; }
-  echo "   $(grep -o "Good signature from \"[^\"]*\"" src.log | head -1)"
+  dpkg-source --require-valid-signature -x "$dsc" breeze-core-$VER > x.log 2>&1 \
+    || { echo "   !! the .dsc signature did not verify with the aspic key"; tail -10 x.log; exit 1; }
+  echo "   $dsc: refused with no key, accepted with the aspic key"
 
   echo "-- apt build-dep, then dpkg-buildpackage"
   apt-get -qq build-dep -y breeze-core >/dev/null
@@ -467,8 +476,11 @@ run_case ubuntu-src ubuntu:26.04 '
 '
 
 SRPM_CASE="$(cat <<'CASE'
-  dnf -q -y install curl rpm-build dnf-plugins-core >/dev/null 2>&1 \
-    || dnf -q -y install curl rpm-build "dnf-command(download)" "dnf-command(builddep)" >/dev/null
+  # Not curl itself: the images have curl-minimal, which provides the command
+  # and, on Alma 9 since 9.8, conflicts with the full curl package.
+  dnf -q -y install rpm-build dnf-plugins-core >/dev/null 2>&1 \
+    || dnf -q -y install rpm-build "dnf-command(download)" "dnf-command(builddep)" >/dev/null
+  command -v curl >/dev/null || dnf -q -y install curl >/dev/null
   curl -fsSL "$BASE/rpm/aspic.repo" \
     | sed "s#https://aspic.salataputarica.hr.eu.org#$BASE#g" > /etc/yum.repos.d/aspic.repo
   grep -q "^\[aspic-source\]" /etc/yum.repos.d/aspic.repo || { echo "!! aspic.repo has no source repository"; exit 1; }
