@@ -20,8 +20,18 @@
 
 import { adoptSigner, apiFetch, clearApiKey, setDeviceToken } from "./api.js";
 import { ed25519Supported, generateSigner, persistSigner } from "./signer.js";
+import { announce, dialog } from "./a11y.js";
 
 const POLL_MS = 2000;
+// Said once, this long before the code runs out, for anyone who needs the
+// time to get it to whoever approves it.
+const WARN_AT_S = 15;
+
+// "JH7S-XT2P" read letter by letter -- "J H 7 S, X T 2 P" -- rather than as
+// two words a screen reader guesses at.
+function spelled(code){
+  return code.split("-").map(part => part.split("").join(" ")).join(", ");
+}
 
 export function enroll(){
   return new Promise((resolve) => {
@@ -36,7 +46,11 @@ export function enroll(){
 
     let pollTimer = null, countdownTimer = null;
 
-    const showError = (msg) => { errorEl.textContent = msg; errorEl.classList.remove("hidden"); };
+    const showError = (msg) => {
+      errorEl.textContent = msg;
+      errorEl.classList.remove("hidden");
+      announce(msg);
+    };
     const clearError = () => errorEl.classList.add("hidden");
     const stopTimers = () => {
       if(pollTimer) clearInterval(pollTimer);
@@ -48,9 +62,13 @@ export function enroll(){
       step2.classList.add("hidden");
       step1.classList.remove("hidden");
       startBtn.disabled = false;
+      startBtn.focus();   // back to "start pairing", for another code
     };
 
     ov.classList.remove("hidden");
+    // A modal dialog with no Escape: this browser has nothing to show until
+    // it is paired.
+    const release = dialog(ov);
 
     // The key pair for the enrolment in progress. Persisted only once the
     // server approves it — a key stored earlier would be an orphan if the user
@@ -108,14 +126,21 @@ export function enroll(){
 
       const {session_id, user_code, expires_in} = await res.json();
       codeEl.textContent = user_code;
+      codeEl.setAttribute("aria-label", "Pairing code " + spelled(user_code));
       step1.classList.add("hidden");
       step2.classList.remove("hidden");
+      // The button that had focus has just been hidden. Focus goes to the
+      // code, and the code is said, with what to do with it.
+      codeEl.focus();
+      announce(`Pairing code ${spelled(user_code)}. It expires in ${expires_in} seconds. ` +
+               "Give it to whoever approves new devices on the server.");
 
       let remaining = expires_in;
       countdownEl.textContent = remaining;
       countdownTimer = setInterval(() => {
         remaining -= 1;
         countdownEl.textContent = Math.max(0, remaining);
+        if(remaining === WARN_AT_S) announce(`${WARN_AT_S} seconds left on the pairing code.`);
         if(remaining <= 0){ showError("code expired — start again"); toStep1(); }
       }, 1000);
 
@@ -147,6 +172,8 @@ export function enroll(){
           }
           pending = null;
           ov.classList.add("hidden");
+          release();
+          announce("Paired. Loading your units.");
           resolve(true);
         }else if(data.status === "expired" || data.status === "unknown"){
           showError("code expired — start again");

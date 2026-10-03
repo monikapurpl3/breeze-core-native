@@ -21,6 +21,7 @@
 // they return.
 
 import { apiFetch } from "./api.js";
+import { dialog } from "./a11y.js";
 
 // The order /api/system itself uses, so the panel reads the way the server
 // thinks. Taken from a live 3.1.0 snapshot rather than guessed — an earlier
@@ -153,6 +154,8 @@ export function nerdDialog(){
     });
 
     document.body.appendChild(overlay);
+    // Escape is handled above; this makes it a dialog and gives focus back after.
+    dialog(overlay);
 
     (async () => {
       let res;

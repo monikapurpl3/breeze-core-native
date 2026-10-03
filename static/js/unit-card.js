@@ -11,6 +11,7 @@ import { nextSwingMode } from "./swing.js";
 import { fmtTemp } from "./display.js";
 import { buildClimateBar } from "./climate-bar.js";
 import { sleepText, startText } from "./timers.js";
+import { announce } from "./a11y.js";
 
 const DIAL_CIRC = 2 * Math.PI * 78;
 
@@ -29,7 +30,13 @@ export function buildPanel(unit, control, actions = {}){
   refs.modePills = Array.from(node.querySelectorAll("[data-role=modeRow] .pill"));
   refs.fanPills = Array.from(node.querySelectorAll("[data-role=fanRow] .pill"));
 
+  // The card is a <section> named by its heading, so a screen reader says
+  // "Living Room, region" on the way in and every control in it has that
+  // context; headings also let one jump from unit to unit.
+  refs.name.id = "unit-" + unit.id + "-name";
+  node.setAttribute("aria-labelledby", refs.name.id);
   refs.name.textContent = unit.name;
+  refs.menuBtn.setAttribute("aria-label", "Options for " + unit.name);
 
   // The indoor / outdoor / target bar, built rather than templated because it
   // owns its own geometry and there is nothing for the HTML to say about it.
@@ -80,14 +87,27 @@ export function buildPanel(unit, control, actions = {}){
   refs.startCancel.addEventListener("click", () => actions.onCancelTimer && actions.onCancelTimer(p, "start"));
 
   // ⋮ menu: rename / remove. The menu closes on outside click or Escape.
+  // aria-expanded says whether it is open; opening moves focus to its first
+  // item, and Escape from inside it puts focus back on the ⋮.
   if(refs.menuBtn && refs.menu){
-    const closeMenu = () => refs.menu.classList.add("hidden");
+    const closeMenu = () => {
+      refs.menu.classList.add("hidden");
+      refs.menuBtn.setAttribute("aria-expanded", "false");
+    };
     refs.menuBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      refs.menu.classList.toggle("hidden");
+      const opening = refs.menu.classList.contains("hidden");
+      refs.menu.classList.toggle("hidden", !opening);
+      refs.menuBtn.setAttribute("aria-expanded", String(opening));
+      if(opening && refs.renameBtn) refs.renameBtn.focus();
     });
     document.addEventListener("click", closeMenu);
-    document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeMenu(); });
+    document.addEventListener("keydown", (e) => {
+      if(e.key !== "Escape") return;
+      const inside = refs.menu.contains(document.activeElement);
+      closeMenu();
+      if(inside) refs.menuBtn.focus();
+    });
     if(refs.renameBtn){
       refs.renameBtn.addEventListener("click", () => { closeMenu(); actions.onRename && actions.onRename(p); });
     }
@@ -121,10 +141,20 @@ export function renderTimers(p){
 // Update the displayed unit name (after a rename).
 export function setName(p, name){
   p.refs.name.textContent = name;
+  p.refs.menuBtn.setAttribute("aria-label", "Options for " + name);
+}
+
+// Said aloud when a message first appears, with the unit's name: the polls
+// set the same error again every few seconds while a unit is unreachable,
+// and that must not be read every few seconds.
+function speakOnce(p, slot, msg){
+  if(msg && msg !== p[slot]) announce(p.refs.name.textContent + ": " + msg);
+  p[slot] = msg || null;
 }
 
 export function setError(p, msg){
   const box = p.refs.errorBox;
+  speakOnce(p, "spokenError", msg);
   if(msg){ box.textContent = msg; box.style.display = "block"; }
   else{ box.style.display = "none"; }
 }
@@ -135,6 +165,7 @@ const NOTICE_MS = 15000;
 export function setNotice(p, msg){
   const box = p.refs.noticeBox;
   clearTimeout(p.noticeTimer);
+  speakOnce(p, "spokenNotice", msg);
   if(msg){
     box.textContent = msg;
     box.style.display = "block";
@@ -161,14 +192,26 @@ export function render(p, s){
   r.dialFill.style.strokeDasharray = DIAL_CIRC;
   r.dialFill.style.strokeDashoffset = DIAL_CIRC * (1 - frac);
 
-  r.powerSwitch.className = "switch power-switch" + (s.power_state ? " on" : "");
-  r.ecoSwitch.className = "switch" + (s.eco ? " on" : "");
-  r.turboSwitch.className = "switch" + (s.turbo ? " on" : "");
-  r.vSwitch.className = "switch" + (s.swing_mode === "VERTICAL" || s.swing_mode === "BOTH" ? " on" : "");
-  r.hSwitch.className = "switch" + (s.swing_mode === "HORIZONTAL" || s.swing_mode === "BOTH" ? " on" : "");
+  // Each switch's state goes to the button (aria-checked, which is what is
+  // read out) and to the knob drawn inside it (the class, which is what is
+  // seen). The power switch is its own knob.
+  const sw = (button, knob, on) => {
+    button.setAttribute("aria-checked", String(!!on));
+    knob.classList.toggle("on", !!on);
+  };
+  sw(r.powerSwitch, r.powerSwitch, s.power_state);
+  sw(r.ecoSwitch, r.ecoKnob, s.eco);
+  sw(r.turboSwitch, r.turboKnob, s.turbo);
+  sw(r.vSwitch, r.vKnob, s.swing_mode === "VERTICAL" || s.swing_mode === "BOTH");
+  sw(r.hSwitch, r.hKnob, s.swing_mode === "HORIZONTAL" || s.swing_mode === "BOTH");
 
-  r.modePills.forEach(pill => pill.classList.toggle("active", pill.dataset.mode === s.operational_mode));
-  r.fanPills.forEach(pill => pill.classList.toggle("active", Number(pill.dataset.fan) === s.fan_speed));
+  // The chosen mode and fan speed: aria-pressed for the ear, .active for the eye.
+  const choose = (pill, on) => {
+    pill.classList.toggle("active", on);
+    pill.setAttribute("aria-pressed", String(on));
+  };
+  r.modePills.forEach(pill => choose(pill, pill.dataset.mode === s.operational_mode));
+  r.fanPills.forEach(pill => choose(pill, Number(pill.dataset.fan) === s.fan_speed));
 
   // Indoor, outdoor and target in one picture, by the same rule the app uses.
   p.climate.update(s);

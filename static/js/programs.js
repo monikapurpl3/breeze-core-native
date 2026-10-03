@@ -23,6 +23,7 @@
 // schedules at all — better than offering a button that always errors.
 
 import { apiFetch } from "./api.js";
+import { dialog } from "./a11y.js";
 import { confirmDialog } from "./manage.js";
 import { fmtTemp } from "./display.js";
 
@@ -118,6 +119,7 @@ export function programsDialog(units){
       if(e.key === "Escape"){ document.removeEventListener("keydown", esc); done(); }
     });
     document.body.appendChild(overlay);
+    dialog(overlay);   // Escape is handled above
 
     async function loadStatus(){
       try{
@@ -315,5 +317,6 @@ function pickUnit(units){
     actions.appendChild(cancel);
     card.appendChild(actions);
     document.body.appendChild(overlay);
+    dialog(overlay, { onEscape: () => { overlay.remove(); resolve(null); } });
   });
 }

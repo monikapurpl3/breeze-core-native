@@ -35,7 +35,10 @@ const TOKEN_STORAGE = "meow_ac_device_token";
 export function getApiKey(){
   let key = localStorage.getItem(KEY_STORAGE);
   if(!key){
-    key = (prompt("API key (from /etc/meow-ac/config.json on meow):") || "").trim();
+    // The browser's own prompt: plain, and read out by every screen reader.
+    // It names where the key really is: the 3.x text still said
+    // /etc/meow-ac on a host called meow.
+    key = (prompt("API key (the api_key in the server's config.json, usually /etc/breeze-core/config.json):") || "").trim();
     if(key) localStorage.setItem(KEY_STORAGE, key);
   }
   return key;

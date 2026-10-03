@@ -136,6 +136,39 @@ choosing: going back to "custom" restores it.
 The choice is **per browser**, in `localStorage`. It is not server state and it
 does not follow you to another device.
 
+## Accessibility
+
+The panel works with a keyboard alone, a screen reader, switch access, voice
+control and zoom:
+
+- **Every control is a real button.** Power, eco, turbo and the two flaps are
+  switches that say whether they are on. The mode and fan buttons say which
+  one is chosen. All of them can be reached with Tab and operated with Enter
+  or Space. Each card is a section named after its unit, with the unit's name
+  as a heading, so a screen reader can jump from unit to unit.
+- **Changes are spoken without moving focus.** A screen reader reads out the
+  new target temperature, whoever changed it. It also reads a unit refusing a
+  change, a unit becoming unreachable, the pairing code (letter by letter),
+  15 seconds before the code runs out, and "Paired" when an admin approves.
+  Each message is said once, not again on every refresh.
+- **Every window is a proper dialog:** pairing, add a unit, rename, Programs,
+  Nerd and timers. Focus goes into it, the page behind cannot be reached
+  until it closes, Escape closes it, and focus goes back to the button that
+  opened it.
+- **What you can see:**
+  - focus always shows as a ring in the theme colour;
+  - text meets contrast guidelines in the default theme;
+  - nothing is shown by colour alone;
+  - the page can be zoomed and still fits a 320 px wide screen;
+  - the targets are at least 24 px, and the eco, turbo and flap switches are
+    their whole row.
+- **Reduce motion** (the system setting) stops the online dot's pulse and the
+  sliding of the switches and the dial.
+
+The pairing code still expires after 60 seconds, which the server decides.
+Pairing also needs an admin to approve the code on the server, so plan for
+someone to do that alongside you.
+
 ## Notes on how it is built
 
 Only interesting if you are modifying it:
@@ -157,3 +190,11 @@ Only interesting if you are modifying it:
   lives in IndexedDB.
 - The file list is **generated** at build time by walking `static/`, so a file
   added to the panel cannot be silently left out of the binary.
+- **Accessibility lives in `a11y.js`.** It has two functions:
+  - `dialog(overlay)` makes any overlay a modal dialog;
+  - `announce(text)` speaks through the page's one live region.
+
+  A new control is a `<button>`: `role="switch"` with `aria-checked` for
+  on/off, `aria-pressed` for a choice. A `<div>` with a click handler cannot be
+  reached by keyboard or read by a screen reader. That is how the power switch
+  was out of reach for everyone without a mouse until October 2026.

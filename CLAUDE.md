@@ -174,6 +174,14 @@ a field and broke byte-compatibility — a convincing bug that does not exist.
 - **Never add a CORS header.** The panel is same-origin, and a permissive policy
   would let any other LAN page drive this API. Its absence is load-bearing and
   there is a test for it.
+- **Every panel control is a real `<button>`** with a name and a state. On/off
+  controls use `role="switch"` and `aria-checked`; a choice uses `aria-pressed`.
+  Overlays go through `dialog()` in `static/js/a11y.js`, and anything said
+  without moving focus through `announce()`. Until October 2026 the power,
+  mode, fan, eco, turbo and flap controls were clickable `<div>`s:
+  unreachable by keyboard, silent to screen readers, unnameable by voice
+  control. A blind user could not switch a unit on. Check a change with the
+  browser's accessibility tree, not by looking.
 
 ### Store files must round-trip byte-identically
 

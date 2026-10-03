@@ -63,14 +63,25 @@ export function buildPalettePicker(){
   btn.type = "button";
   btn.title = "Choose a colour theme";
   btn.textContent = "🎨 Theme";
+  btn.setAttribute("aria-haspopup", "true");
+  btn.setAttribute("aria-expanded", "false");
 
   const pop = document.createElement("div");
   pop.className = "palette-pop hidden";
+  pop.setAttribute("role", "group");
+  pop.setAttribute("aria-label", "Colour themes");
 
+  // The chosen palette: the ring for the eye, aria-pressed for the ear.
   const markActive = () => {
     const active = currentPalette();
-    pop.querySelectorAll(".swatch").forEach(s =>
-      s.classList.toggle("active", s.dataset.id === active));
+    pop.querySelectorAll(".swatch").forEach(s => {
+      s.classList.toggle("active", s.dataset.id === active);
+      if(s.tagName === "BUTTON") s.setAttribute("aria-pressed", String(s.dataset.id === active));
+    });
+  };
+  const setOpen = (open) => {
+    pop.classList.toggle("hidden", !open);
+    btn.setAttribute("aria-expanded", String(open));
   };
 
   PALETTES.forEach(p => {
@@ -84,7 +95,8 @@ export function buildPalettePicker(){
     s.addEventListener("click", () => {
       applyPalette(p.id);
       markActive();
-      pop.classList.add("hidden");
+      setOpen(false);
+      btn.focus();
     });
     pop.appendChild(s);
   });
@@ -99,6 +111,8 @@ export function buildPalettePicker(){
 
   const input = document.createElement("input");
   input.type = "color";
+  // The label around it shows only a colour, so the name is given here.
+  input.setAttribute("aria-label", "Pick any colour");
   input.value = customSeed() || PALETTES[0].seed;
   custom.style.background = input.value;
 
@@ -117,11 +131,22 @@ export function buildPalettePicker(){
 
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
-    pop.classList.toggle("hidden");
+    const opening = pop.classList.contains("hidden");
+    setOpen(opening);
     markActive();
+    // Into the popover, on the palette in use, so a keyboard user is where
+    // the choice is made.
+    if(opening){
+      const current = pop.querySelector("button.swatch.active") || pop.querySelector("button.swatch");
+      if(current) current.focus();
+    }
   });
   pop.addEventListener("click", (e) => e.stopPropagation());
-  document.addEventListener("click", () => pop.classList.add("hidden"));
+  document.addEventListener("click", () => setOpen(false));
+  // Escape from inside the popover closes it and returns to the button.
+  pop.addEventListener("keydown", (e) => {
+    if(e.key === "Escape"){ setOpen(false); btn.focus(); }
+  });
 
   wrap.appendChild(btn);
   wrap.appendChild(pop);

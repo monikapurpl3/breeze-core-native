@@ -6,6 +6,7 @@
 // reuse the .enroll-* overlay styles.
 
 import { apiFetch } from "./api.js";
+import { dialog } from "./a11y.js";
 
 // A tiny modal: title + text fields, resolves to {key: value, …} or null.
 // fields: [{ key, label, placeholder?, value? }]
@@ -62,6 +63,7 @@ function modal({ title, fields, submitLabel = "Save" }){
     });
 
     document.body.appendChild(overlay);
+    dialog(overlay, { onEscape: () => close(null) });
     const first = inputs[fields[0].key];
     if(first) first.focus();
   });
@@ -121,6 +123,7 @@ export function confirmDialog({ title, message, confirmLabel = "OK" }){
     ok.onclick = () => close(true);
     overlay.addEventListener("click", (e) => { if(e.target === overlay) close(false); });
     document.body.appendChild(overlay);
+    dialog(overlay, { onEscape: () => close(false) });
     ok.focus();
   });
 }
@@ -156,6 +159,7 @@ export function addSourceDialog(){
     manual.onclick = () => close("ip");
     overlay.addEventListener("click", (e) => { if(e.target === overlay) close(null); });
     document.body.appendChild(overlay);
+    dialog(overlay, { onEscape: () => close(null) });
     scan.focus();
   });
 }
@@ -225,6 +229,7 @@ export function scanDialog(){
     }
     rescan.onclick = run;
     document.body.appendChild(overlay);
+    dialog(overlay, { onEscape: () => close(null) });
     run();
   });
 }

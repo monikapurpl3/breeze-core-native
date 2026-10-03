@@ -97,14 +97,30 @@ export function buildClimateBar(){
 
   const labels = document.createElement("div");
   labels.className = "climate-labels";
-  const indoorLabel = document.createElement("span");
-  indoorLabel.className = "climate-indoor";
-  const outdoorLabel = document.createElement("span");
-  outdoorLabel.className = "climate-outdoor";
+  // "I: 27.0°" is seen; "indoor 27.0°" is heard. A screen reader would
+  // otherwise say "I colon".
+  const labelled = (cls, seen, heard) => {
+    const span = document.createElement("span");
+    span.className = cls;
+    const short = document.createElement("span");
+    short.setAttribute("aria-hidden", "true");
+    short.textContent = seen;
+    const long = document.createElement("span");
+    long.className = "sr-only";
+    long.textContent = heard;
+    const value = document.createElement("span");
+    span.append(short, long, value);
+    return { span, value };
+  };
+  const indoor = labelled("climate-indoor", "I: ", "indoor ");
+  const outdoor = labelled("climate-outdoor", "O: ", "outdoor ");
+  const indoorLabel = indoor.span, outdoorLabel = outdoor.span;
   labels.append(indoorLabel, outdoorLabel);
 
+  // The bar itself is a picture of the numbers beside it, so it is not read.
   const track = document.createElement("div");
   track.className = "climate-track";
+  track.setAttribute("aria-hidden", "true");
   // Order matters: the lighter fill is drawn first and the darker one over it.
   const lighter = document.createElement("div");
   lighter.className = "climate-fill lighter";
@@ -115,18 +131,18 @@ export function buildClimateBar(){
   el.append(labels, track);
 
   function update(state){
-    const indoor = sanitiseTemp(state?.indoor_temperature);
-    const outdoor = sanitiseTemp(state?.outdoor_temperature);
+    const indoorT = sanitiseTemp(state?.indoor_temperature);
+    const outdoorT = sanitiseTemp(state?.outdoor_temperature);
     const target = sanitiseTemp(state?.target_temperature);
 
     // Labels always show what there is, even when the bar cannot be drawn: "I:
     // 27.0°" alone is still worth reading.
-    indoorLabel.textContent = `I: ${fmtTemp(indoor, {showUnit: false})}`;
-    outdoorLabel.textContent = outdoor === null
-      ? ""                                        // no probe: say nothing
-      : `O: ${fmtTemp(outdoor, {showUnit: false})}`;
+    indoor.value.textContent = fmtTemp(indoorT, {showUnit: false});
+    // No probe: the whole label goes, prefixes included, so nothing is said.
+    outdoorLabel.classList.toggle("hidden", outdoorT === null);
+    outdoor.value.textContent = outdoorT === null ? "" : fmtTemp(outdoorT, {showUnit: false});
 
-    const model = climateBarModel({ indoor, outdoor, target });
+    const model = climateBarModel({ indoor: indoorT, outdoor: outdoorT, target });
     el.classList.toggle("unusable", !model.usable);
     if(!model.usable){
       lighter.style.width = "0%";

@@ -192,7 +192,9 @@ async function afterTimerCall(p, res, what){
 function makeActions(){
   return {
     onTimer: async (p) => {
-      const name = (p.state && p.state.name) || String(p.id);
+      // The card's own heading: it has the name before the first state
+      // arrives, which the state does not -- the dialog said "Timer — 1539…".
+      const name = p.refs.name.textContent || (p.state && p.state.name) || String(p.id);
       const t = p.timers || {};
       const choice = await timerDialog({
         unitName: name, sleep: t.sleep, start: t.start,
@@ -310,6 +312,7 @@ function wireHeader(){
     const paint = (on) => {
       beep.textContent = on ? "🔔" : "🔕";
       beep.classList.toggle("on", on);
+      beep.setAttribute("aria-pressed", String(on));  // the bell is all the eye gets
       beep.title = on ? "Units chirp on each command" : "Units stay silent";
     };
     paint(beepEnabled());

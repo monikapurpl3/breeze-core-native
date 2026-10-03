@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- No maximum-scale: it stops people zooming in, which is how many with low
+     vision read the page at all. -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Breeze Core</title>
 <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -10,37 +12,42 @@
 
   <div class="page-header">
     <h1>Breeze Core</h1>
-    <span id="globalStatus"></span>
+    <span id="globalStatus" role="status"></span>
     <div class="header-actions">
       <button class="ghost-btn" id="unitToggle" title="Toggle temperature unit">°C</button>
-      <button class="ghost-btn" id="beepToggle" title="Chirp when a unit accepts a command">🔕</button>
+      <button class="ghost-btn" id="beepToggle" aria-label="Unit chirp" aria-pressed="false" title="Chirp when a unit accepts a command">🔕</button>
       <button class="ghost-btn" id="programsBtn" title="Favourites, schedules and curves">Programs</button>
       <button class="ghost-btn" id="nerdBtn" title="Server, host and runtime details">Nerd</button>
       <button class="ghost-btn" id="addUnitBtn" title="Add a unit by its LAN IP">+ Add unit</button>
     </div>
   </div>
 
-  <div class="grid" id="grid"></div>
+  <main class="grid" id="grid"></main>
 
+  <!-- One unit's card. Every control is a real <button>, so it can be reached
+       with Tab, operated with Enter or Space, named by voice control and read
+       by a screen reader; the on/off ones are role="switch" with aria-checked,
+       the choices aria-pressed. unit-card.js keeps those states in step with
+       the unit, and names the card after it. -->
   <template id="panelTemplate">
-    <div class="unit-panel">
+    <section class="unit-panel">
       <div class="topbar">
-        <div class="unit-name" data-role="name"></div>
+        <h2 class="unit-name" data-role="name"></h2>
         <div class="topbar-right">
-          <div class="status"><span class="dot" data-role="dot"></span><span data-role="statusText">connecting</span></div>
+          <div class="status"><span class="dot" data-role="dot" aria-hidden="true"></span><span data-role="statusText">connecting</span></div>
           <div class="unit-menu">
-            <button class="menu-btn" data-role="menuBtn" aria-label="unit options">⋮</button>
+            <button type="button" class="menu-btn" data-role="menuBtn" aria-label="unit options" aria-haspopup="true" aria-expanded="false">⋮</button>
             <div class="menu hidden" data-role="menu">
-              <button data-role="renameBtn">Rename</button>
-              <button data-role="removeBtn">Remove unit</button>
+              <button type="button" data-role="renameBtn">Rename</button>
+              <button type="button" data-role="removeBtn">Remove unit</button>
             </div>
           </div>
-          <div class="switch power-switch" data-role="powerSwitch"></div>
+          <button type="button" class="switch power-switch" data-role="powerSwitch" role="switch" aria-checked="false" aria-label="Power"></button>
         </div>
       </div>
 
       <div class="dial-wrap">
-        <svg viewBox="0 0 180 180">
+        <svg viewBox="0 0 180 180" aria-hidden="true" focusable="false">
           <circle class="dial-track" cx="90" cy="90" r="78"></circle>
           <circle class="dial-fill" data-role="dialFill" cx="90" cy="90" r="78"
                   stroke-dasharray="490" stroke-dashoffset="490"></circle>
@@ -48,36 +55,43 @@
         <div class="dial-center">
           <div class="indoor-temp" data-role="indoorTemp">--°</div>
           <div class="indoor-label">indoor</div>
-          <div class="target-row">target <span class="target-val" data-role="targetReadout">--°</span></div>
+          <!-- The same number as the stepper's below, which is the one read
+               aloud: hidden here so it is not heard twice. -->
+          <div class="target-row" aria-hidden="true">target <span class="target-val" data-role="targetReadout">--°</span></div>
         </div>
       </div>
 
       <div class="stepper">
-        <button data-role="tempDown">−</button>
-        <div class="target" data-role="targetBig">--°</div>
-        <button data-role="tempUp">+</button>
+        <button type="button" data-role="tempDown" aria-label="Lower the target temperature">−</button>
+        <!-- Live, so a change -- from these buttons, or from anyone else -- is
+             read out without moving focus. -->
+        <div class="target" aria-live="polite" aria-atomic="true"><span class="sr-only">target </span><span data-role="targetBig">--°</span></div>
+        <button type="button" data-role="tempUp" aria-label="Raise the target temperature">+</button>
       </div>
 
-      <div class="row" data-role="modeRow">
-        <div class="pill" data-mode="AUTO">auto</div>
-        <div class="pill" data-mode="COOL">cool</div>
-        <div class="pill" data-mode="DRY">dry</div>
-        <div class="pill" data-mode="HEAT">heat</div>
-        <div class="pill" data-mode="FAN_ONLY">fan</div>
+      <div class="row" data-role="modeRow" role="group" aria-label="Mode">
+        <button type="button" class="pill" aria-pressed="false" data-mode="AUTO">auto</button>
+        <button type="button" class="pill" aria-pressed="false" data-mode="COOL">cool</button>
+        <button type="button" class="pill" aria-pressed="false" data-mode="DRY">dry</button>
+        <button type="button" class="pill" aria-pressed="false" data-mode="HEAT">heat</button>
+        <button type="button" class="pill" aria-pressed="false" data-mode="FAN_ONLY">fan</button>
       </div>
 
-      <div class="row" data-role="fanRow">
-        <div class="pill" data-fan="20">low</div>
-        <div class="pill" data-fan="60">med</div>
-        <div class="pill" data-fan="100">high</div>
-        <div class="pill" data-fan="102">auto</div>
+      <div class="row" data-role="fanRow" role="group" aria-label="Fan speed">
+        <button type="button" class="pill" aria-pressed="false" data-fan="20">low</button>
+        <button type="button" class="pill" aria-pressed="false" data-fan="60" aria-label="medium">med</button>
+        <button type="button" class="pill" aria-pressed="false" data-fan="100">high</button>
+        <button type="button" class="pill" aria-pressed="false" data-fan="102">auto</button>
       </div>
 
+      <!-- Each whole row is the switch, not just the knob drawn in it: a far
+           bigger target. The aria-label repeats the visible word because not
+           every screen reader names a role="switch" from its contents. -->
       <div class="toggles">
-        <div class="toggle">eco <div class="switch" data-role="ecoSwitch"></div></div>
-        <div class="toggle">turbo <div class="switch" data-role="turboSwitch"></div></div>
-        <div class="toggle">flap ↕ <div class="switch" data-role="vSwitch"></div></div>
-        <div class="toggle">flap ↔ <div class="switch" data-role="hSwitch"></div></div>
+        <button type="button" class="toggle" role="switch" aria-checked="false" aria-label="eco" data-role="ecoSwitch"><span class="toggle-label">eco</span><span class="switch" data-role="ecoKnob" aria-hidden="true"></span></button>
+        <button type="button" class="toggle" role="switch" aria-checked="false" aria-label="turbo" data-role="turboSwitch"><span class="toggle-label">turbo</span><span class="switch" data-role="turboKnob" aria-hidden="true"></span></button>
+        <button type="button" class="toggle" role="switch" aria-checked="false" aria-label="flap up and down" data-role="vSwitch"><span class="toggle-label">flap ↕</span><span class="switch" data-role="vKnob" aria-hidden="true"></span></button>
+        <button type="button" class="toggle" role="switch" aria-checked="false" aria-label="flap left and right" data-role="hSwitch"><span class="toggle-label">flap ↔</span><span class="switch" data-role="hKnob" aria-hidden="true"></span></button>
       </div>
 
       <!-- The unit's two timers: at most one sleep timer and one scheduled
@@ -97,12 +111,12 @@
       <div class="error" data-role="errorBox"></div>
       <div class="notice" data-role="noticeBox"></div>
       <div class="footer" data-role="footer">—</div>
-    </div>
+    </section>
   </template>
 
   <div class="empty-state hidden" id="emptyState">
     <p>No units configured yet.</p>
-    <p>Run <code>setup_device.py</code> on the server to discover them, or add one by its LAN IP:</p>
+    <p>Run <code>breeze-core pair</code> on the server to discover them, or add one by its LAN IP:</p>
     <button class="ghost-btn" id="emptyAddBtn">+ Add unit by IP</button>
   </div>
 
@@ -120,13 +134,16 @@
       </p>
 
       <div id="enrollStep1">
+        <label class="sr-only" for="enrollLabel">Device name</label>
         <input class="enroll-input" id="enrollLabel" type="text"
                maxlength="64" placeholder="device name (e.g. living-room tablet)">
         <button class="enroll-btn" id="enrollStartBtn">start pairing</button>
       </div>
 
       <div class="hidden" id="enrollStep2">
-        <div class="enroll-code" id="enrollCode">····-····</div>
+        <!-- Focused when the code appears (enroll.js), and named letter by
+             letter, so a screen reader spells it rather than reading a word. -->
+        <div class="enroll-code" id="enrollCode" tabindex="-1">····-····</div>
         <div class="enroll-countdown">expires in <span id="enrollCountdown">–</span>s</div>
         <p class="enroll-hint">
           Enter this code in the approval tool on the server within the time

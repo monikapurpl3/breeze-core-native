@@ -12,6 +12,7 @@
 // pieces as the other dialogs.
 
 import { apiFetch } from "./api.js";
+import { dialog } from "./a11y.js";
 
 export const SLEEP_PRESETS = [15, 30, 45, 60, 90, 120];
 export const MAX_SLEEP_MINUTES = 24 * 60;
@@ -253,5 +254,6 @@ export function timerDialog({unitName, sleep, start, fetchedAt}){
 
     overlay.addEventListener("click", (e) => { if(e.target === overlay) close(null); });
     document.body.appendChild(overlay);
+    dialog(overlay);   // Escape is handled by onKey above
   });
 }
