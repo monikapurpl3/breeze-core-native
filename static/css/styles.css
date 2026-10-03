@@ -41,8 +41,12 @@ body{
   max-width: 1100px;
   margin: 0 auto 20px;
   display:flex;
+  /* Wraps rather than running off the right edge: the title and six header
+   * controls are about 420px, and a phone has about 335. */
+  flex-wrap: wrap;
   align-items:baseline;
   gap: 10px;
+  row-gap: 12px;
 }
 .page-header h1{
   font-size: 22px;
@@ -57,6 +61,8 @@ body{
 .header-actions{
   margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
 }
@@ -128,6 +134,11 @@ body{
 }
 @media (max-width: 620px){
   .grid{ grid-template-columns: 1fr; }
+  /* The controls get a row of their own under the title, left-aligned like
+   * the cards below them. The theme picker is then at the left edge, so its
+   * popover opens rightwards, or it would start off-screen. */
+  .header-actions{ margin-left: 0; width: 100%; justify-content: flex-start; }
+  .palette-pop{ left: 0; right: auto; }
 }
 
 .unit-panel{

@@ -6,7 +6,7 @@ everything published for it stays where it is and keeps installing.
 
 ## 4.3.1
 
-Breeze Core on a Mac, and Homebrew on both macOS and Linux.
+Breeze Core on a Mac, Homebrew on both macOS and Linux, and a web panel header that fits a phone.
 
 **New**
 
@@ -27,6 +27,15 @@ Breeze Core on a Mac, and Homebrew on both macOS and Linux.
   `breeze-core.env` as the Linux packages, and `brew upgrade` brings each
   release. CI installs it on both kinds of Mac and on x86-64 and ARM64 Linux.
   See [Installing with Homebrew](Installing-with-Homebrew).
+
+**Fixed**
+
+- **The web panel's header fits a phone.** Its six buttons (Theme, °C, the
+  chirp toggle, Programs, Nerd, Add unit) sat in one row that never wrapped.
+  On a phone, and on a tablet in portrait, they ran off the right edge of the
+  screen. They now wrap: on a phone they take rows of their own under the
+  title, and the Theme popover opens rightward, so it stays on screen. Wide
+  screens look as before.
 
 **Changed**
 
