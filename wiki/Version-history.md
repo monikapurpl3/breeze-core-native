@@ -60,6 +60,7 @@ header that fits a phone.
 
   ```sh
   brew tap aspic/breeze https://aspic.salataputarica.hr.eu.org/homebrew/breeze.git
+  brew trust aspic/breeze
   brew install breeze-core
   brew services start breeze-core
   ```

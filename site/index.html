@@ -325,7 +325,11 @@ sudo emerge -av app-misc/breeze-core-bin</pre>
     <span class="who">macOS, Apple silicon and Intel · Linux, x86-64 and ARM64
       — <code>brew</code></span>
 <pre>brew tap aspic/breeze https://aspic.salataputarica.hr.eu.org/homebrew/breeze.git
+brew trust aspic/breeze
 brew install breeze-core</pre>
+    <p class="dim"><code>brew trust</code> is Homebrew's own step for any
+      tap outside its core, asked once: it loads no formula from a tap you have
+      not trusted.</p>
     <p class="dim">One formula for both systems, installing a prebuilt binary:
       on a Mac one built for macOS 13 or newer, on Linux the same static binary
       the packages above carry, so any distribution will do. The formula pins

@@ -6,10 +6,15 @@ New in 4.3.1.
 
 ```sh
 brew tap aspic/breeze https://aspic.salataputarica.hr.eu.org/homebrew/breeze.git
+brew trust aspic/breeze
 brew install breeze-core
 ```
 
-`brew upgrade` picks up each release from then on.
+**`brew trust` is Homebrew's step, asked once of any tap outside its own.**
+Homebrew loads no formula from a third-party tap until you trust it. Without
+it, `brew install` refuses with "Refusing to load formula
+aspic/breeze/breeze-core from untrusted tap". It trusts the tap, not a
+version, so `brew upgrade` picks up each release from then on.
 
 ## Setting it up
 
