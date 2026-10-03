@@ -331,6 +331,13 @@ pub fn run(args: &[String]) -> Result<(), String> {
     if command.touches_the_unit() {
         let state = client.post_json(&format!("/api/units/{id}/control"), &command.body())?;
         println!("{resolved}: {}", describe(&state));
+        // A change the unit ignored used to look exactly like one it took:
+        // the line above shows its state either way. Said in words, as the
+        // panel and the app say it. Still exit 0 -- the request was carried
+        // out; the unit chose -- so scripts that ran before keep running.
+        if let Some(refused) = not_applied_message(&state) {
+            println!("{resolved}: {refused}");
+        }
     }
 
     if let Some(minutes) = command.timer_minutes {
@@ -352,6 +359,12 @@ pub fn run(args: &[String]) -> Result<(), String> {
 }
 
 /// One line of what the unit now reports.
+///
+/// Switched off, it still says what the unit is set to -- the mode,
+/// temperature, flaps and fan it will start with. That used to be just "off
+/// (indoor 24.0 °C)", so a temperature changed while off was never confirmed,
+/// which matters most to someone who cannot glance at the panel. Words in
+/// lower case: some screen readers spell an all-capitals word out.
 fn describe(state: &serde_json::Value) -> String {
     let field = |key: &str| state.get(key).cloned().unwrap_or(serde_json::Value::Null);
     let temperature = |value: &serde_json::Value| match value.as_f64() {
@@ -359,17 +372,11 @@ fn describe(state: &serde_json::Value) -> String {
         None => "--".to_string(),
     };
 
-    if field("power_state").as_bool() == Some(false) {
-        return format!(
-            "off (indoor {} °C)",
-            temperature(&field("indoor_temperature"))
-        );
-    }
     let mut parts = vec![
         field("operational_mode")
             .as_str()
-            .unwrap_or("?")
-            .to_string(),
+            .map(|mode| mode.to_lowercase().replace('_', " "))
+            .unwrap_or_else(|| "?".to_string()),
         format!("{} °C", temperature(&field("target_temperature"))),
     ];
     if let Some(swing) = field("swing_mode").as_str() {
@@ -397,11 +404,70 @@ fn describe(state: &serde_json::Value) -> String {
     if field("turbo").as_bool() == Some(true) {
         parts.push("turbo".into());
     }
-    parts.push(format!(
-        "indoor {} °C",
-        temperature(&field("indoor_temperature"))
-    ));
+    let indoor = format!("indoor {} °C", temperature(&field("indoor_temperature")));
+    if field("power_state").as_bool() == Some(false) {
+        // The reading kept apart, so it is not heard as one of the settings.
+        return format!("off, set to {}; {indoor}", parts.join(", "));
+    }
+    parts.push(indoor);
     parts.join(", ")
+}
+
+/// The fields a unit did not take, from the control reply's `not_applied`, as
+/// a sentence -- or None when it took everything. The same wording and the
+/// same reasons as the panel (static/js/feedback.js) and the app, which are
+/// what was measured on real units: none moves its flaps while off, most
+/// hold the flaps while heating until warm air comes, many offer eco only
+/// while cooling.
+fn not_applied_message(state: &serde_json::Value) -> Option<String> {
+    let fields: Vec<&str> = state
+        .get("not_applied")?
+        .as_array()?
+        .iter()
+        .filter_map(|f| f.as_str())
+        .collect();
+    if fields.is_empty() {
+        return None;
+    }
+    let name = |f: &str| match f {
+        "swing_mode" => "the flap change".to_string(),
+        "fan_speed" => "the fan speed".to_string(),
+        "target_temperature" => "the temperature".to_string(),
+        "operational_mode" => "the mode".to_string(),
+        "power_state" => "the power change".to_string(),
+        other => other.replace('_', " "),
+    };
+    let names: Vec<String> = fields.iter().map(|f| name(f)).collect();
+    let joined = match names.as_slice() {
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+        [] => unreachable!(),
+    };
+
+    let on = state.get("power_state").and_then(|v| v.as_bool()) == Some(true);
+    let heating = state.get("operational_mode").and_then(|v| v.as_str()) == Some("HEAT");
+    let mut reasons: Vec<&str> = Vec::new();
+    for f in &fields {
+        let reason = match *f {
+            "swing_mode" if !on => "Units only move their flaps while they are running.",
+            "swing_mode" if heating => {
+                "While heating, it holds its flaps still until warm air is coming out, which \
+                 can take a few minutes after switching on or into heating. Try again shortly."
+            }
+            "swing_mode" => "It may need a moment before it will take this. Try again shortly.",
+            "eco" if heating => "Many units offer eco only while cooling, not while heating.",
+            "eco" => "Many units offer eco only in some modes.",
+            "turbo" => "Many units offer turbo only in some modes.",
+            _ => "It does not take this in its current mode.",
+        };
+        if !reasons.contains(&reason) {
+            reasons.push(reason);
+        }
+    }
+    Some(format!(
+        "the air conditioner didn't accept {joined}; the unit refused it, not Breeze Core. {}",
+        reasons.join(" ")
+    ))
 }
 
 pub fn usage() -> String {
@@ -677,15 +743,54 @@ mod tests {
     }
 
     #[test]
-    fn describing_a_unit_that_is_off_says_so_briefly() {
+    fn describing_a_unit_that_is_off_still_says_what_it_is_set_to() {
+        // A temperature changed while off has to be confirmed somewhere.
         let state = serde_json::json!({
             "power_state": false,
-            "operational_mode": "COOL",
+            "operational_mode": "HEAT",
+            "target_temperature": 29.5,
+            "fan_speed": 102,
             "indoor_temperature": 26.5,
         });
         let line = describe(&state);
-        assert!(line.starts_with("off"), "{line}");
-        assert!(line.contains("26.5"), "{line}");
+        assert_eq!(line, "off, set to heat, 29.5 °C, fan auto; indoor 26.5 °C");
+    }
+
+    #[test]
+    fn modes_are_words_not_capitals() {
+        let state = serde_json::json!({"power_state": true, "operational_mode": "FAN_ONLY"});
+        assert!(
+            describe(&state).starts_with("fan only, "),
+            "{}",
+            describe(&state)
+        );
+    }
+
+    #[test]
+    fn a_refused_change_is_said_with_the_reason_measured_on_real_units() {
+        let state = serde_json::json!({
+            "power_state": false,
+            "operational_mode": "HEAT",
+            "not_applied": ["swing_mode", "eco"],
+        });
+        let message = not_applied_message(&state).unwrap();
+        assert!(
+            message.starts_with("the air conditioner didn't accept the flap change and eco;"),
+            "{message}"
+        );
+        assert!(message.contains("not Breeze Core"), "{message}");
+        assert!(
+            message.contains("only move their flaps while they are running"),
+            "{message}"
+        );
+        assert!(message.contains("eco only while cooling"), "{message}");
+    }
+
+    #[test]
+    fn nothing_refused_says_nothing() {
+        assert!(not_applied_message(&serde_json::json!({"not_applied": []})).is_none());
+        // A server before 4.1.1 sends no such field at all.
+        assert!(not_applied_message(&serde_json::json!({"power_state": true})).is_none());
     }
 
     #[test]
@@ -701,7 +806,7 @@ mod tests {
             "indoor_temperature": 27.0,
         });
         let line = describe(&state);
-        assert!(line.contains("COOL"), "{line}");
+        assert!(line.starts_with("cool, "), "{line}");
         assert!(line.contains("25.5 °C"), "{line}");
         assert!(line.contains("swing both"), "{line}");
         assert!(line.contains("fan auto"), "{line}");

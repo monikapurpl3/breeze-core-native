@@ -145,6 +145,25 @@ breeze-core: no unit matches 'kitchn'. Known units: Kitchen, Living Room, Back R
 A unit id works wherever a name does, for scripts and for the case where two
 units genuinely share a prefix.
 
+It answers with one line of what the unit now reports. If the unit is off,
+the line still says what it is set to, so a temperature changed while it is
+off is confirmed:
+
+```
+Lijeva Soba: off, set to heat, 29.5 °C, swing both, fan auto; indoor 24.0 °C
+```
+
+**A change the unit refuses is said in words.** The unit answers either way,
+so the line above alone made a refusal look like success:
+
+```
+Lijeva Soba: the air conditioner didn't accept eco; the unit refused it, not Breeze Core. Many units offer eco only while cooling, not while heating.
+```
+
+The exit code is still 0: the request was carried out, and the unit made its
+choice. The output is plain text throughout, with no colour codes, so it
+reads the same in a screen reader as on screen.
+
 `breeze-core control --help` prints the grammar.
 
 ## `proxy`
