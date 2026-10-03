@@ -12,6 +12,8 @@
 #   packaging/out/aspic/
 #   ├── index.html  aspic.css  favicon.svg      the repository's own page
 #   ├── breeze-core/index.html                  one page per project
+#   ├── breeze/index.html  android/Breeze-<v>.apk   the Android app, mirrored from
+#   │                                           its GitHub release (stage-app.sh)
 #   ├── aspic.asc  aspic-alpine.rsa.pub  aspic-usign.pub  aspic-xbps.fingerprint
 #   ├── deb/     dists/stable/… + pool/         (apt,  GPG InRelease; deb-src too)
 #   ├── termux/  dists/stable/… + pool/         (Termux's apt, same key)
@@ -269,6 +271,11 @@ sed "s/@VER@/$VER/g" site/breeze-core/index.html > "$OUT/breeze-core/index.html"
 # than in it: written into it, it said 4.0.0 until 4.2.0.
 printf '%s\n' "$VER" > "$OUT/breeze-core/VERSION"
 chmod 644 "$OUT/breeze-core/VERSION"
+
+# The Android app: its latest GitHub release, checked, and its page. In every
+# tree, because publishing replaces the whole site - a build without it would
+# take /breeze/ and the APK down with the next server release.
+bash packaging/repo/stage-app.sh "$OUT"
 
 # The migration script, with a checksum generated here rather than pasted into a
 # page. It is served from the root because the one-liner that fetches it is the

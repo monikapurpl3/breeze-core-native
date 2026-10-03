@@ -29,7 +29,7 @@ TS="$(date -u +%Y%m%d-%H%M%S)"
 # and these scripts, and the failure mode of an exclude-list is that the next
 # file added here gets published by accident. Adding a page means adding it here,
 # which is the moment to think about whether it should be public at all.
-WEB_FILES="index.html aspic.css favicon.svg breeze-core/index.html"
+WEB_FILES="index.html aspic.css favicon.svg breeze-core/index.html breeze/index.html"
 
 TREE=""
 ALLOW_REMOVALS=0
@@ -192,7 +192,7 @@ PUBLISHED=1
 echo "=== smoke check ==="
 # Non-fatal: the swap has already happened, and this host is on a domestic
 # connection reached through a NAT hairpin, so a slow curl is not a failure.
-paths="/ /aspic.css /favicon.svg /breeze-core/"
+paths="/ /aspic.css /favicon.svg /breeze-core/ /breeze/"
 # One entry point per repository family, so a family that failed to build is
 # caught here rather than by the first person to try installing from it. The
 # xbps and portage entries earn their place twice over: neither is a path any
@@ -211,6 +211,11 @@ paths="/ /aspic.css /favicon.svg /breeze-core/"
   [ -e "$f" ] && paths="$paths /homebrew/dist/$(basename "$f")"
 done
 [ -n "$TREE" ] && paths="$paths /homebrew/breeze.git/info/refs"
+# The app's APK: /breeze/ links it, but a link that resolves locally says
+# nothing about whether nginx will serve a 50 MB file.
+[ -n "$TREE" ] && for f in "$TREE"/android/*.apk; do
+  [ -e "$f" ] && paths="$paths /android/$(basename "$f")"
+done
 for u in $paths; do
   printf '  %-34s ' "$u"
   curl -fsS --max-time 20 -o /dev/null -w '%{http_code}\n' "$URL$u" \

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Breeze — on aspic</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/aspic.css">
+</head>
+<body>
+<main>
+  <p class="crumb"><a href="/">aspic</a> / breeze</p>
+  <h1>Breeze</h1>
+  <p class="sub">The Android app for <a href="/breeze-core/">Breeze Core</a>:
+     one air conditioner per screen, home-screen widgets, and schedules that run
+     on the server, over your own network. No cloud account, and two
+     permissions: internet and vibrate.</p>
+
+  <div class="intro">
+    <p><a href="/android/Breeze-@APP_VER@.apk"><b>Breeze-@APP_VER@.apk</b></a>
+      (@APP_MB@ MB · <a href="/android/Breeze-@APP_VER@.apk.sha256">sha256</a>)
+      · Android 7.0 or newer.</p>
+    <p class="dim">A file to download rather than a package to install by name:
+      Android has no repository to add, and there is no Play listing. The phone
+      asks once to allow installs from your browser or file manager. Every
+      release is signed with the same key, so a new one installs over the old
+      one and keeps your servers and pairing.</p>
+  </div>
+
+  <section id="install" class="s-app">
+    <h2>Installing</h2>
+    <span class="who">On the phone: download it and open it. Or from a computer,
+      over USB:</span>
+<pre><span class="c"># check the download, then install it with USB debugging on</span>
+sha256sum -c Breeze-@APP_VER@.apk.sha256
+adb install -r Breeze-@APP_VER@.apk</pre>
+    <p><b>It needs a server.</b> Breeze is the client; <a href="/breeze-core/">Breeze
+      Core</a> runs on your network and does the talking to the air
+      conditioners. On first launch the app asks for the server's address, its
+      access key and a name for this phone. Then it shows a one-time code, and
+      an administrator approves it on the local network with
+      <code>breeze-core approve &lt;code&gt;</code>. Each phone gets its own
+      credential, which can be revoked on its own.</p>
+    <div class="note">The signing certificate's SHA-256 is
+      <code>e4ab9cb5 c737530b 74a1aabe a04707f2 519a5ee1 fd1d1106 55e1e898 96d6949f</code>.
+      <code>apksigner verify --print-certs</code> shows it for the file you
+      have.</div>
+  </section>
+
+  <section id="what" class="s-app">
+    <h2>What you get</h2>
+    <table class="facts">
+      <tr><td>the control screen</td><td>one unit per screen, tinted to its
+        mode, changes shown at once and pushed live by the server</td></tr>
+      <tr><td>without opening it</td><td>home-screen widgets for power and
+        temperature</td></tr>
+      <tr><td>programs</td><td>favourites, weekly schedules and temperature
+        curves, run by the server, so they fire with the phone off</td></tr>
+      <tr><td>timers</td><td>off after a while, or on at a set day and
+        time</td></tr>
+      <tr><td>accessibility</td><td>TalkBack, Switch Access, Voice Access and
+        large text: every control is named and says how it is set</td></tr>
+      <tr><td>more than one home</td><td>several servers, each paired once</td></tr>
+      <tr><td>when it misbehaves</td><td>a diagnostics screen that checks the
+        server, the pairing and every unit</td></tr>
+    </table>
+    <p class="dim">The app and the server version separately. It works with any
+      Breeze Core and uses whatever that server offers.</p>
+  </section>
+
+  <footer>
+    <b>Breeze</b> @APP_VER@ — <b>AGPL-3.0</b>. Source:
+    <a href="https://github.com/monikapurpl3/breeze">github</a> ·
+    <b>Docs:</b> <a href="https://github.com/monikapurpl3/breeze/wiki">the wiki</a>
+    · <b>Every release:</b>
+    <a href="https://github.com/monikapurpl3/breeze/releases">on GitHub</a><br>
+    <b>Browse:</b> <a href="/android/">android</a><br>
+    Back to <a href="/">the repository</a>.
+  </footer>
+</main>
+</body>
+</html>

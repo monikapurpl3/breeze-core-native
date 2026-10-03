@@ -17,6 +17,7 @@ implies — see "Adding a project".
 |---|---|
 | `index.html`, `aspic.css`, `favicon.svg` | the index: how to add the repository. See `WEB_FILES` in `publish.sh` |
 | `breeze-core/index.html` | one page per project, at `/breeze-core/` |
+| `breeze/index.html` | the Android app's page, at `/breeze/`; `packaging/repo/stage-app.sh` fills in `@APP_VER@` |
 | `aspic.conf` | the nginx vhost. **This copy is the source of truth**; the live file is a copy |
 | `install-host.sh` | one-time (idempotent) host setup: web root, SELinux label, certificate, vhost, renewal, scanner jail |
 | `publish.sh` | push the site as a timestamped release and swap `current` |
@@ -124,3 +125,25 @@ whole tree goes up with:
 ./site/publish.sh --tree packaging/out/aspic
 ./packaging/repo/verify-repo.sh --live           # ...and again, from the real URL
 ```
+
+## The Android app
+
+Breeze, the app, is built and signed in its own repository and released on
+GitHub. Aspic mirrors the latest release at `/android/Breeze-<version>.apk`, with
+its page at `/breeze/`. `packaging/repo/stage-app.sh` fetches it, checks it
+against the released checksum and the app's signing certificate, and writes the
+page. `build-repo.sh` runs it, so every server release carries the current app.
+After an app release on its own, the last built tree is enough:
+
+```bash
+./packaging/repo/stage-app.sh                    # into packaging/out/aspic
+./site/publish.sh --tree packaging/out/aspic
+```
+
+That tree must still be what is live, because publishing replaces everything. If
+a server release has been built since, build again instead.
+
+There is no `breeze-latest.apk`, as bolero had. The vhost caches every `.apk` as
+immutable for a year, which is right for packages that never change under a
+name, but a moving name would stay pinned in caches at its first version. The
+page is the stable address, and it is never cached.
