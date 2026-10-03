@@ -1,12 +1,53 @@
 # Version history
 
-The 4.x line. For 3.x and earlier, see the Python project's own
-[version history](https://github.com/monikapurpl3/breeze-core/wiki/Version-history) —
-everything published for it stays where it is and keeps installing.
+What each release gave you, newest first. Downloads are on the
+[releases page](https://github.com/monikapurpl3/breeze-core-native/releases)
+and, for every package manager, on
+[aspic](https://aspic.salataputarica.hr.eu.org).
 
-## 4.3.1
+| | | |
+|---|---|---|
+| **4.3.1** | 3 Oct 2026 | macOS; a Homebrew tap for macOS and Linux; the panel's header on phones |
+| **4.3.0** | 2 Oct 2026 | Termux, MIPS, OpenWrt 25.12, source packages; `fetch`, `proxy`, `diag --nerd`; the X-Forwarded-For fix |
+| **4.2.0** | 27 Sep 2026 | scheduled starts; a self-updating Windows installer; OPNsense survives a reboot |
+| **4.1.1** | 24 Sep 2026 | a unit's refusals made visible, as `not_applied` |
+| **4.1.0** | 23 Sep 2026 | responsiveness: taps no longer queue behind a unit, connections kept warm |
+| **4.0.2** | 9 Sep 2026 | three settings back from constants; Void and Gentoo; two CLI fixes |
+| **4.0.1** | 8 Sep 2026 | the differences from 3.2.0, from 142 to none undocumented |
+| **4.0.0** | 24 Aug 2026 | the Rust reimplementation: one static binary, installed over 3.x |
 
-Breeze Core on a Mac, Homebrew on both macOS and Linux, and a web panel header that fits a phone.
+---
+
+**3.x and earlier** are the Python implementation that 4.0.0 replaced.
+Everything published for it stays where it is and keeps installing, and the
+details are in [its own version history](https://github.com/monikapurpl3/breeze-core/wiki/Version-history).
+
+| | | |
+|---|---|---|
+| **3.2.0** | 21 Aug 2026 | one-shot timers, the panel signs its requests, OPNsense, containers rebuilt |
+| **3.1.0** | 18 Aug 2026 | live web panel (SSE), programs and Nerd in the browser |
+| **3.0.5** | 16 Aug 2026 | `GET /api/system` — the whole deployment, introspected |
+| **3.0.2** | 13 Aug 2026 | the lockout postmortem: auth logging, 401 reason codes, fail2ban fixes |
+| **3.0.1** | 23 Jul 2026 | first stable 3.0; FreeBSD and NetBSD packages |
+| **3.0.0** | 21–22 Jul 2026 | Ed25519 request signing, SSE push, scan-to-add, capabilities, metrics |
+| **2.6.1** | 10 Jul 2026 | SELinux label fix — writes silently denied on RHEL-family |
+| **2.6.0** | 10 Jul 2026 | `diag` / `approve` / `devices` / `revoke` built into the binary |
+| **2.5.0** | 10 Jul 2026 | no Python needed: self-contained native packages for 15+ distros |
+| **2.4.3** | 7 Jul 2026 | `config.json` 640, so the admin CLIs work without `sudo` |
+| **2.4.2** | 7 Jul 2026 | web panel refresh, six colour palettes, build-info footer |
+| **2.4.1** | 6 Jul 2026 | web panel brought back to parity with the app |
+| **2.4.0** | 6 Jul 2026 | batch state, `/version`, `/health`, delete-unit, brotli |
+| **2.3.0** | 5 Jul 2026 | first-class Windows: installer, service, Caddy wizard |
+| **2.2.1** | 5 Jul 2026 | non-systemd inits and musl hosts |
+| **2.2.0** | 5 Jul 2026 | authenticated config API — rename and add units remotely |
+| **1.0.0** | 4 Jul 2026 | the first working thing |
+
+---
+
+## 4.3.1 — 3 October 2026
+
+Breeze Core on a Mac, Homebrew on both macOS and Linux, and a web panel
+header that fits a phone.
 
 **New**
 
@@ -54,7 +95,7 @@ Breeze Core on a Mac, Homebrew on both macOS and Linux, and a web panel header t
 - Every script in the repository is executable in git, so
   `./packaging/build-binaries.sh` works on a Linux checkout.
 
-## 4.3.0
+## 4.3.0 — 2 October 2026
 
 Four new places to run it: Termux, MIPS routers, OpenWrt 25.12's new package
 manager, and source packages you build yourself. And three new commands: one
@@ -125,7 +166,7 @@ all. Upgrade if you are.**
   before this stored it without the execute bit, so it needed a `chmod +x`
   after unpacking. Packages were never affected.
 
-## 4.2.0
+## 4.2.0 — 27 September 2026
 
 Timers switch a unit **on** as well as off: "on in 3 days at 07:30", beside
 "off in 45 minutes". And the web panel sets both at last; until now only the
@@ -181,7 +222,7 @@ app could. On Windows, a new installer that keeps itself up to date.
   [Upgrading to 4.x](Upgrading-to-4#hashes-of-migratesh).
 - aspic's project page lists every package tree, with its key and downloads.
 
-## 4.1.1
+## 4.1.1 — 24 September 2026
 
 The air conditioner's refusals are visible. A unit that ignores part of a
 command still answers it, with its state unchanged, so a refused change looked
@@ -218,7 +259,7 @@ mode:
 - Release tooling: the GitHub release assets are assembled by script, from the
   signed repository tree.
 
-## 4.1.0
+## 4.1.0 — 23 September 2026
 
 Responsiveness. Tapping + or − repeatedly no longer queues up behind the unit,
 a request a unit ignores is asked again in two seconds rather than ten, and
@@ -288,7 +329,7 @@ to "before this tap", and does not let a push or poll overwrite a unit while a
 control for it is in flight. With both, the temperature no longer walks back
 through values already tapped past.
 
-## 4.0.2
+## 4.0.2 — 9 September 2026
 
 Settings that had quietly become constants are settings again, two new package
 managers, and two CLI papercuts.
@@ -356,7 +397,7 @@ is reported as the `1` the server is actually running.
 - **The usage text** was a wall of prose in a single paragraph. Three short
   groups now.
 
-## 4.0.1
+## 4.0.1 — 8 September 2026
 
 A bug-fix release, and most of what it fixes was found by a tool rather than by
 reading code.
@@ -436,7 +477,7 @@ Against 137 MB for the Alpine image and 291 MB for UBI. All five of the old ones
 existed because an interpreter needs a distribution around it, and that reason is
 gone. amd64 and arm64. Details: [Installing with containers](Installing-with-containers).
 
-## 4.0.0
+## 4.0.0 — 24 August 2026
 
 The Rust reimplementation. Same REST API, same store files, same `AC_*`
 variables, same service name, same panel, same Android app — meant to be
@@ -490,6 +531,8 @@ three units paired, before and after the in-place upgrade.
 - **Brotli.** gzip only, deliberately.
 - **The ability to loosen some settings** — LAN-only admin approval, the code
   TTL, the token TTL and the clock-skew window are constants now.
+
+---
 
 ## Version numbers
 
