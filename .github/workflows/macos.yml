@@ -242,6 +242,10 @@ jobs:
       - run: |
           set -eux
           brew tap aspic/breeze https://aspic.salataputarica.hr.eu.org/homebrew/breeze.git
+          # Homebrew loads nothing from a third-party tap until it is trusted,
+          # once. A `brew tap-new` tap, as in the job above, is trusted from
+          # the start, which is why only this job meets it -- as users do.
+          brew trust aspic/breeze
           brew install breeze-core
           breeze-core --version
           brew test breeze-core
