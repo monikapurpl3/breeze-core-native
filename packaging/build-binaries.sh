@@ -32,6 +32,8 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO"
+# Files read off disk must have the line endings .gitattributes pins (see it).
+bash packaging/check-eol.sh
 OUT="packaging/out/bin"
 DIST="packaging/out/dist"
 VERSION="$(grep -m1 '^version' crates/breeze-core/Cargo.toml | cut -d'"' -f2)"

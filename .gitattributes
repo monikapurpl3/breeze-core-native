@@ -73,3 +73,15 @@ packaging/macos/**       text eol=lf
 
 # The Homebrew formula template: Ruby read by brew on macOS and Linux.
 packaging/homebrew/**     text eol=lf
+
+# What the Linux packagers read off disk and put into packages -- the env file
+# above all, which Termux, OpenRC and procd source with sh, so a CR turns
+# BREEZE_PORT into "8420\r" -- and what is published as it is: the repository
+# definition, the site, the web panel. The first 4.3.1 build shipped a CRLF
+# env file because none of these were pinned; packaging/check-eol.sh now
+# refuses a build whose files on disk disagree with the pins.
+packaging/nfpm/**       text eol=lf
+packaging/repo/**       text eol=lf
+packaging/container/**  text eol=lf
+site/**                 text eol=lf
+static/**               text eol=lf
