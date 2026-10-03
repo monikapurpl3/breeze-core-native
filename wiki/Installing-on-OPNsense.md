@@ -27,7 +27,7 @@ page under **Services → Breeze Core**.
 ## Install
 
 ```sh
-pkg add https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.3.0.pkg
+pkg add https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.3.1.pkg
 ```
 
 Then: **Services → Breeze Core**, set the listen address, and enable it.
@@ -35,7 +35,7 @@ Then: **Services → Breeze Core**, set the listen address, and enable it.
 To **upgrade**, the same with `-f`:
 
 ```sh
-pkg add -f https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.3.0.pkg
+pkg add -f https://aspic.salataputarica.hr.eu.org/opnsense/os-breeze-core-4.3.1.pkg
 ```
 
 Without it, `pkg add` refuses whenever any version is installed — with the

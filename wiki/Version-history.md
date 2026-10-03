@@ -4,6 +4,47 @@ The 4.x line. For 3.x and earlier, see the Python project's own
 [version history](https://github.com/monikapurpl3/breeze-core/wiki/Version-history) —
 everything published for it stays where it is and keeps installing.
 
+## 4.3.1
+
+Breeze Core on a Mac, and Homebrew on both macOS and Linux.
+
+**New**
+
+- **macOS**, Apple silicon and Intel, macOS 13 or newer. The binaries are
+  cross-built on the same machine as every Linux one, and run on real Macs in
+  CI each time anything they are built from changes. See
+  [Ports and architectures](Ports-and-architectures#macos).
+- **A Homebrew tap on aspic**, one formula for macOS and for Homebrew on
+  Linux:
+
+  ```sh
+  brew tap aspic/breeze https://aspic.salataputarica.hr.eu.org/homebrew/breeze.git
+  brew install breeze-core
+  brew services start breeze-core
+  ```
+
+  It keeps its files in `$(brew --prefix)/etc/breeze-core`, reads the same
+  `breeze-core.env` as the Linux packages, and `brew upgrade` brings each
+  release. CI installs it on both kinds of Mac and on x86-64 and ARM64 Linux.
+  See [Installing with Homebrew](Installing-with-Homebrew).
+
+**Changed**
+
+- **`breeze-core fetch` no longer prints your Midea email or phone number.**
+  Two messages repeated it back. That output is what people paste into bug
+  reports, so it now says "that account" or "the same email or phone number".
+  The password prompt still names the account; it goes to the terminal, not to
+  the output.
+
+**For contributors**
+
+- The Python parity tools are gone (`tools/`, `packaging/test/differential.py`,
+  the fixture generators), now that the Python line is frozen at 3.2.0 and they
+  had nothing left to compare. The fixtures they made stay. Two device-probe
+  examples that had served their purpose are gone too.
+- Every script in the repository is executable in git, so
+  `./packaging/build-binaries.sh` works on a Linux checkout.
+
 ## 4.3.0
 
 Four new places to run it: Termux, MIPS routers, OpenWrt 25.12's new package

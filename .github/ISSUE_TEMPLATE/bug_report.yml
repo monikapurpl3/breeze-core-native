@@ -40,7 +40,7 @@ body:
     attributes:
       label: Breeze Core version
       description: "`breeze-core --version`, the panel footer, or Nerd → Server → Version."
-      placeholder: "4.3.0"
+      placeholder: "4.3.1"
     validations:
       required: true
 
