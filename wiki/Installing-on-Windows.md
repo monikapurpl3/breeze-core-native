@@ -2,8 +2,8 @@
 
 A guided installer that registers a hardened Windows service. About a megabyte.
 
-**[Breeze-Core-Setup-4.3.1.exe](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.3.1.exe)**
-· [sha256](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.3.1.exe.sha256)
+**[Breeze-Core-Setup-4.3.2.exe](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.3.2.exe)**
+· [sha256](https://aspic.salataputarica.hr.eu.org/windows/Breeze-Core-Setup-4.3.2.exe.sha256)
 
 x86-64 only.
 
@@ -57,7 +57,7 @@ It is unsigned, so SmartScreen will object. The published SHA-256 is what you
 have to go on; check it before running:
 
 ```powershell
-Get-FileHash .\Breeze-Core-Setup-4.3.1.exe -Algorithm SHA256
+Get-FileHash .\Breeze-Core-Setup-4.3.2.exe -Algorithm SHA256
 ```
 
 ## Why it downloads NSSM

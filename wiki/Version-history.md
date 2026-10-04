@@ -7,6 +7,7 @@ and, for every package manager, on
 
 | | | |
 |---|---|---|
+| **4.3.2** | 4 Oct 2026 | a web panel usable without a mouse or without sight; `control` says when a unit refuses |
 | **4.3.1** | 3 Oct 2026 | macOS; a Homebrew tap for macOS and Linux; the panel's header on phones |
 | **4.3.0** | 2 Oct 2026 | Termux, MIPS, OpenWrt 25.12, source packages; `fetch`, `proxy`, `diag --nerd`; the X-Forwarded-For fix |
 | **4.2.0** | 27 Sep 2026 | scheduled starts; a self-updating Windows installer; OPNsense survives a reboot |
@@ -43,6 +44,43 @@ details are in [its own version history](https://github.com/monikapurpl3/breeze-
 | **1.0.0** | 4 Jul 2026 | the first working thing |
 
 ---
+
+## 4.3.2 — 4 October 2026
+
+A web panel that works with a keyboard alone, a screen reader, switch access
+and voice control, and a command line that says when a unit refuses.
+
+**Fixed**
+
+- **The web panel can be used without a mouse, and without seeing it.**
+  Power, eco, turbo and the two flaps were unnamed shapes that a keyboard
+  could not reach and a screen reader could not see, so a blind user could not
+  switch a unit on. The mode and fan buttons showed which was chosen only by
+  colour. Now:
+  - every control is a real button that says what it is and whether it is
+    on, and Tab and Enter or Space reach and work all of them;
+  - changes are spoken without moving focus: the target temperature, a unit
+    refusing a change or going offline, and the pairing code, letter by
+    letter;
+  - every window (pairing, adding a unit, Programs, Nerd, timers) is a
+    proper dialog that Escape closes;
+  - the page can be zoomed, focus always shows, the targets are bigger, and
+    the system's "reduce motion" is respected.
+
+  See [The web panel](The-web-panel#accessibility).
+- **`breeze-core control` says when a unit refuses a change.** A unit
+  answers either way, so a setting it did not accept (eco while heating, on
+  many units) looked like success. It now prints what was refused and why,
+  as the panel does. For a unit that is off, the answer also says what it is
+  set to, so a temperature changed while it is off is confirmed. See
+  [Command-line tools](Command-line-tools).
+
+**Changed**
+
+- **The Android app is on aspic too,** at
+  [/breeze/](https://aspic.salataputarica.hr.eu.org/breeze/). Its current
+  release, Breeze 2.3.1, brings the same accessibility work to the app.
+  bolero, which had the app before, stays at 2.2.7 and says so.
 
 ## 4.3.1 — 3 October 2026
 

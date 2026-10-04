@@ -150,14 +150,14 @@ the line still says what it is set to, so a temperature changed while it is
 off is confirmed:
 
 ```
-Lijeva Soba: off, set to heat, 29.5 °C, swing both, fan auto; indoor 24.0 °C
+Back Room: off, set to heat, 29.5 °C, swing both, fan auto; indoor 24.0 °C
 ```
 
 **A change the unit refuses is said in words.** The unit answers either way,
 so the line above alone made a refusal look like success:
 
 ```
-Lijeva Soba: the air conditioner didn't accept eco; the unit refused it, not Breeze Core. Many units offer eco only while cooling, not while heating.
+Back Room: the air conditioner didn't accept eco; the unit refused it, not Breeze Core. Many units offer eco only while cooling, not while heating.
 ```
 
 The exit code is still 0: the request was carried out, and the unit made its

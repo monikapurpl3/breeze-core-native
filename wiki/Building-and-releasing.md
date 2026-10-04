@@ -190,7 +190,7 @@ powershell -File packaging/windows/build-installer.ps1 -OutDir packaging/out/win
 
 # 4. publish
 ./packaging/repo/assemble-release.sh      # the GitHub assets, from the signed tree
-gh release create v4.3.1 --notes-file NOTES.md packaging/out/release/*
+gh release create v4.3.2 --notes-file NOTES.md packaging/out/release/*
 ./packaging/container/build-images.sh --push
 ./site/publish.sh --tree packaging/out/aspic
 ./packaging/repo/verify-repo.sh --live
