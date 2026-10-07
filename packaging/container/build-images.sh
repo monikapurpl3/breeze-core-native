@@ -52,9 +52,19 @@ if ! docker buildx inspect bc-multi >/dev/null 2>&1; then
   docker buildx create --name bc-multi --driver docker-container --bootstrap >/dev/null
 fi
 
+# What the GHCR package page shows under the name. GitHub reads it only from
+# the multi-arch index, not from the per-platform LABELs in the Dockerfiles, so
+# the page said nothing at all until these were set. 512 characters at most.
+# There is no per-package README: the page always shows the linked
+# repository's own README.md, below this.
+DOCS="https://github.com/monikapurpl3/breeze-core-native/wiki/Installing-with-containers"
+DESC_SLIM="Breeze Core: self-hosted, LAN-first control for Midea air conditioners - REST API, web panel, schedules, no cloud. One static binary on scratch, amd64 and arm64, versioned tags only (no latest). Pair once: docker run --rm -it --network host -v breeze-config:/etc/breeze-core <this image> pair - then run it with the same volume. Guide: $DOCS"
+DESC_DEBUG="Breeze Core with busybox, for working out what is wrong - not for everyday use: run the tag without -debug. Same binary and paths. Guide: $DOCS"
+
 build() {
-  local dockerfile="$1" suffix="$2"
+  local dockerfile="$1" suffix="$2" desc="$3"
   local tag="$IMAGE:$VERSION$suffix"
+  [ "${#desc}" -le 512 ] || { echo "!! the $tag description is ${#desc} characters; GHCR takes 512"; exit 1; }
   echo
   echo "=== $tag"
   local out=(--output "type=image,push=false")
@@ -68,12 +78,19 @@ build() {
     --platform "$PLATFORMS" \
     --provenance=false \
     -t "$tag" \
+    --annotation "index:org.opencontainers.image.description=$desc" \
+    --annotation "index:org.opencontainers.image.source=https://github.com/monikapurpl3/breeze-core-native" \
+    --annotation "index:org.opencontainers.image.licenses=AGPL-3.0-or-later" \
+    --annotation "index:org.opencontainers.image.documentation=$DOCS" \
+    --annotation "index:org.opencontainers.image.version=$VERSION" \
     "${out[@]}" \
     packaging/out
 }
 
-build packaging/container/Dockerfile       ""
-build packaging/container/Dockerfile.debug "-debug"
+# Debug first: the package page features whichever tag was published last, and
+# its "Install from the command line" box told everyone to pull -debug.
+build packaging/container/Dockerfile.debug "-debug" "$DESC_DEBUG"
+build packaging/container/Dockerfile       ""       "$DESC_SLIM"
 
 if [ "$PUSH" -eq 0 ]; then
   echo
@@ -102,6 +119,7 @@ fi
 echo
 echo "=== anonymous pull check (these images must be public)"
 unreachable=0
+nodesc=0
 for tag in "$VERSION" "$VERSION-debug"; do
   tok="$(curl -fsS "https://ghcr.io/token?service=ghcr.io&scope=repository:monikapurpl3/breeze-core-native:pull" 2>/dev/null \
         | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
@@ -111,6 +129,12 @@ for tag in "$VERSION" "$VERSION-debug"; do
     "https://ghcr.io/v2/monikapurpl3/breeze-core-native/manifests/$tag" || true)"
   if [ "$code" = "200" ]; then
     echo "  ok  $IMAGE:$tag pulls anonymously (HTTP 200)"
+    # And carries the description the package page shows.
+    curl -fsS -H "Authorization: Bearer ${tok:-none}" \
+      -H "Accept: application/vnd.oci.image.index.v1+json" \
+      "https://ghcr.io/v2/monikapurpl3/breeze-core-native/manifests/$tag" 2>/dev/null |
+      grep -q '"org.opencontainers.image.description"' ||
+      { echo "  !! $IMAGE:$tag has no description on its index"; nodesc=1; }
   else
     echo "  !! $IMAGE:$tag is NOT anonymously pullable (HTTP $code)"
     unreachable=1
@@ -122,6 +146,13 @@ if [ "$unreachable" -eq 1 ]; then
   echo "The published install instructions assume no login. Set the package"
   echo "public at (there is no API for this):"
   echo "  https://github.com/users/monikapurpl3/packages/container/breeze-core-native/settings"
+  exit 1
+fi
+
+if [ "$nodesc" -eq 1 ]; then
+  echo
+  echo "The --annotation flags did not reach the published index; the package page"
+  echo "will show no description. Check that buildx is new enough for index: annotations."
   exit 1
 fi
 
