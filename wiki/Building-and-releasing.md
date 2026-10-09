@@ -190,6 +190,7 @@ powershell -File packaging/windows/build-installer.ps1 -OutDir packaging/out/win
 
 # 4. publish
 ./packaging/repo/assemble-release.sh      # the GitHub assets, from the signed tree
+sed "s/@VER@/4.3.2/g" packaging/release-assets-table.md >> NOTES.md   # "which file do I need?"
 gh release create v4.3.2 --notes-file NOTES.md packaging/out/release/*
 ./packaging/container/build-images.sh --push
 ./site/publish.sh --tree packaging/out/aspic
