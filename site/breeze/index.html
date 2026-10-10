@@ -18,7 +18,8 @@
 
   <div class="intro">
     <p><a href="/android/Breeze-@APP_VER@.apk"><b>Breeze-@APP_VER@.apk</b></a>
-      (@APP_MB@ MB · <a href="/android/Breeze-@APP_VER@.apk.sha256">sha256</a>)
+      (@APP_MB@ MB · <a href="/android/Breeze-@APP_VER@.apk.sha256">sha256</a>
+      · <a href="/android/Breeze-@APP_VER@.apk.meta4">metalink</a>)
       · Android 7.0 or newer.</p>
     <p class="dim">A file to download rather than a package to install by name:
       Android has no repository to add, and there is no Play listing. The phone
@@ -33,7 +34,10 @@
       over USB:</span>
 <pre><span class="c"># check the download, then install it with USB debugging on</span>
 sha256sum -c Breeze-@APP_VER@.apk.sha256
-adb install -r Breeze-@APP_VER@.apk</pre>
+adb install -r Breeze-@APP_VER@.apk
+
+<span class="c"># or with aria2: from aspic and GitHub at once, every piece checked</span>
+aria2c https://aspic.salataputarica.hr.eu.org/android/Breeze-@APP_VER@.apk.meta4</pre>
     <p><b>It needs a server.</b> Breeze is the client; <a href="/breeze-core/">Breeze
       Core</a> runs on your network and does the talking to the air
       conditioners. On first launch the app asks for the server's address, its

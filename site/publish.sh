@@ -54,6 +54,13 @@ cleanup() {
 # rollback slots, and two failures in a row would prune the last good release.
 trap cleanup EXIT
 
+if [ -n "$TREE" ]; then
+  # A Metalink beside every download the rules in metalinks.conf name, for
+  # aria2: written into the tree itself, before staging, so the local tree
+  # stays a copy of what is live.
+  bash "$HERE/metalinks.sh" "$TREE" | sed 's/^/  /'
+fi
+
 echo "=== staging ==="
 if [ -n "$TREE" ]; then
   [ -d "$TREE" ] || { echo "PUBLISH ABORTED: $TREE is not a directory"; exit 1; }
@@ -214,7 +221,7 @@ done
 # The app's APK: /breeze/ links it, but a link that resolves locally says
 # nothing about whether nginx will serve a 50 MB file.
 [ -n "$TREE" ] && for f in "$TREE"/android/*.apk; do
-  [ -e "$f" ] && paths="$paths /android/$(basename "$f")"
+  [ -e "$f" ] && paths="$paths /android/$(basename "$f") /android/$(basename "$f").meta4"
 done
 for u in $paths; do
   printf '  %-34s ' "$u"

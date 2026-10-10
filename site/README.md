@@ -126,6 +126,28 @@ whole tree goes up with:
 ./packaging/repo/verify-repo.sh --live           # ...and again, from the real URL
 ```
 
+## Metalinks, for aria2
+
+Every file people download by hand gets a Metalink 4 file beside it, the same
+name plus `.meta4`. It lists the file's size, its SHA-256, a SHA-256 for each
+1 MiB piece, and every place to fetch it: aspic first, then the project's
+GitHub release. `aria2c https://aspic…/x.meta4` downloads from all of them at
+once and checks each piece as it arrives; a piece that fails is fetched again
+from another source. aria2 recognises a metalink by its suffix, so the vhost
+needs nothing for it. Range requests were always served, and the per-address
+connection limit (24) is above aria2's maximum of 16 per server.
+
+`site/metalinks.sh` writes them, and `publish.sh` runs it on the tree before
+every `--tree` publish. Which files get one, and where their mirrors are, is
+`site/metalinks.conf`: one line per pattern, with `{name}` and `{ver}` in the
+mirror URL. A mirror is listed only after it is shown to serve the same bytes:
+by the SHA-256 GitHub records for a release asset, or by downloading anything
+else. A rule that matches nothing is reported, so a path that moves doesn't
+quietly lose its metalink.
+
+**For a new project,** add its downloads to `metalinks.conf`. Repository
+packages stay out: apt, dnf and the rest fetch those themselves.
+
 ## The Android app
 
 Breeze, the app, is built and signed in its own repository and released on
