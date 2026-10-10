@@ -603,6 +603,11 @@ if [ -f packaging/out/portage/app-misc/breeze-core-bin/Manifest ]; then
   mkdir -p "$OUT/portage"
   rm -rf "$OUT/portage/breeze.git"
   git clone -q --bare "$PORTAGE_GIT" "$OUT/portage/breeze.git"
+  # Into one pack. A local clone keeps every object loose, and a dumb HTTP
+  # client fetches loose objects one request at a time: at 4.3.2 that was
+  # some 70 requests per `emerge --sync`, over the vhost's burst of 60, so
+  # every clone ended in a 429. A pack is a handful of requests at any size.
+  git -C "$OUT/portage/breeze.git" repack -a -d -q
   # Without this there is no info/refs or objects/info/packs, and a dumb HTTP
   # clone fails with "repository not found" — which reads as a missing repo
   # rather than a missing index.
@@ -659,6 +664,9 @@ if [ "$(echo $brew_dist | wc -w)" -eq 4 ]; then
   mkdir -p "$OUT/homebrew"
   rm -rf "$OUT/homebrew/breeze.git"
   git clone -q --bare "$HOMEBREW_GIT" "$OUT/homebrew/breeze.git"
+  # Packed, for the reason the Gentoo overlay is: loose objects cost a request
+  # each, and the tap grows by a commit every release.
+  git -C "$OUT/homebrew/breeze.git" repack -a -d -q
   git -C "$OUT/homebrew/breeze.git" update-server-info
   git -C "$OUT/homebrew/breeze.git" remote remove origin 2>/dev/null || true
   echo "  $(git -C "$HOMEBREW_GIT" rev-list --count HEAD) commit(s); four tarballs in /homebrew/dist"
