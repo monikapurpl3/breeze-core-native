@@ -29,7 +29,7 @@ TS="$(date -u +%Y%m%d-%H%M%S)"
 # and these scripts, and the failure mode of an exclude-list is that the next
 # file added here gets published by accident. Adding a page means adding it here,
 # which is the moment to think about whether it should be public at all.
-WEB_FILES="index.html aspic.css favicon.svg breeze-core/index.html breeze/index.html"
+WEB_FILES="index.html aspic.css favicon.svg breeze-core/index.html breeze-core/oddities/index.html breeze/index.html"
 
 TREE=""
 ALLOW_REMOVALS=0

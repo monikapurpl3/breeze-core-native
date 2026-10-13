@@ -297,6 +297,17 @@ installs it on both Macs, and on x86-64 and ARM64 Linux, each time it changes:
 see [Installing with Homebrew](Installing-with-Homebrew). Without Homebrew, the
 launchd template is in `deploy/init/com.breeze.core.plist`.
 
+## Oddities
+
+For fun, 4.3.2 was also cross-built for sixteen systems outside the supported
+set: FreeBSD on arm64, armv7 and ppc64le; NetBSD and OpenBSD on arm64 and
+riscv64; DragonFly; illumos; Solaris on x86 and SPARC; Linux on SPARC64; Haiku;
+Windows on ARM64; and watchOS, twice. **None of them has ever run** — there is
+no machine for any of them here — and they are frozen at 4.3.2. They are on a
+[separate prerelease](https://github.com/monikapurpl3/breeze-core-native/releases/tag/v4.3.2-oddities)
+and [their own page](https://aspic.salataputarica.hr.eu.org/breeze-core/oddities/),
+which says how each was linked. A report from anyone who starts one is welcome.
+
 ## The honest cost
 
 **Cross-built binaries are less obviously trustworthy than natively built

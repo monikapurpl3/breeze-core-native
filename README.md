@@ -58,7 +58,11 @@ Each one is packaged for its own system's package manager wherever it has one,
 signed, and **run before it ships**: on real FreeBSD, NetBSD and OpenBSD
 machines, on real Macs, and under emulation for the architectures nobody keeps a
 spare of. [Ports and architectures](https://github.com/monikapurpl3/breeze-core-native/wiki/Ports-and-architectures)
-says how each is checked, and the one that cannot be.
+says how each is checked, and the one that cannot be. For fun, and untested,
+4.3.2 was also cross-built for
+[sixteen more](https://aspic.salataputarica.hr.eu.org/breeze-core/oddities/) —
+illumos, Solaris, DragonFly, Haiku, SPARC, the BSDs on ARM, Windows on ARM, and
+an Apple Watch.
 
 ## Install
 
