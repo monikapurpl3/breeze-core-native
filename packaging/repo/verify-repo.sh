@@ -327,11 +327,13 @@ VOID_CASE='
 '
 run_case void ghcr.io/void-linux/void-glibc-full:latest "$VOID_CASE"
 CASE_DOCKER_ARGS="--platform linux/386" \
-run_case void-i686 ghcr.io/void-linux/void-glibc:latest "$VOID_CASE"
+run_case void-i686 ghcr.io/void-linux/void-glibc-full:latest "$VOID_CASE"
 CASE_DOCKER_ARGS="--platform linux/arm/v6" \
-run_case void-armv6l ghcr.io/void-linux/void-glibc:latest "$VOID_CASE"
+run_case void-armv6l ghcr.io/void-linux/void-glibc-full:latest "$VOID_CASE"
+# The -full images, as for x86-64: the minimal ones lack shadow (useradd),
+# which every real Void has in base-system, and the package's INSTALL needs.
 CASE_DOCKER_ARGS="--platform linux/arm/v6" \
-run_case void-armv6l-musl ghcr.io/void-linux/void-musl:latest "$VOID_CASE"
+run_case void-armv6l-musl ghcr.io/void-linux/void-musl-full:latest "$VOID_CASE"
 
 # --- portage ----------------------------------------------------------------
 # No signature to check: Gentoo trust is the Manifest, whose hashes portage
