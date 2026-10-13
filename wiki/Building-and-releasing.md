@@ -210,6 +210,30 @@ not exist is a small lie that costs someone an afternoon later.
 `build-installer.ps1` needs `-OutDir packaging/out/windows` or it leaves the
 `.exe` next to its own script and the repository builder publishes nothing.
 
+## Adding architectures to a release
+
+New architectures with **no change to the code** are not a new version: they
+are added to the release whose code they are, and nothing already published
+changes by a byte. 4.3.2 got five that way on 13 October 2026.
+
+1. Confirm the code is the tag's: `git diff --quiet v<ver> -- crates static
+   Cargo.toml Cargo.lock`.
+2. Build only the new binaries, naming the tag's commit:
+   `BREEZE_COMMIT=<tag commit> ./packaging/build-binaries.sh <labels>` (and
+   `build-mips.sh` likewise). The scripts refuse if the code differs from it.
+3. Start `packaging/out` from that release's archived outputs, add the new
+   packages, and check every archived file is still byte-identical.
+4. A package whose *contents* change for an existing architecture gets a new
+   package revision rather than replacing the published file: 4.3.2's armhf
+   .deb became `4.3.2-2` (`BC_RELEASE=2`) when it took the armv6 binary, and
+   the Gentoo ebuild `-r1` (`BC_PORTAGE_REVISION=1`).
+5. Build the tree with `BC_PUBLISHED=packaging/out/archive-<ver>/aspic`, which
+   reuses every already-signed rpm, Arch `.sig` and `.dsc` instead of signing
+   it afresh (a new signature has a new timestamp, so new bytes). Only new
+   files are signed, and indexes cover both.
+6. Verify, then upload only the new assets to the existing GitHub release and
+   add a dated section to its notes.
+
 ## Publishing
 
 `site/publish.sh` uploads to a timestamped release directory and atomically

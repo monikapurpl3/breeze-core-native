@@ -75,11 +75,20 @@ export MSYS_NO_PATHCONV=1
 #
 # The script arrives on stdin and the tar leaves on stdout, so fd 3 carries the
 # archive while the stage's own chatter goes to stderr where a person can see it.
+# Appending to a release (new architectures, same code):
+#
+#   BC_PUBLISHED=packaging/out/archive-<ver>/aspic ./packaging/repo/build-repo.sh
+#
+# Every file this script would sign afresh -- rpms, the SRPM, the Arch .sig
+# files, the Debian .dsc -- is instead copied from that published tree when it
+# is there, so nothing already published changes by a byte (a new signature
+# carries a new timestamp, and so new bytes). Only new files are signed. The
+# path is relative to the repository root, which stages see as /work.
 stage() {
   local img="$1" script="$2"
   mkdir -p "$OUT"
   printf '%s' "$script" \
-    | docker run --rm -i -v "$MOUNT:/work:ro" -e VER="$VER" "$img" sh -euc '
+    | docker run --rm -i -v "$MOUNT:/work:ro" -e VER="$VER" -e BC_PUBLISHED="${BC_PUBLISHED:-}" "$img" sh -euc '
         exec 3>&1 1>&2
         mkdir -p /out
         sh -eu -s
@@ -331,6 +340,8 @@ stage debian:bookworm-slim '
   # this signature against the keys the user trusts.
   cp /work/packaging/out/source/deb/* "$R/pool/main/b/breeze-core/"
   for d in "$R"/pool/main/b/breeze-core/*.dsc; do
+    pub="/work/$BC_PUBLISHED/deb/pool/main/b/breeze-core/$(basename "$d")"
+    if [ -n "$BC_PUBLISHED" ] && [ -f "$pub" ]; then cp "$pub" "$d"; continue; fi
     gpg --batch --yes --clearsign -o "$d.asc" "$d" && mv "$d.asc" "$d"
   done
   cd "$R"
@@ -410,8 +421,16 @@ stage almalinux:9 '
 EOF
   for a in x86_64 aarch64 armv7hl riscv64 ppc64le s390x loongarch64; do
     mkdir -p "/out/rpm/$a"
-    cp /work/packaging/out/pkg/*."$a".rpm "/out/rpm/$a/" 2>/dev/null || continue
-    rpmsign --addsign "/out/rpm/$a/"*.rpm >/dev/null
+    ls /work/packaging/out/pkg/*."$a".rpm >/dev/null 2>&1 || continue
+    for f in /work/packaging/out/pkg/*."$a".rpm; do
+      n=$(basename "$f")
+      # Already published (BC_PUBLISHED): keep its signed bytes.
+      if [ -n "$BC_PUBLISHED" ] && [ -f "/work/$BC_PUBLISHED/rpm/$a/$n" ]; then
+        cp "/work/$BC_PUBLISHED/rpm/$a/$n" "/out/rpm/$a/"
+      else
+        cp "$f" "/out/rpm/$a/" && rpmsign --addsign "/out/rpm/$a/$n" >/dev/null
+      fi
+    done
     createrepo_c --general-compress-type gz "/out/rpm/$a" >/dev/null
     # repo_gpgcheck=1 verifies this file, which is what makes the metadata
     # trustworthy rather than only the packages it lists.
@@ -424,8 +443,14 @@ EOF
   # matching -source repository for that one command, so nobody resolves
   # source packages by accident.
   mkdir -p /out/rpm/SRPMS
-  cp /work/packaging/out/source/rpm/*.src.rpm /out/rpm/SRPMS/
-  rpmsign --addsign /out/rpm/SRPMS/*.src.rpm >/dev/null
+  for f in /work/packaging/out/source/rpm/*.src.rpm; do
+    n=$(basename "$f")
+    if [ -n "$BC_PUBLISHED" ] && [ -f "/work/$BC_PUBLISHED/rpm/SRPMS/$n" ]; then
+      cp "/work/$BC_PUBLISHED/rpm/SRPMS/$n" /out/rpm/SRPMS/
+    else
+      cp "$f" /out/rpm/SRPMS/ && rpmsign --addsign "/out/rpm/SRPMS/$n" >/dev/null
+    fi
+  done
   createrepo_c --general-compress-type gz /out/rpm/SRPMS >/dev/null
   gpg --batch --yes -abs -o /out/rpm/SRPMS/repodata/repomd.xml.asc \
       /out/rpm/SRPMS/repodata/repomd.xml
@@ -443,7 +468,13 @@ stage archlinux:base '
     cp /work/packaging/out/pkg/*-"$a".pkg.tar.zst "/out/arch/$a/" 2>/dev/null || continue
     ( cd "/out/arch/$a"
       # SigLevel = Required wants a signature per package AND a signed database.
-      for p in *.pkg.tar.zst; do gpg --batch --yes --detach-sign "$p"; done
+      for p in *.pkg.tar.zst; do
+        if [ -n "$BC_PUBLISHED" ] && [ -f "/work/$BC_PUBLISHED/arch/$a/$p.sig" ]; then
+          cp "/work/$BC_PUBLISHED/arch/$a/$p.sig" .
+        else
+          gpg --batch --yes --detach-sign "$p"
+        fi
+      done
       repo-add --sign --key "$KEYID" aspic.db.tar.gz *.pkg.tar.zst >/dev/null
       # repo-add leaves .db and .files as symlinks to the .tar.gz. A symlink in a
       # published tree is a 404 waiting to happen, so materialise them.
@@ -457,7 +488,13 @@ stage archlinux:base '
   # --allsource tarball with a detached signature, for `makepkg -si`.
   mkdir -p /out/arch/sources
   cp /work/packaging/out/source/arch/*.src.tar.gz /out/arch/sources/
-  ( cd /out/arch/sources && for s in *.src.tar.gz; do gpg --batch --yes --detach-sign "$s"; done )
+  ( cd /out/arch/sources && for s in *.src.tar.gz; do
+      if [ -n "$BC_PUBLISHED" ] && [ -f "/work/$BC_PUBLISHED/arch/sources/$s.sig" ]; then
+        cp "/work/$BC_PUBLISHED/arch/sources/$s.sig" .
+      else
+        gpg --batch --yes --detach-sign "$s"
+      fi
+    done )
 '
 
 # --- apk (alpine) -----------------------------------------------------------
