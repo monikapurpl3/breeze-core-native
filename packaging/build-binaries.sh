@@ -124,7 +124,19 @@ selected() {
 # The commit goes into the binary, so /api/version and /metrics can identify
 # exactly what is running. A dirty tree is labelled as such rather than passed
 # off as the commit it nearly is.
-if git rev-parse --short HEAD >/dev/null 2>&1; then
+#
+# BREEZE_COMMIT may be given instead -- for adding architectures to a release
+# whose code has not changed since its tag, when HEAD is only packaging work
+# on top. It is accepted only if the code is byte-identical to that commit's.
+if [ -n "${BREEZE_COMMIT:-}" ]; then
+  code=(crates static Cargo.toml Cargo.lock)
+  if ! git diff --quiet "$BREEZE_COMMIT" -- "${code[@]}" 2>/dev/null; then
+    echo "!! BREEZE_COMMIT=$BREEZE_COMMIT, but the code differs from it:"
+    git diff --stat "$BREEZE_COMMIT" -- "${code[@]}" | tail -3
+    exit 1
+  fi
+  export BREEZE_COMMIT
+elif git rev-parse --short HEAD >/dev/null 2>&1; then
   BREEZE_COMMIT="$(git rev-parse --short HEAD)"
   git diff --quiet HEAD 2>/dev/null || BREEZE_COMMIT="$BREEZE_COMMIT-dirty"
   export BREEZE_COMMIT

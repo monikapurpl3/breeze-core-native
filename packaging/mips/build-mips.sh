@@ -52,7 +52,12 @@ selected() {
   return 1
 }
 
-if git rev-parse --short HEAD >/dev/null 2>&1; then
+# A given BREEZE_COMMIT is accepted only if the code is byte-identical to it;
+# see build-binaries.sh.
+if [ -n "${BREEZE_COMMIT:-}" ]; then
+  git diff --quiet "$BREEZE_COMMIT" -- crates static Cargo.toml Cargo.lock 2>/dev/null \
+    || { echo "!! BREEZE_COMMIT=$BREEZE_COMMIT, but the code differs from it"; exit 1; }
+elif git rev-parse --short HEAD >/dev/null 2>&1; then
   BREEZE_COMMIT="$(git rev-parse --short HEAD)"
   git diff --quiet HEAD 2>/dev/null || BREEZE_COMMIT="$BREEZE_COMMIT-dirty"
 fi
