@@ -92,8 +92,14 @@ run_case() {
   # keeps one variant per tag: after `--platform linux/386 alpine:3.20`, a bare
   # `alpine:3.20` IS the i386 image, and an amd64 case would silently test i386
   # under emulation instead.
+  #
+  # Except OpenWrt's own images: each tag is a single variant, labelled with
+  # OpenWrt's package architecture (linux/mips_24kc, linux/i386_pentium4) rather
+  # than a Docker platform, so no --platform matches it and pinning one makes
+  # docker refuse an image it has.
   local platform="--platform linux/amd64"
   case "${CASE_DOCKER_ARGS:-}" in *--platform*) platform="" ;; esac
+  case "$image" in openwrt/rootfs:*|bc-openwrt:*) platform="" ;; esac
   # shellcheck disable=SC2086
   if printf 'BASE=%s\nVER=%s\n%s' "$BASE" "$VER" "$script" \
      | timeout 900 docker run --rm -i ${NETARG} $platform ${CASE_DOCKER_ARGS:-} -e BASE="$BASE" -e VER="$VER" \
@@ -103,6 +109,13 @@ run_case() {
     report 1 "$name"
   fi
 }
+
+# Big-endian ppc64 and loongarch64 run under QEMU handlers Docker Desktop's VM
+# does not keep across a restart: without them those cases fail with a bare
+# "exec format error". Registered before the first case that needs them.
+if selected debian-loong64 || selected openeuler-loong64 || selected adelie-ppc64; then
+  ./packaging/cross/install-qemu-binfmt.sh ppc64 loongarch64 > /dev/null 2>&1
+fi
 
 # --- apt --------------------------------------------------------------------
 APT_CASE='
