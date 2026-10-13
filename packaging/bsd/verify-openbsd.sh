@@ -16,10 +16,10 @@ cd "$REPO"
 TARGET="${1:-monika@192.168.122.128}"
 VER="$(grep -m1 '^version' crates/breeze-core/Cargo.toml | cut -d'"' -f2)"
 
-# A glob, not a fixed path: build-openbsd.sh stages into <rel>/packages/<arch>/
+# A glob, not a fixed path: build-bsd.sh stages into <rel>/packages/<arch>/
 # so that the published tree is the layout pkg_add PKG_PATH expects.
 PKG_LOCAL="$(find packaging/out/bsd/openbsd -name "breeze-core-$VER.tgz" | head -1)"
-[ -n "$PKG_LOCAL" ] || { echo "no breeze-core-$VER.tgz staged - run packaging/bsd/build-openbsd.sh"; exit 1; }
+[ -n "$PKG_LOCAL" ] || { echo "no breeze-core-$VER.tgz staged - run packaging/bsd/build-bsd.sh openbsd"; exit 1; }
 scp -q "$PKG_LOCAL" "$TARGET:/tmp/"
 scp -q packaging/repo/keys/aspic-openbsd.pub "$TARGET:/tmp/aspic-pkg.pub"
 

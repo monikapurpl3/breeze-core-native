@@ -1,61 +1,52 @@
 # packaging/bsd — the BSDs
 
-There is no cross-build here, and that is the whole story: Zig bundles a libc for
-every Linux target this project ships, and none for FreeBSD, NetBSD or OpenBSD.
-So every BSD binary here is compiled on a BSD machine. All three are built, and
-all three carry the complete binary with TLS — `ring` compiles on each of them
-without help, so none of these is a reduced build.
-
-## NetBSD — done, and verified on the machine
+Everything here runs on the workstation. Since 4.4.0 the three BSD binaries are
+cross-compiled by `packaging/build-binaries.sh` (see `packaging/cross/README.md`)
+and packaged and signed by `build-bsd.sh`, using each BSD's own packaging tools
+inside the `bc-bsdpkg` container. The VMs only run the verify scripts.
 
 ```bash
-./packaging/bsd/build-netbsd.sh   [user@host]   # compile, package, fetch back
-./packaging/bsd/verify-netbsd.sh  [user@host]   # install, upgrade, run, stop
+./packaging/build-binaries.sh freebsd-amd64 netbsd-amd64 openbsd-amd64
+./packaging/bsd/build-bsd.sh                      # package + sign all three
+./packaging/bsd/verify-netbsd.sh  [user@host]     # install, upgrade, run, stop
+./packaging/bsd/verify-openbsd.sh [user@host]     # refuse an untrusted key, install, run, stop
+./packaging/bsd/verify-freebsd.sh [user@host] [base-url]   # refuse a bad key, install from the repo
 ```
 
-`build-netbsd.sh` sends the source, builds with the pkgsrc `cargo`, packages with
-base-system `pkg_create(1)`, generates the `pkg_summary` a pkgin feed needs, and
-brings all three back. Nothing is emulated.
+Until 4.3.2 each BSD was compiled, packaged and signed on a VM of that system,
+and two signing keys travelled to those VMs to be used and shredded with
+`rm -P`. Now the keys never leave this machine: `build-bsd.sh` streams them
+into a throwaway container per run and nothing writes them anywhere else.
 
-**The full build works, TLS included.** `ring` compiles on NetBSD 11 without
-help, so the NetBSD package is the same ~2.5 MB binary as everywhere else rather
-than a reduced build — and it declares **no dependencies at all**, where the
-Python package needed `python312`.
+## What builds what
 
-Two things that cost time and are worth not rediscovering:
+| | binary (build-binaries.sh) | package (build-bsd.sh, in bc-bsdpkg) |
+|---|---|---|
+| FreeBSD | zig, FreeBSD 14's libc | FreeBSD's `pkg create`, signed catalogue from `pkg repo` (RSA) |
+| NetBSD | zig, NetBSD 10.1's libc | pkgsrc's `pkg_create`; `pkg_info -X` writes `pkg_summary` |
+| OpenBSD | clang + lld against the release's own libraries | `mkpkg-openbsd.py`, signed with `signify -zS` |
+| OPNsense | the FreeBSD binary | `packaging/opnsense/build-plugin.sh`, same image |
 
-- **`~/.cargo` on that machine is root-owned** (pkgsrc built rust as root), so a
-  normal user's build dies while downloading its first crate with a bare
-  "Permission denied". `build-netbsd.sh` sets `CARGO_HOME` inside its own work
-  directory instead of fixing the machine.
-- **`pkg_create`, `pkg_add` and `pkg_info` are not on a login PATH** — they live
-  in `/usr/pkg/sbin` and `/usr/sbin`. The failure is `command not found` from
-  inside a script that looks like it should work.
+`bc-bsdpkg` (the `Dockerfile` here) is Ubuntu 24.04 with FreeBSD's pkg 2.7.5
+built from source the way pkg's own CI builds it, a pkgsrc bootstrap for
+pkg_install, and Debian's signify. OpenBSD's `pkg_create` is Perl that only runs
+on OpenBSD, so `mkpkg-openbsd.py` writes the package itself; it was checked
+against the package `pkg_create` made for 4.3.2 and differs only where 4.3.2 was
+wrong (that LICENSE had CRLF line endings, from `git archive` with autocrlf on
+the way to the VM).
 
-The feed it produces is **unsigned**, and the landing page says so: pkgin has no
-signature verification to offer, and `pkg_add`'s GPG support wants a
-signed-package format this does not use. Every other feed on aspic verifies a
-signature; this one has HTTPS and nothing more.
+## FreeBSD — a signed repository
 
-## FreeBSD — done, signed repository, verified on the machine
+`pkg repo` builds the catalogue and signs it, so `pkg install breeze-core`
+verifies before it installs and a tampered catalogue fails. The package declares
+**no dependencies**; the Python one needed `python312`.
 
-```bash
-./packaging/bsd/build-freebsd.sh   [user@host]   # compile, package, sign, fetch back
-./packaging/bsd/verify-freebsd.sh  [user@host]   # refuse a bad key, install, run, stop
-```
+**The ABI is a pattern, `FreeBSD:1[45]:amd64`.** pkg fnmatches a package's ABI
+against the host's, and the binary links against FreeBSD 14's libc, which 15
+carries forward. 4.3.2's package said `FreeBSD:15:amd64` and so refused 14.
+Widen the pattern when 16 ships, after running the binary there.
 
-A real RSA-signed `pkg` repository, not a loose package: `pkg repo` builds the
-catalogue and signs it, so `pkg install breeze-core` verifies before it installs
-and a tampered catalogue fails. Like NetBSD it declares **no dependencies** —
-the Python package needed `python312`.
-
-**This is the one repository on aspic that is not assembled on the workstation.**
-`pkg repo` signs locally, so the RSA key is copied to the build machine, used,
-and destroyed with `rm -P`; `build-freebsd.sh` does that and then checks the file
-is gone. Everything else on aspic is signed on the Dell and pushed as static
-files.
-
-Three things worth not rediscovering:
+Worth not rediscovering (from the rc script and the verify):
 
 - **`daemon -p` is the child's pid, `-P` is the supervisor's**, and `rcvar`
   matching wants whichever one `procname` names. Point them at different
@@ -69,19 +60,41 @@ Three things worth not rediscovering:
 - **Verify identity, not liveness.** An orphaned Python service was still
   holding 8420 and answering `/api/health`, which made a *failed* start look
   like a success. `verify-freebsd.sh` checks that the process on that port is
-  `breeze` running `/usr/local/bin/breeze-core serve`. The migration script
-  avoids the same trap by stopping the old service before it upgrades.
+  `breeze` running `/usr/local/bin/breeze-core serve`.
+- `pkg` built for Linux still records files as `root:wheel`, as on FreeBSD.
 
-## OpenBSD — done, signify-signed package, verified on the machine
+`verify-freebsd.sh` installs from a repository URL. Before publishing, serve
+`packaging/out/bsd` locally and tunnel it to the VM:
 
 ```bash
-./packaging/bsd/build-openbsd.sh   [user@host]   # compile, package, sign, fetch back
-./packaging/bsd/verify-openbsd.sh  [user@host]   # refuse an untrusted key, install, run, stop
+(cd packaging/out/bsd && python -m http.server 8099 --bind 127.0.0.1) &
+ssh -N -R 8099:127.0.0.1:8099 monika@192.168.122.131 &
+./packaging/bsd/verify-freebsd.sh monika@192.168.122.131 http://127.0.0.1:8099
+# then kill both by their PIDs
 ```
 
-**The first OpenBSD *package* this project has ever had.** The Python line could
-only manage a source install here, because a virtualenv full of absolute paths is
-not something you can hand to `pkg_add`. One static binary is.
+## NetBSD — a pkgin feed, unsigned
+
+The feed is **unsigned**, and the landing page says so: pkgin has no signature
+verification to offer, and `pkg_add`'s GPG support wants a signed-package format
+this does not use. Every other feed on aspic verifies a signature; this one has
+HTTPS and nothing more.
+
+- **`+BUILD_INFO` names the platform the binary is for, not the one it was
+  packaged on:** `OPSYS=NetBSD`, `OS_VERSION=10.1` (zig's libc), `MACHINE_ARCH=x86_64`.
+  pkg_add refuses another OPSYS or arch outright, but only *warns* when
+  OS_VERSION differs, so an 11.x machine prints "was built for a different
+  platform" and installs. That warning is true.
+- **`PKGTOOLS_VERSION` is deliberately absent**: a value that does not match the
+  host's exact pkg_install release makes pkg_add reject the package.
+- **`pkg_create`, `pkg_add` and `pkg_info` are not on a NetBSD login PATH** —
+  they live in `/usr/pkg/sbin` and `/usr/sbin`. The verify sets PATH for that.
+
+## OpenBSD — a signify-signed package
+
+**The first OpenBSD *package* this project ever had** arrived with the native
+line: a virtualenv full of absolute paths is not something you can hand to
+`pkg_add`. One binary is.
 
 The packing list does the work a script would otherwise do badly: `@newgroup` /
 `@newuser` declare the service account so `pkg_delete` removes it again, and the
@@ -89,19 +102,20 @@ configuration is `@sample`, so `pkg_add` seeds it once and never touches an
 edited copy — which is what you want for a file holding an API key and a unit's
 V3 credentials.
 
-- **The key's filename is part of the format.** `pkg_sign` records the key's name
-  in the signature and `pkg_add` then opens `/etc/signify/<name>.pub`, so
-  renaming the key renames what every user must install. It is `aspic-pkg`.
+- **The key's filename is part of the format.** The signature records the key's
+  name and `pkg_add` then opens `/etc/signify/<name>.pub`, so the secret key is
+  signed with as `aspic-pkg.sec`, and renaming it renames what every user must
+  install.
 - **`pkg_info -e` wants a pkgspec**, not a stem: `breeze-core` gets you
   "Invalid spec", `breeze-core-*` works. NetBSD's takes the bare name, which is
   why `migrate.sh` has two lines for one command.
-- **`-D FULLPKGPATH=`** silences "Use of uninitialized value in hash element at
-  PkgAdd.pm line 304" on every install — a hand-built package has no pkgpath and
-  the security-quirks check keys a hash on it. Setting it as a `@comment` in the
-  list is rejected as "can't be set explicitly".
-- **Builds go in `/home`.** The default `/` is under a gigabyte and was 99% full;
-  a rust build does not fit. `ulimit -d` also needs raising, because the default
-  login class caps the data segment below what `rustc` wants when linking.
+- **`@comment pkgpath=`** (FULLPKGPATH) silences "Use of uninitialized value in
+  hash element at PkgAdd.pm line 304" on every install — a hand-built package
+  has no pkgpath and the security-quirks check keys a hash on it.
+- **The binary is valid for one release.** OpenBSD moves its libc every six
+  months; this one links against 7.9's `libc.so.103.0`. `OPENBSD_REL` in
+  `build-binaries.sh` is the one place that says which, and a new release needs
+  its sets' checksums added to `packaging/cross/openbsd-sysroot.sh`.
 
 ## Published layout
 
@@ -113,19 +127,15 @@ the OpenBSD index. Turn it off and every OpenBSD install reports the package as
 nonexistent.
 
 ```
-/freebsd/                          meta.conf, packagesite.pkg, the package, aspic-freebsd.pub
+/freebsd/                          meta.conf, packagesite.pkg, data.pkg, the package, aspic-freebsd.pub
 /netbsd/All/                       the package and pkg_summary (unsigned)
 /openbsd/<release>/packages/<arch>/  the signed package, plus aspic-pkg.pub one level up
 /opnsense/                         os-breeze-core-<ver>.pkg and its sha256
 ```
 
-The OpenBSD path carries the release because OpenBSD moves its libc every six
-months and a package is valid for the release it was built on. `build-openbsd.sh`
-reads that release off the build machine rather than hardcoding it.
-
 ## OPNsense
 
-See `packaging/opnsense/`. OPNsense is FreeBSD 14 (26.1) or 15 (26.7), so its
-binary is built in a FreeBSD 14 chroot on the FreeBSD builder — binaries run
-forward, not backward — and the package admits both (`FreeBSD:1[45]:amd64`). `verify-plugin.sh` checks everything that can be checked from here and
-says plainly what cannot: the GUI page itself has never run on a real firewall.
+See `packaging/opnsense/`. OPNsense is FreeBSD 14 (26.1) or 15 (26.7); the
+FreeBSD binary, linked against 14's libc, serves both, and `verify-plugin.sh`
+runs it in the FreeBSD VM's 14 root and on its 15 userland to prove it. The GUI
+page itself has still never been exercised on a real firewall by these scripts.

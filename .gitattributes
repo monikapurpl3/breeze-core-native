@@ -83,5 +83,7 @@ packaging/homebrew/**     text eol=lf
 packaging/nfpm/**       text eol=lf
 packaging/repo/**       text eol=lf
 packaging/container/**  text eol=lf
+packaging/bsd/**        text eol=lf
+packaging/cross/**      text eol=lf
 site/**                 text eol=lf
 static/**               text eol=lf

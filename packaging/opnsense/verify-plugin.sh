@@ -177,23 +177,30 @@ else
   bad "no package - run packaging/opnsense/build-plugin.sh"
 fi
 
-# ABI and contents, asked of the builder because pkg lives there.
+# ABI and contents, asked of the FreeBSD VM because pkg lives there. The package
+# is built here (build-plugin.sh) and carried over to be looked at.
+scp -q -o BatchMode=yes "$PKG" "$USER_AT:/tmp/os-breeze-core-$VER.pkg" 2>/dev/null || true
 remote=$(ssh -o BatchMode=yes "$USER_AT" "
   set -eu
-  P=\$(ls -1 $ROOT/tmp/pkgout/os-breeze-core-*.pkg 2>/dev/null | tail -1)
-  [ -n \"\$P\" ] || { echo 'NOPKG'; exit 0; }
+  P=/tmp/os-breeze-core-$VER.pkg
+  [ -f \"\$P\" ] || { echo 'NOPKG'; exit 0; }
   echo \"ABI=\$(pkg query -F \"\$P\" %q)\"
   echo \"DEPS=\$(pkg query -F \"\$P\" '%dn' | tr '\n' ' ')\"
   echo \"FILES=\$(pkg query -F \"\$P\" '%Fp' | wc -l | tr -d ' ')\"
   pkg query -F \"\$P\" '%Fp' | grep -c 'mvc/app' | sed 's/^/MVC=/'
   # The point of the whole exercise: this one binary has to run on FreeBSD 14
-  # (OPNsense 26.1) and 15 (26.7). The builder itself is 15.
-  doas chroot $ROOT /usr/bin/env sh -c 'ls /tmp/stage/usr/local/bin/breeze-core >/dev/null' 2>/dev/null \
-    && doas chroot $ROOT /tmp/stage/usr/local/bin/breeze-core --version | head -1 | sed 's/^/RUNS=/' \
-    || echo 'RUNS=no'
+  # (OPNsense 26.1) and 15 (26.7). The VM is 15; its FreeBSD 14 root is where
+  # the 14 half is tried. The binary is taken out of the package itself.
+  X=/tmp/bc-opn-x; rm -rf \$X; mkdir -p \$X; tar -xf \"\$P\" -C \$X
+  B=\$X/usr/local/bin/breeze-core
+  if [ -d $ROOT/usr ]; then
+    doas mkdir -p $ROOT/tmp/bc-opn && doas cp \$B $ROOT/tmp/bc-opn/breeze-core
+    doas chroot $ROOT /tmp/bc-opn/breeze-core --version 2>/dev/null | head -1 | sed 's/^/RUNS=/' || echo 'RUNS=no'
+  else
+    echo 'RUNS=no FreeBSD 14 root at $ROOT'
+  fi
   echo \"HOSTREL=\$(freebsd-version -u)\"
-  $ROOT/tmp/stage/usr/local/bin/breeze-core --version 2>/dev/null | head -1 | sed 's/^/RUNS15=/' \
-    || echo 'RUNS15=no'
+  \$B --version 2>/dev/null | head -1 | sed 's/^/RUNS15=/' || echo 'RUNS15=no'
 " 2>/dev/null || echo "")
 
 abi=$(printf '%s' "$remote" | sed -n 's/^ABI=//p')

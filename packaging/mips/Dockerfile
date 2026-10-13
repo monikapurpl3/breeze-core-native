@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 # The MIPS builder: a pinned nightly with rust-src, and OpenWrt's own
-# toolchains for the two architectures most routers are.
+# toolchains for the two architectures most routers are, plus Octeon.
 #
-#   mipsel_24kc   little-endian, ramips (MediaTek MT7621, MT76x8)
-#   mips_24kc     big-endian, ath79 (Qualcomm Atheros)
+#   mipsel_24kc        little-endian, ramips (MediaTek MT7621, MT76x8)
+#   mips_24kc          big-endian, ath79 (Qualcomm Atheros)
+#   mips64_octeonplus  big-endian 64-bit, n64 ABI (Cavium Octeon: EdgeRouter)
 #
 # Why each piece:
 #
@@ -28,7 +29,8 @@ RUN apt-get update -qq \
 # label | OpenWrt target | toolchain SHA-256 (from that target's sha256sums)
 RUN set -eu; mkdir -p /opt/openwrt; cd /opt/openwrt; \
     for t in "ramips-mt7621|ramips/mt7621|04316e081dcaea0394d3a8eca761500c91d7d54e9d49ccb8f855ae257ea4f995" \
-             "ath79-generic|ath79/generic|3903d0069c4833f45cd1fc5dfa7714e04a216476c32ec90b660477aa98826b6e"; do \
+             "ath79-generic|ath79/generic|3903d0069c4833f45cd1fc5dfa7714e04a216476c32ec90b660477aa98826b6e" \
+             "octeon-generic|octeon/generic|a0e3f270cd52e00692dab69a6ebef4242ca7018269b73bebf3b3f9db7dc824c0"; do \
       name="${t%%|*}"; rest="${t#*|}"; path="${rest%%|*}"; sum="${rest#*|}"; \
       f="openwrt-toolchain-${OPENWRT}-${name}_${GCC}_musl.Linux-x86_64.tar.zst"; \
       curl -fsSLO "https://downloads.openwrt.org/releases/${OPENWRT}/targets/${path}/${f}"; \
@@ -37,15 +39,17 @@ RUN set -eu; mkdir -p /opt/openwrt; cd /opt/openwrt; \
     done; \
     ln -s /opt/openwrt/openwrt-toolchain-*-ramips-mt7621_*/toolchain-mipsel_24kc_* /opt/mipsel_24kc; \
     ln -s /opt/openwrt/openwrt-toolchain-*-ath79-generic_*/toolchain-mips_24kc_* /opt/mips_24kc; \
+    ln -s /opt/openwrt/openwrt-toolchain-*-octeon-generic_*/toolchain-mips64_octeonplus_* /opt/mips64_octeonplus; \
     /opt/mipsel_24kc/bin/mipsel-openwrt-linux-musl-gcc --version | head -1; \
-    /opt/mips_24kc/bin/mips-openwrt-linux-musl-gcc --version | head -1
+    /opt/mips_24kc/bin/mips-openwrt-linux-musl-gcc --version | head -1; \
+    /opt/mips64_octeonplus/bin/mips64-openwrt-linux-musl-gcc --version | head -1
 
 # A static musl build links `-lunwind`, from a libunwind.a that ships with a
 # target's prebuilt std, and tier 3 targets have none. gcc's own static
 # unwinder is the same _Unwind_* API -- it is what these targets use, as
 # libgcc_s, when linked dynamically -- so each toolchain gets a directory in
 # which libunwind.a IS its libgcc_eh.a.
-RUN set -eu; for t in mipsel_24kc mips_24kc; do \
+RUN set -eu; for t in mipsel_24kc mips_24kc mips64_octeonplus; do \
       mkdir -p "/opt/unwind/$t"; \
       ln -s "$(ls /opt/$t/lib/gcc/*/*/libgcc_eh.a)" "/opt/unwind/$t/libunwind.a"; \
     done

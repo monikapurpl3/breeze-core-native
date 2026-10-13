@@ -13,13 +13,15 @@ REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO"
 TARGET="${1:-monika@192.168.122.130}"
 VER="$(grep -m1 '^version' crates/breeze-core/Cargo.toml | cut -d'"' -f2)"
-WORK="bcn-build"
+PKG_LOCAL="packaging/out/bsd/netbsd/All/breeze-core-$VER.tgz"
+[ -f "$PKG_LOCAL" ] || { echo "no $PKG_LOCAL - run packaging/bsd/build-bsd.sh netbsd"; exit 1; }
+# Built on the workstation (build-bsd.sh), so it is carried over to be tested.
+scp -q "$PKG_LOCAL" "$TARGET:/tmp/"
 OLD_URL="https://bolero.salataputarica.hr.eu.org/netbsd/All/breeze-core-3.2.0.tgz"
 
 ssh "$TARGET" "set -eu
 export PATH=\$PATH:/usr/pkg/sbin:/usr/sbin
-PKG=\$HOME/$WORK/out/breeze-core-$VER.tgz
-[ -f \"\$PKG\" ] || { echo 'no package — run packaging/bsd/build-netbsd.sh first'; exit 1; }
+PKG=/tmp/breeze-core-$VER.tgz
 
 echo '-- starting from nothing'
 doas service breeze_core stop >/dev/null 2>&1 || true

@@ -137,9 +137,9 @@ packaging/out/source|./packaging/source/build-source.sh|
 packaging/out/source/rpm|./packaging/source/build-source.sh|
 packaging/out/source/deb|./packaging/source/build-source.sh|
 packaging/out/source/arch|./packaging/source/build-source.sh|
-packaging/out/bsd/freebsd|./packaging/bsd/build-freebsd.sh|data.pkg packagesite.pkg digests.pkg filesite.pkg meta meta.conf packagesite.yaml aspic-freebsd.pub
-packaging/out/bsd/netbsd/All|./packaging/bsd/build-netbsd.sh|pkg_summary pkg_summary.gz pkg_summary.bz2
-$OBSD_STAGE|./packaging/bsd/build-openbsd.sh|
+packaging/out/bsd/freebsd|./packaging/bsd/build-bsd.sh freebsd|data.pkg packagesite.pkg digests.pkg filesite.pkg meta meta.conf packagesite.yaml aspic-freebsd.pub
+packaging/out/bsd/netbsd/All|./packaging/bsd/build-bsd.sh netbsd|pkg_summary pkg_summary.gz pkg_summary.bz2
+$OBSD_STAGE|./packaging/bsd/build-bsd.sh openbsd|
 packaging/out/opnsense|./packaging/opnsense/build-plugin.sh|
 packaging/out/windows|packaging/windows/build-installer.ps1|Breeze-Core-Setup.exe Breeze-Core-Setup.exe.sha256
 "
@@ -838,10 +838,10 @@ case "$VER" in
 esac
 
 # --- FreeBSD (pkg) ----------------------------------------------------------
-# Built AND signed on a real FreeBSD machine by packaging/bsd/build-freebsd.sh:
-# `pkg repo` signs locally, so unlike every other repository here this one is
-# not assembled on this workstation. The key visits that machine and is shredded
-# afterwards; see that script.
+# Packaged and signed by packaging/bsd/build-bsd.sh, with FreeBSD's own `pkg repo`
+# running in the bc-bsdpkg container. Until 4.3.2 this was the one repository
+# not assembled on this workstation: it was signed on a FreeBSD VM, and the key
+# went there and was shredded afterwards.
 echo "=== FreeBSD repo ==="
 if [ -d packaging/out/bsd/freebsd ]; then
   cp -R packaging/out/bsd/freebsd "$OUT/freebsd"
@@ -851,12 +851,13 @@ if [ -d packaging/out/bsd/freebsd ]; then
   echo "  carried $(ls "$OUT/freebsd"/*.pkg 2>/dev/null | grep -v -e '/data\.pkg$' -e '/packagesite\.pkg$' | wc -l | tr -d ' ') package(s) and their signed catalogue"
 else
   echo "  !! nothing staged in packaging/out/bsd/freebsd"
-  echo "     run packaging/bsd/build-freebsd.sh, or the FreeBSD section will 404"
+  echo "     run packaging/bsd/build-bsd.sh freebsd, or the FreeBSD section will 404"
 fi
 
 # --- NetBSD (pkgin) ---------------------------------------------------------
-# Built on a real NetBSD machine by packaging/bsd/build-netbsd.sh and carried
-# here, because there is no cross-build for it: Zig bundles no NetBSD libc.
+# Cross-built (zig ships NetBSD 10.1's libc) and packaged by
+# packaging/bsd/build-bsd.sh with pkgsrc's own pkg_create, in the bc-bsdpkg
+# container.
 #
 # Unsigned, unlike every other feed here — pkgin has no signature verification
 # to offer, and pkg_add's GPG support needs a signed-package format this does
@@ -869,12 +870,12 @@ else
   # Loud, because the page has a NetBSD section and a missing feed makes it a
   # section that 404s.
   echo "  !! nothing staged in packaging/out/bsd/netbsd"
-  echo "     run packaging/bsd/build-netbsd.sh, or the NetBSD section will 404"
+  echo "     run packaging/bsd/build-bsd.sh netbsd, or the NetBSD section will 404"
 fi
 
 # --- OpenBSD (pkg_add) ------------------------------------------------------
-# Built and signify-signed on a real OpenBSD machine by build-openbsd.sh, which
-# stages it as <release>/packages/<arch>/ - the layout pkg_add builds when it
+# Cross-built against the release's own libraries, packaged and signify-signed
+# by packaging/bsd/build-bsd.sh, which stages it as <release>/packages/<arch>/ - the layout pkg_add builds when it
 # expands %c and %a out of PKG_PATH. Release-specific on purpose: OpenBSD moves
 # its libc every six months and does not pretend a 7.9 package runs on 7.8.
 #
@@ -898,7 +899,7 @@ if [ -d packaging/out/bsd/openbsd ]; then
   fi
 else
   echo "  !! nothing staged in packaging/out/bsd/openbsd"
-  echo "     run packaging/bsd/build-openbsd.sh, or the OpenBSD section will 404"
+  echo "     run packaging/bsd/build-bsd.sh openbsd, or the OpenBSD section will 404"
 fi
 
 # --- OPNsense plugin --------------------------------------------------------

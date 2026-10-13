@@ -1,8 +1,13 @@
 #!/bin/sh
-# Build a native NetBSD binary package (.tgz) with pkg_create(1) from the base
-# system. Run ON NetBSD, from the source tree, after `cargo build --release`.
+# Build a native NetBSD binary package (.tgz) with pkg_create(1).
 #
-#   doas sh packaging/bsd/mkpkg-netbsd.sh [output-dir]
+#   BC_BIN=path/to/breeze-core sh packaging/bsd/mkpkg-netbsd.sh [output-dir]
+#
+# Runs in the bc-bsdpkg container (build-bsd.sh), whose pkg_create is pkgsrc's
+# own pkg_install bootstrapped on Linux -- the same tool NetBSD's base system
+# ships. Until 4.3.2 it ran on a NetBSD VM, which is why the platform below is
+# now written out rather than read off `uname`: it is the platform the
+# cross-built binary is for, not the one the package is made on.
 #
 # Much shorter than the Python line's version of this file, and the reason is
 # the whole point of the rewrite: there is no interpreter to depend on, no
@@ -23,16 +28,16 @@ fi
 OUT="${1:-.}"
 VER="$(grep -m1 '^version' crates/breeze-core/Cargo.toml | cut -d'"' -f2)"
 PREFIX=/usr/pkg
-BIN=target/release/breeze-core
+BIN="${BC_BIN:-target/release/breeze-core}"
 META="$(mktemp -d)"
 trap 'rm -rf "$META"' EXIT
 
-[ -x "$BIN" ] || { echo "no $BIN — run: cargo build --release"; exit 1; }
+[ -f "$BIN" ] || { echo "no $BIN — build it with packaging/build-binaries.sh netbsd-amd64"; exit 1; }
 
 # Stage into the prefix. pkg_create reads the packing list relative to @cwd, so
 # everything packaged has to actually live there at build time.
+mkdir -p "$PREFIX/bin" "$PREFIX/share/examples/rc.d" "$PREFIX/share/examples/breeze-core"
 install -m 0755 "$BIN" "$PREFIX/bin/breeze-core"
-mkdir -p "$PREFIX/share/examples/rc.d" "$PREFIX/share/examples/breeze-core"
 install -m 0755 packaging/bsd/rc.netbsd "$PREFIX/share/examples/rc.d/breeze_core"
 install -m 0644 packaging/nfpm/breeze-core.env \
     "$PREFIX/share/examples/breeze-core/breeze-core.env"
@@ -86,10 +91,15 @@ EOF
 # PKGTOOLS_VERSION is deliberately absent: pkg_add then prints a harmless
 # "lacks pkg_install version data" note, whereas a value that does not match the
 # host's exact pkg_install release makes it reject the package.
+#
+# OS_VERSION is the release whose libc the binary links against (zig's NetBSD
+# libc is 10.1's). pkg_add refuses a package for another OPSYS or MACHINE_ARCH,
+# but only warns when OS_VERSION differs from the host's -- which on an 11.x
+# machine it will, honestly.
 cat > "$META/BUILD_INFO" <<EOF
-OPSYS=$(uname -s)
-OS_VERSION=$(uname -r)
-MACHINE_ARCH=$(uname -p)
+OPSYS=NetBSD
+OS_VERSION=${BC_NETBSD_OS_VERSION:-10.1}
+MACHINE_ARCH=${BC_NETBSD_ARCH:-x86_64}
 EOF
 
 # The packing list. No @pkgdep line: the binary is static.

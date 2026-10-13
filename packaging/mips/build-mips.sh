@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Build the 32-bit MIPS binaries, for OpenWrt routers.
+# Build the MIPS binaries, for OpenWrt routers: the two 32-bit ones and Octeon.
 #
-#   ./packaging/mips/build-mips.sh              # mipsel and mips
+#   ./packaging/mips/build-mips.sh              # mipsel, mips and mips64
 #   ./packaging/mips/build-mips.sh mipsel
 #
 # Output, beside build-binaries.sh's: packaging/out/bin/<label>/breeze-core and
@@ -42,6 +42,7 @@ VERSION="$(grep -m1 '^version' crates/breeze-core/Cargo.toml | cut -d'"' -f2)"
 TARGETS="
 mipsel|mipsel-unknown-linux-musl|mipsel_24kc|little-endian, soft float (MT7621, MT76x8)
 mips|mips-unknown-linux-musl|mips_24kc|big-endian, soft float (ath79)
+mips64|mips64-unknown-linux-muslabi64|mips64_octeonplus|big-endian 64-bit n64, hard float (Octeon: EdgeRouter)
 "
 
 want=("$@")

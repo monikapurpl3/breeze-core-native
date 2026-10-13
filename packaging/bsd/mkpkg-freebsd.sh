@@ -1,12 +1,17 @@
 #!/bin/sh
-# Build a native FreeBSD package with pkg-create(8). Run ON FreeBSD, from the
-# source tree, after `cargo build --release`.
+# Build a native FreeBSD package with pkg-create(8).
 #
-#   sh packaging/bsd/mkpkg-freebsd.sh [output-dir]
+#   BC_BIN=path/to/breeze-core sh packaging/bsd/mkpkg-freebsd.sh [output-dir]
 #
-# No root needed: everything is staged in a temporary directory and pkg reads it
-# from there, unlike the NetBSD script which has to place files inside the
-# pkgsrc prefix before pkg_create can see them.
+# Runs in the bc-bsdpkg container (build-bsd.sh), whose pkg is FreeBSD's own,
+# built for Linux; until 4.3.2 this ran on a FreeBSD VM. Everything is staged in
+# a temporary directory and pkg reads it from there.
+#
+# The ABI is a pattern, FreeBSD:1[45]:amd64, not one release: pkg fnmatches a
+# package's ABI against the host's, and the cross-built binary links against
+# FreeBSD 14's libc, which 15 carries forward. The OPNsense plugin found this
+# out first ("wrong architecture: FreeBSD:14:amd64 instead of FreeBSD:15:amd64").
+# Widen it when FreeBSD 16 ships, after a run on 16.
 #
 # The package declares **no dependencies**. The Python one needed
 # lang/pythonNNN, matched to whatever the virtualenv had been built against,
@@ -16,11 +21,12 @@ set -eu
 
 OUT="${1:-.}"
 VER="$(grep -m1 '^version' crates/breeze-core/Cargo.toml | cut -d'"' -f2)"
-BIN=target/release/breeze-core
+BIN="${BC_BIN:-target/release/breeze-core}"
+ABI="${BC_FREEBSD_ABI:-FreeBSD:1[45]:amd64}"
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 
-[ -x "$BIN" ] || { echo "no $BIN - run: cargo build --release"; exit 1; }
+[ -f "$BIN" ] || { echo "no $BIN - build it with packaging/build-binaries.sh freebsd-amd64"; exit 1; }
 
 # The package root. /usr/local is where FreeBSD packages live, and the rc.d
 # script and example env go with it.
@@ -94,6 +100,7 @@ MANIFEST
 # above: that heredoc is quoted so the shell scripts inside it survive intact,
 # which also means $VER would not expand in it.
 printf 'version = "%s";\n' "$VER" >> "$manifest"
+printf 'abi = "%s";\narch = "%s";\n' "$ABI" "$ABI" >> "$manifest"
 
 mkdir -p "$OUT"
 pkg create -o "$OUT" -r "$STAGE" -M "$manifest" -p "$plist"
