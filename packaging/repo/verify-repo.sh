@@ -87,9 +87,16 @@ run_case() {
   # variable it does not list itself. Harmless everywhere else.
   # CASE_DOCKER_ARGS: extra docker arguments for one case, such as the
   # --platform an imported MIPS image needs.
+  #
+  # A case that names no platform gets linux/amd64 explicitly. The image store
+  # keeps one variant per tag: after `--platform linux/386 alpine:3.20`, a bare
+  # `alpine:3.20` IS the i386 image, and an amd64 case would silently test i386
+  # under emulation instead.
+  local platform="--platform linux/amd64"
+  case "${CASE_DOCKER_ARGS:-}" in *--platform*) platform="" ;; esac
   # shellcheck disable=SC2086
   if printf 'BASE=%s\nVER=%s\n%s' "$BASE" "$VER" "$script" \
-     | timeout 900 docker run --rm -i ${NETARG} ${CASE_DOCKER_ARGS:-} -e BASE="$BASE" -e VER="$VER" \
+     | timeout 900 docker run --rm -i ${NETARG} $platform ${CASE_DOCKER_ARGS:-} -e BASE="$BASE" -e VER="$VER" \
          "$image" sh -eu -s 2>&1 | sed 's/^/    /'; then
     report 0 "$name"
   else

@@ -82,7 +82,9 @@ for l in "${want[@]}"; do
   # Static binaries run in one x86-64 Alpine, whatever their architecture. A
   # dynamically linked one (s390x, the one glibc build) needs its own loader
   # and libc, so it runs in a Debian image of its own architecture instead.
-  image=alpine:3.24 platform="" shell=sh
+  # amd64 named explicitly: the image store keeps one variant per tag, so a
+  # bare tag can be whichever architecture was pulled last.
+  image=alpine:3.24 platform="--platform linux/amd64" shell=sh
   if file -b "$b" | grep -q 'dynamically linked'; then
     case "$l" in
       s390x) platform="--platform linux/s390x" ;;
