@@ -144,9 +144,13 @@ MACHINE="$(uname -m)"
 case "$MACHINE" in
     x86_64|amd64)  ARCH=amd64 ;;
     aarch64|arm64) ARCH=arm64 ;;
-    armv7l|armv7)  ARCH=armhf ;;
+    armv7l|armv7|armv6l) ARCH=armhf ;;
+    i[3-6]86)      ARCH=i386 ;;
     riscv64)       ARCH=riscv64 ;;
     ppc64le)       ARCH=ppc64le ;;
+    ppc64)         ARCH=ppc64 ;;
+    loongarch64)   ARCH=loong64 ;;
+    mips64)        ARCH=mips64 ;;
     s390x)         ARCH=s390x ;;
     *)             ARCH="$MACHINE" ;;
 esac

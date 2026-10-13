@@ -45,8 +45,11 @@ STAGE3="gentoo/stage3:amd64-openrc"
 TARBALLS="
 amd64|amd64
 arm64|arm64
-armv7|armv7
+armv6|armv6
+i686|i686
+loongarch64|loongarch64
 ppc64le|ppc64le
+ppc64|ppc64
 riscv64|riscv64
 s390x|s390x
 "

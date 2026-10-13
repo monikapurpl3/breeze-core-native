@@ -98,7 +98,7 @@ run_case() {
 }
 
 # --- apt --------------------------------------------------------------------
-run_case debian debian:12 '
+APT_CASE='
   apt-get -qq update >/dev/null
   apt-get -qq install -y curl gnupg >/dev/null
   echo "deb $BASE/deb stable main" > /etc/apt/sources.list.d/aspic.list
@@ -120,6 +120,16 @@ run_case debian debian:12 '
   breeze-core --version | grep -q "breeze-core $VER"
   echo "   installed $(breeze-core --version | head -1) from the signed repo"
 '
+run_case debian debian:12 "$APT_CASE"
+# The 32-bit and LoongArch .debs, each in its own architecture's Debian. armhf
+# is the armv6 binary (it is the one armhf .deb), installed here on Debian's
+# own ARMv7 armhf, which is what most armhf users run.
+CASE_DOCKER_ARGS="--platform linux/386" \
+run_case debian-i386 debian:12 "$APT_CASE"
+CASE_DOCKER_ARGS="--platform linux/arm/v7" \
+run_case debian-armhf debian:12 "$APT_CASE"
+CASE_DOCKER_ARGS="--platform linux/loong64" \
+run_case debian-loong64 ghcr.io/loong64/debian:trixie "$APT_CASE"
 
 # --- Termux -----------------------------------------------------------------
 # Termux's own apt, as the app user, in a real Android userland. x86_64 only:
@@ -206,6 +216,9 @@ CASE
 )"
 run_case alma  almalinux:9 "$RPM_CASE"
 run_case alma8 almalinux:8 "$RPM_CASE"
+# LoongArch has no Alma or Fedora image; openEuler publishes one, with dnf.
+CASE_DOCKER_ARGS="--platform linux/loong64" \
+run_case openeuler-loong64 openeuler/openeuler:latest "$RPM_CASE"
 
 # --- pacman -----------------------------------------------------------------
 run_case arch archlinux:base '
@@ -236,7 +249,7 @@ CONF
 '
 
 # --- apk --------------------------------------------------------------------
-run_case alpine alpine:3.20 '
+ALPINE_CASE='
   apk add --no-cache curl >/dev/null
   # No architecture in the URL: apk appends it itself, and pointing at the
   # per-arch directory makes it fetch /alpine/x86_64/x86_64/APKINDEX.tar.gz.
@@ -256,6 +269,15 @@ run_case alpine alpine:3.20 '
   breeze-core --version | grep -q "breeze-core $VER"
   echo "   installed from an RSA-signed APKINDEX"
 '
+run_case alpine alpine:3.20 "$ALPINE_CASE"
+CASE_DOCKER_ARGS="--platform linux/386" \
+run_case alpine-x86 alpine:3.20 "$ALPINE_CASE"
+CASE_DOCKER_ARGS="--platform linux/arm/v6" \
+run_case alpine-armhf alpine:3.20 "$ALPINE_CASE"
+# Big-endian ppc64 has no Alpine; Adelie Linux uses the same apk and is where
+# that binary's apk users are.
+CASE_DOCKER_ARGS="--platform linux/ppc64" \
+run_case adelie-ppc64 adelielinux/adelie:latest "$ALPINE_CASE"
 
 # --- xbps -------------------------------------------------------------------
 # The "both directions" shape is different here, because xbps trusts on first
@@ -264,7 +286,7 @@ run_case alpine alpine:3.20 '
 # SIGNED and by us, that the fingerprint it shows matches the one the site
 # publishes, and that every architecture is signed rather than only the one the
 # signing container happened to be.
-run_case void ghcr.io/void-linux/void-glibc-full:latest '
+VOID_CASE='
   # curl FIRST: the image ships no HTTP client at all -- no curl, no wget --
   # and the next line removes the repositories it would be installed from.
   xbps-install -Sy curl >/dev/null 2>&1
@@ -289,11 +311,11 @@ run_case void ghcr.io/void-linux/void-glibc-full:latest '
 
   echo "-- every architecture signed, not just this one"
   for a in x86_64 x86_64-musl aarch64 aarch64-musl armv7l armv7l-musl \
-           riscv64 riscv64-musl ppc64le ppc64le-musl; do
+           armv6l armv6l-musl i686 riscv64 riscv64-musl ppc64le ppc64le-musl; do
     XBPS_ARCH=$a xbps-install -S 2>&1 </dev/null | grep -q "RSA signed by" \
       || { echo "   !! $a is UNSIGNED"; exit 1; }
   done
-  echo "   all ten architecture/libc combinations"
+  echo "   all thirteen architecture/libc combinations"
 
   echo "-- and it installs, once the key is accepted"
   yes | xbps-install -S >/dev/null 2>&1 || true
@@ -303,6 +325,13 @@ run_case void ghcr.io/void-linux/void-glibc-full:latest '
   breeze-core --version | grep -q "breeze-core $VER"
   echo "   installed, and reports $VER"
 '
+run_case void ghcr.io/void-linux/void-glibc-full:latest "$VOID_CASE"
+CASE_DOCKER_ARGS="--platform linux/386" \
+run_case void-i686 ghcr.io/void-linux/void-glibc:latest "$VOID_CASE"
+CASE_DOCKER_ARGS="--platform linux/arm/v6" \
+run_case void-armv6l ghcr.io/void-linux/void-glibc:latest "$VOID_CASE"
+CASE_DOCKER_ARGS="--platform linux/arm/v6" \
+run_case void-armv6l-musl ghcr.io/void-linux/void-musl:latest "$VOID_CASE"
 
 # --- portage ----------------------------------------------------------------
 # No signature to check: Gentoo trust is the Manifest, whose hashes portage
@@ -428,6 +457,10 @@ if selected openwrt-mipsel || selected openwrt-mips || selected openwrt-mipsel-o
 fi
 run_case openwrt            openwrt/rootfs:x86_64-24.10.8 "$OPKG_CASE"
 run_case openwrt-apk        openwrt/rootfs:x86_64-25.12.5 "$APK3_CASE"
+# 32-bit x86 is the one new OpenWrt architecture with a rootfs image; the
+# arm1176, loongarch64 and Octeon packages differ from the ones tested here
+# only in their architecture label, and their binaries are run under QEMU.
+run_case openwrt-i386       openwrt/rootfs:i386_pentium4-v25.12.5 "$APK3_CASE"
 CASE_DOCKER_ARGS="--platform linux/mipsle" \
 run_case openwrt-mipsel     bc-openwrt:malta-le-25.12.5   "$APK3_CASE"
 run_case openwrt-mips       openwrt/rootfs:mips_24kc-25.12.5 "$APK3_CASE"

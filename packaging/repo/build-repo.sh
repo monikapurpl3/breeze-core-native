@@ -334,7 +334,7 @@ stage debian:bookworm-slim '
     gpg --batch --yes --clearsign -o "$d.asc" "$d" && mv "$d.asc" "$d"
   done
   cd "$R"
-  ARCHES="amd64 arm64 armhf riscv64 ppc64el s390x"
+  ARCHES="amd64 arm64 armhf i386 riscv64 ppc64el s390x loong64"
   for a in $ARCHES; do
     mkdir -p "dists/stable/main/binary-$a"
     apt-ftparchive --arch "$a" packages pool > "dists/stable/main/binary-$a/Packages"
@@ -408,7 +408,7 @@ stage almalinux:9 '
 %_signature gpg
 %_gpg_name Aspic Repository
 EOF
-  for a in x86_64 aarch64 armv7hl riscv64 ppc64le s390x; do
+  for a in x86_64 aarch64 armv7hl riscv64 ppc64le s390x loongarch64; do
     mkdir -p "/out/rpm/$a"
     cp /work/packaging/out/pkg/*."$a".rpm "/out/rpm/$a/" 2>/dev/null || continue
     rpmsign --addsign "/out/rpm/$a/"*.rpm >/dev/null
@@ -465,7 +465,10 @@ echo "=== apk repo ==="
 stage alpine:3.20 '
   apk add --no-cache abuild apk-tools >/dev/null
   missing=""
-  for a in x86_64 aarch64 armv7 riscv64 ppc64le s390x; do
+  # armhf and x86 are the Alpine names for armv6 and 32-bit x86. ppc64 is
+  # big-endian, for Adelie Linux, which uses apk and has no Alpine to point at.
+  # (No apostrophes in here: this whole script is one single-quoted string.)
+  for a in x86_64 aarch64 armv7 armhf x86 riscv64 ppc64le ppc64 s390x; do
     # Globbed, because nfpm writes the RELEASE into the name too and does it in
     # apk own dialect: breeze-core_4.0.2-r2_x86_64.apk. An exact
     # breeze-core_${VER}_${a}.apk matched nothing once BC_RELEASE was set, and
@@ -510,7 +513,7 @@ if ls packaging/out/xbps/*.xbps >/dev/null 2>&1; then
   stage ghcr.io/void-linux/void-glibc-full:latest '
     KEY=/work/packaging/repo/keys/aspic-xbps.pem
     ARCHES="x86_64 x86_64-musl aarch64 aarch64-musl armv7l armv7l-musl
-            riscv64 riscv64-musl ppc64le ppc64le-musl"
+            armv6l armv6l-musl i686 riscv64 riscv64-musl ppc64le ppc64le-musl"
     mkdir -p /out/xbps
     cp /work/packaging/out/xbps/*.xbps /out/xbps/
 

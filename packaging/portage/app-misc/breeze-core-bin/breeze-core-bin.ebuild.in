@@ -20,10 +20,15 @@ REL="https://github.com/monikapurpl3/breeze-core-native/releases/download/v${PV}
 SRC_URI="
 	amd64? ( ${REL}/breeze-core-${PV}-linux-amd64.tar.zst -> ${P}-amd64.tar.zst )
 	arm64? ( ${REL}/breeze-core-${PV}-linux-arm64.tar.zst -> ${P}-arm64.tar.zst )
-	arm? ( ${REL}/breeze-core-${PV}-linux-armv7.tar.zst -> ${P}-armv7.tar.zst )
-	ppc64? ( ${REL}/breeze-core-${PV}-linux-ppc64le.tar.zst -> ${P}-ppc64le.tar.zst )
+	arm? ( ${REL}/breeze-core-${PV}-linux-armv6.tar.zst -> ${P}-armv6.tar.zst )
+	loong? ( ${REL}/breeze-core-${PV}-linux-loongarch64.tar.zst -> ${P}-loongarch64.tar.zst )
+	ppc64? (
+		${REL}/breeze-core-${PV}-linux-ppc64le.tar.zst -> ${P}-ppc64le.tar.zst
+		${REL}/breeze-core-${PV}-linux-ppc64.tar.zst -> ${P}-ppc64.tar.zst
+	)
 	riscv? ( ${REL}/breeze-core-${PV}-linux-riscv64.tar.zst -> ${P}-riscv64.tar.zst )
 	s390? ( ${REL}/breeze-core-${PV}-linux-s390x.tar.zst -> ${P}-s390x.tar.zst )
+	x86? ( ${REL}/breeze-core-${PV}-linux-i686.tar.zst -> ${P}-i686.tar.zst )
 "
 S="${WORKDIR}"
 
@@ -33,7 +38,7 @@ SLOT="0"
 # -* first: this is a prebuilt binary, so an architecture is supported only
 # where a tarball actually exists. Without the -* an unlisted architecture
 # inherits nothing and the package looks merely untested rather than absent.
-KEYWORDS="-* ~amd64 ~arm ~arm64 ~ppc64 ~riscv ~s390"
+KEYWORDS="-* ~amd64 ~arm ~arm64 ~loong ~ppc64 ~riscv ~s390 ~x86"
 
 # No IUSE. There is nothing to configure at build time: the web panel, the TLS
 # roots and the timezone handling are all compiled in, and the binary is
@@ -56,27 +61,29 @@ QA_PREBUILT="usr/bin/breeze-core"
 
 pkg_pretend() {
 	# Gentoo's keywords are coarser than these binaries, and a prebuilt package
-	# gets no compile step in which the mismatch would surface. Two keywords
-	# span machines the tarball cannot run on:
+	# gets no compile step in which the mismatch would surface.
 	#
 	#   arm    — covers armv4 through armv7, soft- and hard-float. The tarball
-	#            is armv7 hard-float only.
-	#   ppc64  — covers both endiannesses. The tarball is little-endian only.
+	#            is armv6 hard-float, which every ARMv6 and ARMv7 hard-float
+	#            machine runs (the same binary is the armhf .deb, for the same
+	#            reason). Soft-float and pre-ARMv6 cannot.
+	#   ppc64  — covers both endiannesses; both are fetched, and src_unpack
+	#            takes the one CHOST says.
+	#   x86    — the binary needs SSE2 (Pentium 4, Athlon 64 and later): ring,
+	#            the TLS library, refuses to build without it.
 	#
 	# Refusing here, with the reason, beats installing a binary that dies as
 	# "cannot execute binary file" or SIGILL on first start. CHOST is the right
 	# thing to test rather than /proc/cpuinfo: it is also correct when the
 	# package is built once and pushed to other machines as a binary package.
-	if use arm && [[ ${CHOST} != armv7*hf ]] && [[ ${CHOST} != armv7*eabihf ]]; then
-		eerror "The prebuilt ARM binary is armv7 hard-float."
+	if use arm && [[ ${CHOST} != armv[67]*hf ]] && [[ ${CHOST} != armv[67]*-hardfloat-* ]]; then
+		eerror "The prebuilt ARM binary is armv6 hard-float (it also runs on armv7)."
 		eerror "This machine's CHOST is ${CHOST}, which cannot run it."
 		eerror "Build from source instead, or use the upstream tarball directly."
 		die "unsupported ARM variant for a prebuilt binary"
 	fi
-	if use ppc64 && [[ ${CHOST} != powerpc64le-* ]]; then
-		eerror "The prebuilt ppc64 binary is little-endian (powerpc64le)."
-		eerror "This machine's CHOST is ${CHOST}, which cannot run it."
-		die "unsupported ppc64 endianness for a prebuilt binary"
+	if use x86; then
+		ewarn "The prebuilt x86 binary needs SSE2: a Pentium 4, Athlon 64 or later."
 	fi
 }
 
@@ -109,6 +116,14 @@ src_unpack() {
 	# of unrelated force-overwrite behaviour to fix one symlink.
 	local f
 	for f in ${A}; do
+		# ppc64 fetches both endiannesses (see pkg_pretend); unpack the one
+		# this CHOST runs, or the second would overwrite the first.
+		if use ppc64; then
+			case ${f} in
+				*-ppc64le.tar.zst) [[ ${CHOST} == powerpc64le-* ]] || continue ;;
+				*-ppc64.tar.zst) [[ ${CHOST} == powerpc64le-* ]] && continue ;;
+			esac
+		fi
 		zstd -dc < "${DISTDIR}/${f}" | tar -xof - || die "unpacking ${f} failed"
 	done
 }

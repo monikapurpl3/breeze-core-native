@@ -22,25 +22,44 @@ VERSION="$(grep -m1 '^version' crates/breeze-core/Cargo.toml | cut -d'"' -f2)"
 #   BC_RELEASE=2 ./packaging/nfpm/build-packages.sh
 RELEASE="${BC_RELEASE:-1}"
 
-# label | nfpm arch | OpenWrt arch labels (space-separated, or "-")
+# label | nfpm arch | packagers | OpenWrt arch labels (space-separated, or "-")
 #
 # One binary per architecture serves every packager, because the Linux builds
 # are static musl. The OpenWrt column exists because opkg matches its own
 # architecture names, which nfpm has never heard of: the ipks differ only in
 # that field, so they are produced by re-running nfpm with BC_ARCH set to each.
 #
-# An nfpm arch of "-" means OpenWrt only: 32-bit MIPS is what most routers
-# are, and no distribution that uses deb, rpm, pacman or Alpine's apk still
-# ships it. Those binaries come from packaging/mips/build-mips.sh.
+# An nfpm arch of "-" means OpenWrt only: MIPS is what most routers are, and
+# no distribution that uses deb, rpm, pacman or Alpine's apk still ships it.
+# Those binaries come from packaging/mips/build-mips.sh.
+#
+# The packagers column lists what is built for that architecture. Since 4.4.0
+# not every row gets all four:
+#
+#   * armhf is ONE Debian architecture for two ARM generations, so it can have
+#     one .deb: the armv6 binary, which also runs on every ARMv7 board, and is
+#     the only one Raspberry Pi OS on a Pi Zero or Pi 1 can run. armv7 keeps
+#     its rpm, pacman and Alpine packages (Alpine's armv7 and armhf are separate
+#     architectures).
+#   * a format is built only where there is a distribution to install it into
+#     and a container image to prove that: i686 has Debian, Alpine and Void;
+#     loongarch64 has Debian (loong64) and openEuler (rpm); big-endian ppc64
+#     has Adelie Linux, which uses apk. Arch Linux 32, Alpine loongarch64 and
+#     Debian's ppc64 port have no image to verify against, so they get none.
 ARCHES="
-amd64|amd64|x86_64
-arm64|arm64|aarch64_generic aarch64_cortex-a53 aarch64_cortex-a72
-armv7|arm7|arm_cortex-a7_neon-vfpv4
-riscv64|riscv64|riscv64_riscv64
-ppc64le|ppc64le|-
-s390x|s390x|-
-mipsel|-|mipsel_24kc
-mips|-|mips_24kc
+amd64|amd64|deb rpm archlinux apk|x86_64
+arm64|arm64|deb rpm archlinux apk|aarch64_generic aarch64_cortex-a53 aarch64_cortex-a72
+armv7|arm7|rpm archlinux apk|arm_cortex-a7_neon-vfpv4
+armv6|arm6|deb apk|arm_arm1176jzf-s_vfp
+i686|386|deb apk|i386_pentium4
+riscv64|riscv64|deb rpm archlinux apk|riscv64_riscv64
+ppc64le|ppc64le|deb rpm archlinux apk|-
+ppc64|ppc64|apk|-
+loongarch64|loong64|deb rpm|loongarch64_generic
+s390x|s390x|deb rpm archlinux apk|-
+mipsel|-|-|mipsel_24kc
+mips|-|-|mips_24kc
+mips64|-|-|mips64_octeonplus
 "
 
 want=("$@")
@@ -68,7 +87,7 @@ export MSYS_NO_PATHCONV=1
 mkdir -p "$OUT"
 made=0
 
-while IFS='|' read -r label nfpm_arch owrt; do
+while IFS='|' read -r label nfpm_arch pkgrs owrt; do
   [ -n "$label" ] || continue
   selected "$label" || continue
   binary="$BIN/$label/breeze-core"
@@ -118,7 +137,7 @@ while IFS='|' read -r label nfpm_arch owrt; do
       mkdir -p /stage /tmp/out
       install -m 0755 '/work/$binary' /stage/breeze-core
       if [ '$nfpm_arch' != '-' ]; then
-        for packager in deb rpm archlinux apk; do
+        for packager in $pkgrs; do
           BC_ARCH='$nfpm_arch' nfpm package -f packaging/nfpm/nfpm.yaml -p \$packager -t /tmp/out
         done
       fi

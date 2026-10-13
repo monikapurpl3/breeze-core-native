@@ -41,11 +41,13 @@ IMAGE="ghcr.io/void-linux/void-glibc-full:latest"
 # No s390x row: Void has never had an s390x port, so there is no arch string to
 # put here. riscv64 and ppc64le are second-tier on Void itself and are built
 # but untested on real hardware, exactly as they are for every other packager
-# in this repository.
+# in this repository. i686 has no musl row because Void has no i686-musl.
 ARCHES="
 amd64|x86_64 x86_64-musl
 arm64|aarch64 aarch64-musl
 armv7|armv7l armv7l-musl
+armv6|armv6l armv6l-musl
+i686|i686
 riscv64|riscv64 riscv64-musl
 ppc64le|ppc64le ppc64le-musl
 "

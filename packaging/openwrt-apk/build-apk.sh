@@ -38,9 +38,13 @@ aarch64_generic|arm64
 aarch64_cortex-a53|arm64
 aarch64_cortex-a72|arm64
 arm_cortex-a7_neon-vfpv4|armv7
+arm_arm1176jzf-s_vfp|armv6
+i386_pentium4|i686
 riscv64_riscv64|riscv64
+loongarch64_generic|loongarch64
 mipsel_24kc|mipsel
 mips_24kc|mips
+mips64_octeonplus|mips64
 "
 
 MOUNT="$REPO"
