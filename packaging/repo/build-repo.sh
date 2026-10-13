@@ -275,6 +275,12 @@ mkdir -p "$OUT/breeze-core"
 # project is broken rather than the page being old.
 sed "s/@VER@/$VER/g" site/index.html > "$OUT/index.html"
 sed "s/@VER@/$VER/g" site/breeze-core/index.html > "$OUT/breeze-core/index.html"
+# The frozen 4.3.2 oddities: no version to substitute, and their downloads are
+# on a GitHub prerelease, but the page is part of the tree like any other --
+# publish.sh --tree publishes the tree and nothing else, so a page missing here
+# is a page deleted from aspic (it went out as a 404 the first time).
+mkdir -p "$OUT/breeze-core/oddities"
+cp site/breeze-core/oddities/index.html "$OUT/breeze-core/oddities/index.html"
 # The current release, one line, for migrate.sh to ask for. That script is
 # published with its checksums, so the version it installs lives here rather
 # than in it: written into it, it said 4.0.0 until 4.2.0.
