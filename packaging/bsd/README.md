@@ -1,6 +1,6 @@
 # packaging/bsd — the BSDs
 
-Everything here runs on the workstation. Since 4.4.0 the three BSD binaries are
+Everything here runs on the workstation. Since October 2026 the three BSD binaries are
 cross-compiled by `packaging/build-binaries.sh` (see `packaging/cross/README.md`)
 and packaged and signed by `build-bsd.sh`, using each BSD's own packaging tools
 inside the `bc-bsdpkg` container. The VMs only run the verify scripts.

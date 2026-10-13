@@ -93,7 +93,7 @@ agree:
 | RSA-4096 | xbps | all `xbps-rindex` signs with |
 | ECDSA P-256 | OpenWrt apk (25.12+) | what OpenWrt itself signs its apk indexes with; apk-tools 3 reads neither GPG nor usign |
 
-FreeBSD and OpenBSD are signed **here too**, since 4.4.0: FreeBSD's `pkg repo`
+FreeBSD and OpenBSD are signed **here too**, from the release after 4.3.2: FreeBSD's `pkg repo`
 and `signify` run in the `bc-bsdpkg` container (`packaging/bsd/`), the keys
 streamed into it per run. Until 4.3.2 they were signed on each BSD's own VM, and
 the keys went there to be used and shredded.

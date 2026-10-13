@@ -472,7 +472,7 @@ hour.
 
 **All three BSDs are full builds** — `ring` compiles for each, so each is the
 same ~2.5 MB binary with TLS, and no BSD package declares a dependency where the
-Python ones needed `python312`. Since 4.4.0 they are cross-built and packaged on
+Python ones needed `python312`. Since October 2026 they are cross-built and packaged on
 the workstation (see Cross-compilation above and `packaging/bsd/README.md`);
 until 4.3.2 each was built on a VM of its own system.
 

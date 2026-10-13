@@ -33,7 +33,7 @@ RELEASE="${BC_RELEASE:-1}"
 # no distribution that uses deb, rpm, pacman or Alpine's apk still ships it.
 # Those binaries come from packaging/mips/build-mips.sh.
 #
-# The packagers column lists what is built for that architecture. Since 4.4.0
+# The packagers column lists what is built for that architecture. Since October 2026
 # not every row gets all four:
 #
 #   * armhf is ONE Debian architecture for two ARM generations, so it can have

@@ -25,7 +25,7 @@
 # 2.17, which is what the Python build achieved by compiling inside deliberately
 # ancient containers.
 #
-# The BSDs are cross-built here too, since 4.4.0, each against the libc its own
+# The BSDs are cross-built here too, since October 2026, each against the libc its own
 # release uses (packaging/cross/README.md has the detail):
 #
 #   FreeBSD   zig, which ships FreeBSD 14's libc; the binary also runs on

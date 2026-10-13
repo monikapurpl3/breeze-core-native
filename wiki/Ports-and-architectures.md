@@ -125,7 +125,7 @@ way from where you would look for the cause.
 
 ## The BSDs, cross-built
 
-Since 4.4.0 the BSD binaries are cross-compiled on the same workstation as
+From the release after 4.3.2 the BSD binaries are cross-compiled on the same workstation as
 everything else, each against the C library of the release it is for, and
 packaged and signed there with each BSD's own tools. Until 4.3.2 each was
 compiled, packaged and signed on a virtual machine of its own system.
@@ -195,7 +195,7 @@ The traps still worth knowing:
 - Soft-float triples are pedantic about their suffixes, and getting one wrong
   produces a package a router accepts and then cannot run.
 - **`mips64_octeonplus` (Cavium Octeon: EdgeRouter, and OpenWrt's octeon
-  target) ships from 4.4.0, built with OpenWrt's own octeon toolchain — and it
+  target) ships since October 2026, added to 4.3.2, built with OpenWrt's own octeon toolchain — and it
   is the one binary here that nothing on this side can run.** That toolchain
   uses Octeon-only instructions, which QEMU's generic MIPS64 lacks, while QEMU's
   Octeon model has no FPU. Neither has a real Octeon: there the kernel emulates

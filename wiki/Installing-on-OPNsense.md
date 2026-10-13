@@ -57,7 +57,7 @@ comes out. Nothing will nag you.
 OPNsense 26.1 is FreeBSD 14.3 and OPNsense 26.7 is FreeBSD 15.1, and **FreeBSD
 binaries run forward, not backward** — a 15 build will not start on 14. So the
 binary is linked against FreeBSD 14's C library, and that one binary runs on
-both. Since 4.4.0 it is the same binary as the ordinary FreeBSD package, which
+both. From the release after 4.3.2 it is the same binary as the ordinary FreeBSD package, which
 is therefore also for 14 and 15.
 
 The package says so to `pkg` with the ABI pattern `FreeBSD:1[45]:amd64`: it
