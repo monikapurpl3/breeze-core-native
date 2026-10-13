@@ -353,9 +353,15 @@ run_case gentoo alpine:3.20 '
   # suffix (breeze-core-bin-4.0.2-r1.ebuild), and an exact name would fail then.
   ls /tmp/aspic/app-misc/breeze-core-bin/breeze-core-bin-"$VER"*.ebuild >/dev/null 2>&1 || {
     echo "   !! no ebuild for $VER"; ls /tmp/aspic/app-misc/breeze-core-bin; exit 1; }
+  # One DIST line per distfile the ebuild names (each SRC_URI entry renames
+  # its tarball with "->"), counted rather than hardcoded: the number changes
+  # whenever an architecture is added, and a fixed 6 failed when 4.3.2-r1 grew
+  # to 9.
+  eb=$(ls /tmp/aspic/app-misc/breeze-core-bin/breeze-core-bin-"$VER"*.ebuild | head -1)
+  want=$(grep -c -- " -> " "$eb")
   n=$(grep -c "^DIST " /tmp/aspic/app-misc/breeze-core-bin/Manifest || echo 0)
-  [ "$n" = 6 ] || { echo "   !! Manifest has $n DIST lines, expected 6"; exit 1; }
-  echo "   $(basename $(ls /tmp/aspic/app-misc/breeze-core-bin/breeze-core-bin-"$VER"*.ebuild | head -1)), 6 architectures in the Manifest"
+  [ "$n" = "$want" ] || { echo "   !! Manifest has $n DIST lines, the ebuild names $want distfiles"; exit 1; }
+  echo "   $(basename "$eb"), $n distfiles in the Manifest"
 
   echo "-- the account ebuilds must be there too"
   test -f /tmp/aspic/acct-user/breeze/breeze-0.ebuild || { echo "   !! no acct-user"; exit 1; }
