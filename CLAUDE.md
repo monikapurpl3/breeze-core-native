@@ -132,23 +132,21 @@ from the same reading as the code:
 So: msmart's test vectors for the protocol, pydantic-generated fixtures for the
 stores, Python-generated signatures for auth, and `diag` for the HTTP surface.
 
-### Read the reference from `~/Desktop/breeze-core`, nowhere else
+### Read the reference from `M:\breeze-core`, nowhere else
 
-Three copies of the Python project exist on the maintainer's machine and only one
-is current:
+The Python project lives at **`M:\breeze-core`** on the maintainer's Dev Drive:
+the tree 3.2.0 was built from. One stale copy remains and looks plausible:
+`mrrp:/opt/meow-ac` with `meow-ac.service`, a dead legacy deployment. The live
+service there is `breeze-core.service` from the RPM, with its stores in
+`/etc/breeze-core` — *not* `/etc/meow-ac`. (A second stale copy,
+`~/Desktop/MEOWAC`, was deleted in October 2026.)
 
-| Path | What it is |
-|---|---|
-| `~/Desktop/breeze-core` | **The reference.** The tree 3.2.0 was built from. |
-| `~/Desktop/MEOWAC` | A stale working copy. Its `CLAUDE.md` still loads if you start a session there, which makes it look authoritative. |
-| `mrrp:/opt/meow-ac` + `meow-ac.service` | A dead legacy deployment, inactive. The live service is `breeze-core.service` from the RPM, with its stores in `/etc/breeze-core` — *not* `/etc/meow-ac`. |
-
-This has already cost real time: `MEOWAC` and `/opt/meow-ac` predate the `beep`
-field and the whole timers feature, and the stale `/etc/meow-ac/programs.json`
-has no `beep` key. Reading those, it looks exactly like the native port invented
-a field and broke byte-compatibility — a convincing bug that does not exist.
+This has already cost real time: the stale copies predate the `beep` field and
+the whole timers feature, and the stale `/etc/meow-ac/programs.json` has no
+`beep` key. Reading those, it looks exactly like the native port invented a
+field and broke byte-compatibility — a convincing bug that does not exist.
 **Before trusting any Python file as the reference, `md5sum` it against
-`~/Desktop/breeze-core`.**
+`M:\breeze-core`.**
 
 ## Conventions and gotchas specific to this repo
 
@@ -236,13 +234,35 @@ pydantic models.
 
 ### Cross-compilation
 
-- **FreeBSD and OpenBSD cross-compile**; OpenBSD is tier 3 and needs
-  `-Zbuild-std`.
-- **NetBSD needs the real VM** — `cargo-zigbuild` refuses it, as zig ships no
-  NetBSD libc.
+Everything is built on the workstation; `packaging/cross/README.md` has the
+per-target table. The VMs only run verify scripts.
+
+- **Zig is pinned to 0.16.0** and `build-binaries.sh` refuses any other
+  (`BC_ZIG` points at a pinned copy). 0.17.0 arrived on the workstation by
+  auto-update and cannot build i686.
+- **FreeBSD** is `cargo zigbuild` (zig ships FreeBSD 14's libc, so the one
+  binary also serves OPNsense 14 and 15). **NetBSD** is plain cargo with
+  `packaging/cross/zcc.js` as linker and CC: zig has its libc, only
+  cargo-zigbuild's target list lacks it, and cc-rs's `--target=` must be
+  stripped for zig.
+- **OpenBSD links against the release's real libraries**, not zig's stubs
+  (whose binary asks for a bare `libc.so`): `packaging/cross/openbsd-sysroot.sh`
+  fetches and pins them, clang + lld link, `-Zcf-protection=branch` adds the IBT
+  landing pads OpenBSD enforces. The binary is valid for one release
+  (`OPENBSD_REL` in `build-binaries.sh`).
+- **BSD packages are made here too**, with each BSD's own tools in the
+  `bc-bsdpkg` image (`packaging/bsd/`), and signed here: the keys no longer go
+  to a VM.
+- **loongarch64** needs `+crt-static -C link-self-contained=no` and has
+  `--no-rosegment` stripped (zcc.js); otherwise it links dynamically and twice.
+- **The armhf .deb is the armv6 binary**: one Debian architecture for two ARM
+  generations, and armv6 code runs on every ARMv7 board as well as the Pi
+  Zero/1. The Gentoo `arm` keyword uses it for the same reason.
 - **MIPS links with the OpenWrt SDK toolchain**, not zig: zig 0.16's bundled
   `mipsel` musl emits references to its own std internals it then fails to
-  provide.
+  provide. Octeon (mips64) uses OpenWrt's octeon toolchain and **cannot run
+  under QEMU** (Octeon-only instructions, and no FPU in QEMU's Octeon model);
+  only real hardware verifies it.
 - **Termux is an Android build, linked by the NDK** (`packaging/termux/`), not
   the musl binary: on Android musl finds no `/etc/localtime` and runs in UTC, so
   schedules fire hours out. Android-only code is `cfg(target_os = "android")`;
@@ -450,12 +470,11 @@ real file, for that reason — and every case is wrapped in `timeout`, because a
 check that waits for a refusal that never comes hung two containers for half an
 hour.
 
-**NetBSD builds natively and fully** — `ring` compiles, so it is the same ~2.5 MB
-binary with TLS, and the package declares no dependencies where the Python one
-needed `python312`. `~/.cargo` on that machine is root-owned, so builds set
-`CARGO_HOME` inside the work directory; `pkg_create`/`pkg_add`/`pkg_info` are not
-on a login PATH. FreeBSD and OpenBSD are not done: no cross-build exists (Zig
-bundles no BSD libc) and those VMs were not running.
+**All three BSDs are full builds** — `ring` compiles for each, so each is the
+same ~2.5 MB binary with TLS, and no BSD package declares a dependency where the
+Python ones needed `python312`. Since 4.4.0 they are cross-built and packaged on
+the workstation (see Cross-compilation above and `packaging/bsd/README.md`);
+until 4.3.2 each was built on a VM of its own system.
 
 ## Where this publishes: aspic, and the sunset
 

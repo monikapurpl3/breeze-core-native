@@ -9,6 +9,7 @@ native Android app that talk to your units over your own LAN.
 
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/monikapurpl3/breeze-core-native?label=release)](https://github.com/monikapurpl3/breeze-core-native/releases/latest)
+[![Runs on](https://img.shields.io/badge/runs%20on-22%20targets%20·%207%20operating%20systems-e69138)](https://github.com/monikapurpl3/breeze-core-native/wiki/Ports-and-architectures)
 [![Packages](https://img.shields.io/badge/packages-deb%20·%20rpm%20·%20apk%20·%20pacman%20·%20xbps%20·%20ebuild%20·%20opkg-6aa84f)](https://aspic.salataputarica.hr.eu.org)
 [![Documentation](https://img.shields.io/badge/docs-wiki-8e7cc3)](https://github.com/monikapurpl3/breeze-core-native/wiki)
 
@@ -39,6 +40,25 @@ internet is down, your air conditioning still works.
 
 It is **one static executable of about 2.5 MB with no dependencies at all** —
 not few, none — which is why it fits as comfortably on a router as on a server.
+
+## Runs on almost anything
+
+The same program, built from one source tree for **22 targets**:
+
+| | |
+|---|---|
+| **Linux** | x86-64 · 32-bit x86 · ARM64 · ARMv7 · ARMv6 (every Raspberry Pi, the Zero included) · RISC-V · POWER, both endiannesses · IBM Z mainframes · LoongArch · MIPS, both endiannesses · Cavium Octeon |
+| **Routers and firewalls** | OpenWrt, twelve package architectures · OPNsense, with its own GUI page |
+| **The BSDs** | FreeBSD · NetBSD · OpenBSD |
+| **Desktops** | Windows · macOS, Apple silicon and Intel |
+| **Phones** | Android, through Termux |
+| **Containers** | Docker and Podman, amd64 and arm64 |
+
+Each one is packaged for its own system's package manager wherever it has one,
+signed, and **run before it ships**: on real FreeBSD, NetBSD and OpenBSD
+machines, on real Macs, and under emulation for the architectures nobody keeps a
+spare of. [Ports and architectures](https://github.com/monikapurpl3/breeze-core-native/wiki/Ports-and-architectures)
+says how each is checked, and the one that cannot be.
 
 ## Install
 

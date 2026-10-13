@@ -52,12 +52,13 @@ firewall is a much bigger ask than fetching one file. So this is one file.
 The trade is that upgrades are manual: `pkg add -f` the new URL when a release
 comes out. Nothing will nag you.
 
-## Why it is built on FreeBSD 14
+## Why it is built for FreeBSD 14
 
-OPNsense 26.1 is FreeBSD 14.3 and OPNsense 26.7 is FreeBSD 15.1. The ordinary
-FreeBSD package in this project is built on 15, and **FreeBSD binaries run
-forward, not backward** — a 15 build will not start on 14. So the plugin's
-binary is compiled in a FreeBSD 14 root, and that one binary runs on both.
+OPNsense 26.1 is FreeBSD 14.3 and OPNsense 26.7 is FreeBSD 15.1, and **FreeBSD
+binaries run forward, not backward** — a 15 build will not start on 14. So the
+binary is linked against FreeBSD 14's C library, and that one binary runs on
+both. Since 4.4.0 it is the same binary as the ordinary FreeBSD package, which
+is therefore also for 14 and 15.
 
 The package says so to `pkg` with the ABI pattern `FreeBSD:1[45]:amd64`: it
 installs on 14 and 15, and is refused on anything else. **4.1.1 was stamped

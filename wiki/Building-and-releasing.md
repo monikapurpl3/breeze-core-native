@@ -93,9 +93,10 @@ agree:
 | RSA-4096 | xbps | all `xbps-rindex` signs with |
 | ECDSA P-256 | OpenWrt apk (25.12+) | what OpenWrt itself signs its apk indexes with; apk-tools 3 reads neither GPG nor usign |
 
-FreeBSD and OpenBSD are signed **on their own machines** — `pkg repo` and
-`signify` respectively — and those keys are shredded (`rm -P`) after use rather
-than left on a VM.
+FreeBSD and OpenBSD are signed **here too**, since 4.4.0: FreeBSD's `pkg repo`
+and `signify` run in the `bc-bsdpkg` container (`packaging/bsd/`), the keys
+streamed into it per run. Until 4.3.2 they were signed on each BSD's own VM, and
+the keys went there to be used and shredded.
 
 `packaging/repo/portage-git/` needs backing up for the same reason as the keys,
 for a different one: it holds the Gentoo overlay's git history. Regenerating it
@@ -105,9 +106,13 @@ fail with unrelated histories for everyone who had already added the overlay.
 ## Verification is the point
 
 `verify-repo.sh` installs from the built tree in clean containers of each
-distribution — Debian 12, Termux, AlmaLinux 9, AlmaLinux 8, Arch, Alpine, Void,
-Gentoo, and OpenWrt 24.10 (opkg) and 25.12 (apk), the latter two on x86_64 and on
-both MIPS endiannesses under QEMU (`packaging/mips/prepare-qemu.sh` first) — served over HTTP by an nginx container, because that is the only way
+distribution — Debian 12 (amd64, i386 and armhf), Debian loong64, Termux,
+AlmaLinux 9, AlmaLinux 8, openEuler (LoongArch), Arch, Alpine (x86_64, x86 and
+armhf), Adélie (big-endian ppc64), Void (x86_64, i686, armv6l glibc and musl),
+Gentoo, and OpenWrt 24.10 (opkg) and 25.12 (apk), the latter two on x86_64,
+32-bit x86 and both MIPS endiannesses — the foreign ones under QEMU
+(`packaging/mips/prepare-qemu.sh` and `packaging/cross/install-qemu-binfmt.sh
+ppc64 loongarch64` first) — served over HTTP by an nginx container, because that is the only way
 to exercise the URL layout and the index fetch as a real client does.
 
 **Both directions, every time.** Every one of those clients will happily

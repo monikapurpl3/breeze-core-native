@@ -9,7 +9,7 @@ None of the three declares a single dependency.
 
 ## FreeBSD
 
-A proper RSA-signed `pkg` repository, built and verified on FreeBSD 15.1.
+A proper RSA-signed `pkg` repository, for **FreeBSD 14 and 15**, verified on FreeBSD 15.1.
 
 ```sh
 sudo mkdir -p /usr/local/etc/pkg/keys /usr/local/etc/pkg/repos
@@ -49,7 +49,7 @@ sandbox to lean on. See [Exposing it safely](Exposing-it-safely).
 
 ## NetBSD
 
-A `pkgin` feed, built on a real NetBSD 11.0 machine.
+A `pkgin` feed, for **NetBSD 10.1 and newer**, verified on NetBSD 11.0. On 11.x, `pkg_add` notes that the package "was built for a different platform" (10.1) and installs it: that note is true, and harmless.
 
 ```sh
 echo "https://aspic.salataputarica.hr.eu.org/netbsd/All" \
@@ -78,7 +78,7 @@ Enable it with `breeze_core=YES` in `/etc/rc.conf`, then
 
 ## OpenBSD
 
-A **signify**-signed package, built and verified on OpenBSD 7.9.
+A **signify**-signed package for OpenBSD 7.9, verified on OpenBSD 7.9.
 
 ```sh
 # the key's filename is not cosmetic -- see below

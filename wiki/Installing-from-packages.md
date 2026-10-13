@@ -13,15 +13,19 @@ Debian 12, Alpine and RHEL 8 alike.
 
 | Family | Manager | Architectures |
 |---|---|---|
-| Debian · Ubuntu · Mint · Pop!_OS · Raspberry Pi OS · Devuan | `apt` | amd64, arm64, armhf, riscv64, ppc64el, s390x |
-| Fedora · RHEL · AlmaLinux · Rocky · CentOS Stream | `dnf` | x86_64, aarch64, armv7hl, riscv64, ppc64le, s390x |
+| Debian · Ubuntu · Mint · Pop!_OS · Raspberry Pi OS · Devuan | `apt` | amd64, arm64, armhf (every Pi, the Zero included), i386, riscv64, ppc64el, s390x, loong64 |
+| Fedora · RHEL · AlmaLinux · Rocky · CentOS Stream · openEuler | `dnf` | x86_64, aarch64, armv7hl, riscv64, ppc64le, s390x, loongarch64 |
 | openSUSE Leap · Tumbleweed · SLES | `zypper` | the same rpms |
 | Arch · Manjaro · Artix · EndeavourOS | `pacman` | x86_64, aarch64, armv7h |
-| Alpine | `apk` | x86_64, aarch64, armv7, riscv64, ppc64le, s390x |
-| Void | `xbps` | x86_64, aarch64, armv7l, riscv64, ppc64le — each in **glibc and musl** |
-| Gentoo · Funtoo | `emerge` | an overlay: `~amd64 ~arm ~arm64 ~ppc64 ~riscv ~s390` |
-| OpenWrt 25.12+ | `apk` (v3) | x86_64, 3 × aarch64, arm_cortex-a7, riscv64, **mipsel_24kc, mips_24kc** |
-| OpenWrt 24.10 and older | `opkg` | the same eight |
+| Alpine | `apk` | x86_64, x86, aarch64, armv7, armhf, riscv64, ppc64le, s390x |
+| Adélie Linux | `apk` | ppc64 (big-endian), from the same repository |
+| Void | `xbps` | x86_64, aarch64, armv7l, armv6l, riscv64, ppc64le — each in **glibc and musl** — and i686 |
+| Gentoo · Funtoo | `emerge` | an overlay: `~amd64 ~x86 ~arm ~arm64 ~loong ~ppc64 ~riscv ~s390` |
+| OpenWrt 25.12+ | `apk` (v3) | x86_64, i386_pentium4, 3 × aarch64, arm_cortex-a7, arm_arm1176jzf-s (Pi Zero/1), riscv64, loongarch64, **mipsel_24kc, mips_24kc, mips64_octeonplus** |
+| OpenWrt 24.10 and older | `opkg` | the same twelve |
+
+32-bit x86 needs SSE2 (a Pentium 4, Athlon 64 or later). Every other
+architecture, and the details, are on [Ports and architectures](Ports-and-architectures).
 
 Plus [the BSDs](Installing-on-the-BSDs), [OPNsense](Installing-on-OPNsense),
 [Termux](Installing-on-Termux), [Windows](Installing-on-Windows) and

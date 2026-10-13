@@ -1,32 +1,58 @@
 # Ports and architectures
 
-Which machines Breeze Core is packaged for, how the binaries are produced, and
-what is honestly absent.
+Which machines Breeze Core runs on, how the binaries are produced, and what is
+honestly absent.
+
+**One small static executable, built for 22 targets: thirteen Linux
+architectures, from a Raspberry Pi Zero and a 32-bit thin client to a Loongson
+desktop, an IBM mainframe and a big-endian Power Mac; Android; Windows; macOS on
+both kinds of Mac; FreeBSD, NetBSD and OpenBSD; and the routers and firewalls
+in between, OpenWrt and OPNsense.** All of it is built on one workstation, from
+one source tree, with no emulator in the build.
 
 There is no proof-of-concept tier. Every architecture below either has a signed
 package published on every release, or is listed here as absent with the reason.
 
 ## What ships
 
-| Architecture | deb | rpm | pacman | apk | xbps | ipk | ebuild | tarball |
+| Architecture | deb | rpm | pacman | apk | xbps | ipk/OpenWrt | ebuild | tarball |
 |---|---|---|---|---|---|---|---|---|
 | x86-64 | ✅ `amd64` | ✅ `x86_64` | ✅ `x86_64` | ✅ `x86_64` | ✅ ×2 | ✅ `x86_64` | ✅ `~amd64` | ✅ |
+| x86 (32-bit) § | ✅ `i386` | — | — | ✅ `x86` | ✅ `i686` | ✅ `i386_pentium4` | ✅ `~x86` | ✅ |
 | ARM64 | ✅ `arm64` | ✅ `aarch64` | ✅ `aarch64` | ✅ `aarch64` | ✅ ×2 | ✅ 3 targets | ✅ `~arm64` | ✅ |
-| ARMv7 | ✅ `armhf` | ✅ `armv7hl` | ✅ `armv7h` | ✅ `armv7` | ✅ ×2 | ✅ `arm_cortex-a7…` | ✅ `~arm` † | ✅ |
+| ARMv7 | ✅ `armhf` ¶ | ✅ `armv7hl` | ✅ `armv7h` | ✅ `armv7` | ✅ ×2 | ✅ `arm_cortex-a7…` | ✅ `~arm` ¶ | ✅ |
+| ARMv6 (Pi Zero, Pi 1) | ✅ `armhf` ¶ | — | — | ✅ `armhf` | ✅ ×2 | ✅ `arm_arm1176jzf-s_vfp` | ✅ `~arm` ¶ | ✅ |
 | riscv64 | ✅ | ✅ | ⬇ | ✅ | ✅ ×2 | ✅ `riscv64_riscv64` | ✅ `~riscv` | ✅ |
 | ppc64le | ✅ `ppc64el` | ✅ | ⬇ | ✅ | ✅ ×2 | — | ✅ `~ppc64` † | ✅ |
+| ppc64 (big-endian) | — | — | — | ✅ `ppc64` (Adélie) | — | — | ✅ `~ppc64` † | ✅ |
 | s390x | ✅ | ✅ | ⬇ | ✅ | — | — | ✅ `~s390` | ✅ |
+| LoongArch64 | ✅ `loong64` | ✅ `loongarch64` | — | — | — | ✅ `loongarch64_generic` | ✅ `~loong` | ✅ |
 | MIPS (little-endian) | — | — | — | — | — | ✅ `mipsel_24kc` ‡ | — | ✅ |
 | MIPS (big-endian) | — | — | — | — | — | ✅ `mips_24kc` ‡ | — | ✅ |
+| MIPS64 (Octeon) | — | — | — | — | — | ✅ `mips64_octeonplus` ‡ | — | ✅ |
 
 ✅ in a signed repository · ⬇ built and attached to the release, but not in a
-repository · † keyworded with a guard, see below
-· ‡ OpenWrt only, in both feeds (see [MIPS](#mips))
+repository · † keyworded with a guard, see below · ‡ OpenWrt only, in both
+feeds (see [MIPS](#mips)) · § needs SSE2: Pentium 4, Athlon 64 or later ·
+¶ the same armv6 binary, see below
 
 Plus a native package each for **FreeBSD**, **NetBSD** and **OpenBSD**, an
 **OPNsense** plugin, a **Windows** installer, **Termux** packages for Android
 (aarch64, arm, x86_64), and **macOS** tarballs for Apple silicon and Intel,
 below.
+
+**One armhf, two ARMs.** Debian and Raspberry Pi OS call both ARMv6 and ARMv7
+hard-float `armhf`, so there can be only one armhf `.deb`, and it holds the
+**armv6** binary: ARMv7 runs ARMv6 code, so the one package serves every Pi from
+the Zero up and every ARMv7 board. Gentoo's `arm` keyword uses the same binary
+for the same reason. Alpine and Void name the two separately, so they get both.
+
+**A format is offered only where it can be proven.** The 32-bit x86 and
+LoongArch packages exist for the distributions that have an image to install
+into and check: Debian, Alpine, Void and OpenWrt for x86; Debian (`loong64`)
+and openEuler (rpm) for LoongArch; and Adélie Linux, which uses apk, for
+big-endian ppc64. Arch Linux 32, Alpine's LoongArch port and Debian's ppc64 port
+have none, so they get no package — the tarball still runs there.
 
 **`×2` is glibc and musl.** Void treats the two libcs as separate
 architectures with separate package indexes, so each gets its own package — the
@@ -38,11 +64,12 @@ s390x port for a repository to serve. Those packages are still built and
 attached to each release, so `pacman -U <url>` works if you run one of the
 unofficial ports.
 
-**The two † rows are keyworded but guarded.** Gentoo's `arm` keyword spans
-armv4 through armv7 and both float ABIs, and `ppc64` spans both endiannesses,
-while these binaries are armv7 hard-float and little-endian only. The ebuild
-checks `CHOST` and refuses with an explanation rather than installing something
-that cannot run.
+**The `~arm` and `~ppc64` keywords are guarded.** Gentoo's `arm` keyword spans
+armv4 through armv7 and both float ABIs, and the binary is ARMv6 hard-float; the
+ebuild checks `CHOST` and refuses soft-float and pre-ARMv6 with an explanation
+rather than installing something that cannot run. `ppc64` spans both
+endiannesses, and now both binaries exist: the ebuild fetches both and unpacks
+the one `CHOST` names.
 
 **The ipk column is OpenWrt 24.10 and older.** OpenWrt 25.12 uses apk-tools 3
 instead, and every architecture in that column is also in the apk v3 feed;
@@ -96,6 +123,28 @@ runtime — a statically linked glibc binary resolves no hostnames at all. It
 fails at the point where it tries to reach something by name, which is a long
 way from where you would look for the cause.
 
+## The BSDs, cross-built
+
+Since 4.4.0 the BSD binaries are cross-compiled on the same workstation as
+everything else, each against the C library of the release it is for, and
+packaged and signed there with each BSD's own tools. Until 4.3.2 each was
+compiled, packaged and signed on a virtual machine of its own system.
+
+| | linked against | packaged with |
+|---|---|---|
+| FreeBSD | FreeBSD 14's libc, from zig — so it runs on 14 and 15, and on OPNsense 26.1 and 26.7 | FreeBSD's `pkg`, signed catalogue |
+| NetBSD | NetBSD 10.1's libc, from zig | pkgsrc's `pkg_create` |
+| OpenBSD | 7.9's own libraries, downloaded from OpenBSD and checksum-pinned | a re-implementation of `pkg_create`, signed with `signify` |
+
+OpenBSD gets its real libraries rather than zig's because zig's OpenBSD libc is
+generated stubs, and the result asks for a bare `libc.so` instead of
+`libc.so.103.0`. Built against 7.9's own, it has the same dependencies as a
+binary compiled on OpenBSD, and the IBT landing pads OpenBSD enforces on amd64.
+The tools that package them — FreeBSD's `pkg`, pkgsrc's `pkg_install` and
+`signify` — run in a Linux container, so the signing keys never leave the
+workstation. Every package is still installed and run on a real machine of its
+system before a release; see [the honest cost](#the-honest-cost).
+
 ## MIPS
 
 **Shipped: mipsel_24kc and mips_24kc**, the two architectures most OpenWrt
@@ -145,10 +194,14 @@ The traps still worth knowing:
   Packages and binaries are named by OpenWrt architecture, never by uname.
 - Soft-float triples are pedantic about their suffixes, and getting one wrong
   produces a package a router accepts and then cannot run.
-- `mips64_octeonplus` is still **not shipped**. It was built once and died with
-  SIGILL under emulation before the artifact was reached;
-  `QEMU_CPU=Octeon68XX` was necessary but not sufficient. An unverified
-  artifact for an exotic architecture is worse than none.
+- **`mips64_octeonplus` (Cavium Octeon: EdgeRouter, and OpenWrt's octeon
+  target) ships from 4.4.0, built with OpenWrt's own octeon toolchain — and it
+  is the one binary here that nothing on this side can run.** That toolchain
+  uses Octeon-only instructions, which QEMU's generic MIPS64 lacks, while QEMU's
+  Octeon model has no FPU. Neither has a real Octeon: there the kernel emulates
+  floating point, as every hard-float program on an EdgeRouter relies on, and
+  QEMU's user mode does not. It runs until its first floating-point
+  instruction. A report from a real EdgeRouter is the check it is missing.
 
 ## OpenWrt: two feeds, and the account that was never made
 
@@ -254,19 +307,21 @@ is not:
   distribution**. `verify-repo.sh` covers Debian 12, AlmaLinux 9, AlmaLinux 8,
   Arch, Alpine, Void and Gentoo, against the live repository URL, and each case
   also proves that an untrusted key is *refused*.
-- The three BSDs are built and verified **natively on real machines**, not
-  cross-built at all, because Zig bundles no BSD libc.
-- The OPNsense plugin's binary is compiled **inside a FreeBSD 14 root** and
-  run both there and on FreeBSD 15, since OPNsense 26.1 is 14 and 26.7 is 15,
-  and FreeBSD binaries run forward rather than backward.
+- **Every Linux binary is run, not only built**: `packaging/cross/smoke-linux.sh`
+  starts each one under QEMU, fetches `/api/health` and the panel, and passes
+  `diag` against it. Only Octeon cannot be (see [MIPS](#mips)).
+- The three BSDs are **cross-built and verified on real machines** — FreeBSD
+  15.1, NetBSD 11.0 and OpenBSD 7.9 — which install the package from the signed
+  repository or with the signature checked, start the service and query it.
+- The OPNsense plugin's binary is the FreeBSD one, linked against FreeBSD 14,
+  and is run both in a FreeBSD 14 root and on FreeBSD 15, since OPNsense 26.1 is
+  14 and 26.7 is 15, and FreeBSD binaries run forward rather than backward.
 - The two macOS binaries are cross-built, and **run on real Macs** in CI on
   every change that could affect them; see [macOS](#macos).
-- **riscv64, ppc64le and s390x are cross-built and executed nowhere.** That is
-  the remaining gap, and it is stated rather than hidden. The mitigation is that
-  they come off the same one-step toolchain as amd64, from the same source, with
-  no emulator and no per-target workarounds — there is far less that can be
-  subtly wrong with them than when each one needed its own flags to survive an
-  emulator.
+- **Emulation is not hardware.** riscv64, ppc64 in both endiannesses, s390x,
+  LoongArch and the 32-bit ARMs run under QEMU here, not on the machines
+  themselves. QEMU is strict about instructions, so a binary that uses one the
+  CPU lacks fails here too — but it is not a real POWER9, mainframe or Loongson.
 
-If you run one of those three, `breeze-core diag` is the check, and a report is
-welcome.
+If you run one of those, `breeze-core diag` is the check, and a report is
+welcome. An EdgeRouter owner's report would close the last gap.

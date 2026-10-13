@@ -68,7 +68,8 @@ curl -fsSL https://aspic.salataputarica.hr.eu.org/aspic.asc \
 echo "deb [signed-by=/usr/share/keyrings/aspic.gpg] https://aspic.salataputarica.hr.eu.org/deb stable main" \
   | sudo tee /etc/apt/sources.list.d/aspic.list
 sudo apt update</pre>
-    <p class="dim">amd64 · arm64 · armhf · riscv64 · ppc64el · s390x.</p>
+    <p class="dim">amd64 · arm64 · armhf (every Raspberry Pi, the Zero included) · i386 ·
+      riscv64 · ppc64el · s390x · loong64.</p>
   </section>
 
   <section id="rhel" class="s-rpm">
@@ -86,7 +87,8 @@ sudo dnf makecache</pre>
       is <b>48 hours</b>: once it has refreshed it will not look here again for
       two days, so a release published inside that window stays invisible and the
       only apparent cure is <code>dnf clean all</code>.</div>
-    <p class="dim">x86_64 · aarch64 · armv7hl · riscv64 · ppc64le · s390x.</p>
+    <p class="dim">x86_64 · aarch64 · armv7hl · riscv64 · ppc64le · s390x · loongarch64
+      (openEuler).</p>
   </section>
 
   <section id="suse" class="s-suse">
@@ -133,7 +135,8 @@ sudo curl -fsSL -o /etc/apk/keys/aspic-alpine.rsa.pub \
 echo "https://aspic.salataputarica.hr.eu.org/alpine" \
   | sudo tee -a /etc/apk/repositories
 sudo apk update</pre>
-    <p class="dim">x86_64 · aarch64 · armv7 · riscv64 · ppc64le · s390x. Without
+    <p class="dim">x86_64 · x86 · aarch64 · armv7 · armhf · riscv64 · ppc64le · s390x, and
+      big-endian ppc64 for Adélie Linux, which uses the same apk. Without
       that key in <code>/etc/apk/keys</code>, apk refuses the index rather than
       asking you about it.</p>
   </section>
@@ -157,9 +160,11 @@ echo "src/gz aspic https://aspic.salataputarica.hr.eu.org/openwrt/$DISTRIB_ARCH"
   &gt;&gt; /etc/opkg/customfeeds.conf
 opkg update &amp;&amp; opkg install breeze-core</pre>
     <p class="dim">x86_64 · aarch64_generic · aarch64_cortex-a53 ·
-      aarch64_cortex-a72 · arm_cortex-a7_neon-vfpv4 · riscv64_riscv64 ·
-      <b>mipsel_24kc</b> (MediaTek: MT7621, MT76x8) · <b>mips_24kc</b> (Atheros:
-      ath79) — the last two being what most routers are. <code>$DISTRIB_ARCH</code>
+      aarch64_cortex-a72 · arm_cortex-a7_neon-vfpv4 · arm_arm1176jzf-s_vfp
+      (Raspberry Pi Zero and 1) · i386_pentium4 · riscv64_riscv64 ·
+      loongarch64_generic · <b>mipsel_24kc</b> (MediaTek: MT7621, MT76x8) ·
+      <b>mips_24kc</b> (Atheros: ath79) · <b>mips64_octeonplus</b> (Cavium
+      Octeon: EdgeRouter) — the MIPS ones being what most routers are. <code>$DISTRIB_ARCH</code>
       is your router's exact package architecture, which is what both feeds are
       laid out by. For opkg, the key file has to be <i>named</i> after its own
       fingerprint: opkg looks it up by that name, so a sensible filename silently
@@ -273,8 +278,9 @@ export PKG_PATH="https://aspic.salataputarica.hr.eu.org/openbsd/%c/packages/%a/:
     <span class="who">xbps, glibc and musl alike</span>
 <pre>echo "repository=https://aspic.salataputarica.hr.eu.org/xbps"   | sudo tee /etc/xbps.d/20-aspic.conf
 sudo xbps-install -S breeze-core</pre>
-    <p class="dim">x86_64 · aarch64 · armv7l · riscv64 · ppc64le, each in both
-      <b>glibc and musl</b> flavours — ten packages holding the same bytes,
+    <p class="dim">x86_64 · aarch64 · armv7l · armv6l · riscv64 · ppc64le, each in
+      both <b>glibc and musl</b> flavours, and i686 — thirteen packages holding
+      the same bytes per architecture,
       because the binary is static and does not care which libc you run, but
       xbps keeps separate repodata per architecture and would otherwise show
       the package to only half of Void. No dependencies at all.</p>
@@ -317,12 +323,14 @@ sudo emerge -av app-misc/breeze-core-bin</pre>
       <code>sync-uri&nbsp;=&nbsp;https://aspic.salataputarica.hr.eu.org/portage/breeze.git</code>.
       There is no git server here — it is a plain static tree, which git clones
       and pulls from perfectly well.</div>
-    <div class="note warn"><b>armv7 and ppc64 are keyworded but guarded.</b>
+    <div class="note warn"><b>arm is keyworded but guarded.</b>
       Gentoo's <code>arm</code> keyword covers armv4 through armv7 and both
-      float ABIs, and <code>ppc64</code> covers both endiannesses, while these
-      prebuilt binaries are armv7 hard-float and little-endian only. The ebuild
-      checks your CHOST and refuses with an explanation rather than installing
-      something that cannot run.</div>
+      float ABIs, while the prebuilt binary is ARMv6 hard-float (which every
+      ARMv7 hard-float machine also runs). The ebuild checks your CHOST and
+      refuses soft-float and older ARM with an explanation rather than
+      installing something that cannot run. <code>ppc64</code> covers both
+      endiannesses, and both binaries exist: it picks the one your CHOST is.
+      <code>x86</code> needs SSE2.</div>
   </section>
 
   <section id="homebrew" class="s-brew">
