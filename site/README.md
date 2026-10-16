@@ -18,6 +18,7 @@ implies — see "Adding a project".
 | `index.html`, `aspic.css`, `favicon.svg` | the index: how to add the repository. See `WEB_FILES` in `publish.sh` |
 | `breeze-core/index.html` | one page per project, at `/breeze-core/` |
 | `breeze/index.html` | the Android app's page, at `/breeze/`; `packaging/repo/stage-app.sh` fills in `@APP_VER@` |
+| `breezectl/index.html` | the terminal client's page, at `/breezectl/`; `packaging/repo/stage-breezectl.sh` fills in `@CTL_VER@` |
 | `aspic.conf` | the nginx vhost. **This copy is the source of truth**; the live file is a copy |
 | `install-host.sh` | one-time (idempotent) host setup: web root, SELinux label, certificate, vhost, renewal, scanner jail |
 | `publish.sh` | push the site as a timestamped release and swap `current` |
@@ -92,6 +93,12 @@ Two of its details are worth knowing before editing:
   index, immutable for the packages themselves. A cached index is how a published
   release becomes invisible to `apt update`, and that failure reads as a broken
   publish rather than as a caching bug.
+- **`/breezectl/` is served as UTF-8 text, never cached.** Its scripts are read by
+  `curl | sh`, `irm | iex` and browsers, and `breezectl`, `_breezectl` and
+  `SHA256SUMS` have no extension nginx knows. Never cached because the installers
+  check the scripts against `SHA256SUMS`, and two caches out of step would fail
+  every install. The location is a plain prefix, not `^~`, so the dotfile rule
+  still wins, and it holds no `add_header`.
 
 ## Adding a project
 
@@ -169,3 +176,18 @@ There is no `breeze-latest.apk`, as bolero had. The vhost caches every `.apk` as
 immutable for a year, which is right for packages that never change under a
 name, but a moving name would stay pinned in caches at its first version. The
 page is the stable address, and it is never cached.
+
+## breezectl, the terminal client
+
+Its own repository too (`../breezectl` beside this one, or `BREEZECTL_DIR`).
+`packaging/repo/stage-breezectl.sh` runs that repository's `stage.sh` — which
+refuses a working tree that differs from a commit — into `breezectl/`, checks
+`SHA256SUMS` again where it landed, refuses a pair of clients whose versions
+differ, and writes the page. `build-repo.sh` runs it; after a breezectl release
+on its own, the same two lines as for the app, with the same condition:
+
+```bash
+./packaging/repo/stage-breezectl.sh              # into packaging/out/aspic
+./site/publish.sh --tree packaging/out/aspic
+```
+

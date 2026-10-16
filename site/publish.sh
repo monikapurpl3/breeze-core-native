@@ -218,6 +218,9 @@ paths="/ /aspic.css /favicon.svg /breeze-core/ /breeze/"
   [ -e "$f" ] && paths="$paths /homebrew/dist/$(basename "$f")"
 done
 [ -n "$TREE" ] && paths="$paths /homebrew/breeze.git/info/refs"
+# breezectl's installers and checksums: the one-liners on its page fetch these
+# by name, and a 404 there fails every install.
+[ -n "$TREE" ] && [ -d "$TREE/breezectl" ] && paths="$paths /breezectl/ /breezectl/install.sh /breezectl/install.ps1 /breezectl/breezectl /breezectl/SHA256SUMS"
 # The app's APK: /breeze/ links it, but a link that resolves locally says
 # nothing about whether nginx will serve a 50 MB file.
 [ -n "$TREE" ] && for f in "$TREE"/android/*.apk; do

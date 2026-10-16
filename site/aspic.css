@@ -23,6 +23,7 @@
 
   /* one colour per project, driving its rule, heading and code tint */
   --native:#f0ad45; --app:#7fd66b; --legacy:#e0507c; --host:#4fd1c5;
+  --cli:#e27bd4;
 }
 
 *{box-sizing:border-box}
@@ -94,6 +95,9 @@ table.facts td{padding:6px 12px 6px 0;border-bottom:1px solid var(--line);
                color:var(--dim);vertical-align:top}
 table.facts td:first-child{color:#dde5ee;white-space:nowrap}
 table.facts tr:last-child td{border-bottom:0}
+/* A long path in a cell (%LOCALAPPDATA%\Programs\…) would otherwise set the
+   table's width on a phone and push the rest of it off the screen. */
+table.facts code{overflow-wrap:anywhere}
 
 footer{margin-top:50px;padding-top:20px;border-top:1px solid var(--line);
        color:var(--dim);font-size:13.5px;line-height:1.85}
@@ -118,6 +122,7 @@ footer b{color:#dde5ee;font-weight:650}
  * find out. */
 .s-native{--c:var(--native)}
 .s-app{--c:var(--app)}
+.s-cli{--c:var(--cli)}
 .s-legacy{--c:var(--legacy)}
 .s-host{--c:var(--host)}
 

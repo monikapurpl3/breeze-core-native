@@ -14,6 +14,8 @@
 #   ├── breeze-core/index.html                  one page per project
 #   ├── breeze/index.html  android/Breeze-<v>.apk   the Android app, mirrored from
 #   │                                           its GitHub release (stage-app.sh)
+#   ├── breezectl/  breezectl  install.sh …     the terminal client, from its own
+#   │                                           checkout (stage-breezectl.sh)
 #   ├── aspic.asc  aspic-alpine.rsa.pub  aspic-usign.pub  aspic-xbps.fingerprint
 #   ├── deb/     dists/stable/… + pool/         (apt,  GPG InRelease; deb-src too)
 #   ├── termux/  dists/stable/… + pool/         (Termux's apt, same key)
@@ -291,6 +293,10 @@ chmod 644 "$OUT/breeze-core/VERSION"
 # tree, because publishing replaces the whole site - a build without it would
 # take /breeze/ and the APK down with the next server release.
 bash packaging/repo/stage-app.sh "$OUT"
+
+# breezectl, the terminal client: its scripts, their checksums and its page.
+# In every tree for the same reason as the app.
+bash packaging/repo/stage-breezectl.sh "$OUT"
 
 # The migration script, with a checksum generated here rather than pasted into a
 # page. It is served from the root because the one-liner that fetches it is the
