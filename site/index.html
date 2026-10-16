@@ -200,7 +200,7 @@ pkg update &amp;&amp; pkg install breeze-core</pre>
   <section id="freebsd" class="s-fbsd">
     <h2>FreeBSD</h2>
     <span class="who">A real RSA-signed <code>pkg</code> repository — amd64,
-      built and verified on FreeBSD&nbsp;15.1</span>
+      one package for FreeBSD&nbsp;14 and&nbsp;15</span>
 <pre>sudo mkdir -p /usr/local/etc/pkg/keys /usr/local/etc/pkg/repos
 sudo fetch -o /usr/local/etc/pkg/keys/aspic.pub \
   https://aspic.salataputarica.hr.eu.org/freebsd/aspic-freebsd.pub
@@ -220,10 +220,10 @@ sudo service breeze_core start</pre>
     <p class="dim">The package declares <b>no dependencies</b> — the Python line
       needed <code>python312</code> and a wheel for every extension — and keeps
       <code>/usr/local/etc/breeze-core</code> on deinstall, so an upgrade over
-      3.2.0 leaves your config and device tokens alone. This repository is the
-      only one here whose catalogue is signed on the machine that builds it,
-      because <code>pkg repo</code> signs locally; the key goes there, gets used,
-      and is destroyed with <code>rm -P</code>.</p>
+      3.2.0 leaves your config and device tokens alone. Like every repository
+      here, it is built and signed on the maintainer's own machine, with
+      FreeBSD's own <code>pkg</code>, and the key never leaves it: aspic only
+      serves the signed files.</p>
   </section>
 
   <section id="netbsd" class="s-nbsd">
