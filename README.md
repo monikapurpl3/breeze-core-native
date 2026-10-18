@@ -62,7 +62,7 @@ says how each is checked, and the one that cannot be. For fun, and untested,
 4.3.2 was also cross-built for
 [sixteen more](https://aspic.salataputarica.hr.eu.org/breeze-core/oddities/) —
 illumos, Solaris, DragonFly, Haiku, SPARC, the BSDs on ARM, Windows on ARM, and
-an Apple Watch.
+an Apple Watch... sort of.
 
 ## Install
 
