@@ -136,7 +136,7 @@ stores, Python-generated signatures for auth, and `diag` for the HTTP surface.
 
 The Python project lives at **`M:\breeze-core`** on the maintainer's Dev Drive:
 the tree 3.2.0 was built from. One stale copy remains and looks plausible:
-`mrrp:/opt/meow-ac` with `meow-ac.service`, a dead legacy deployment. The live
+`/opt/meow-ac` on the old server, with `meow-ac.service`, a dead legacy deployment. The live
 service there is `breeze-core.service` from the RPM, with its stores in
 `/etc/breeze-core` — *not* `/etc/meow-ac`. (A second stale copy,
 `~/Desktop/MEOWAC`, was deleted in October 2026.)
@@ -231,70 +231,6 @@ pydantic models.
 - Blocking I/O and `tiny_http`, deliberately. A request spends ~1.8 s waiting on
   a LAN round-trip and there are a handful of clients, so an async runtime would
   cost ~1 MB of binary and buy nothing.
-
-### Cross-compilation
-
-Everything is built on the workstation; `packaging/cross/README.md` has the
-per-target table. The VMs only run verify scripts.
-
-- **Zig is pinned to 0.16.0** and `build-binaries.sh` refuses any other
-  (`BC_ZIG` points at a pinned copy). 0.17.0 arrived on the workstation by
-  auto-update and cannot build i686.
-- **FreeBSD** is `cargo zigbuild` (zig ships FreeBSD 14's libc, so the one
-  binary also serves OPNsense 14 and 15). **NetBSD** is plain cargo with
-  `packaging/cross/zcc.js` as linker and CC: zig has its libc, only
-  cargo-zigbuild's target list lacks it, and cc-rs's `--target=` must be
-  stripped for zig.
-- **OpenBSD links against the release's real libraries**, not zig's stubs
-  (whose binary asks for a bare `libc.so`): `packaging/cross/openbsd-sysroot.sh`
-  fetches and pins them, clang + lld link, `-Zcf-protection=branch` adds the IBT
-  landing pads OpenBSD enforces. The binary is valid for one release
-  (`OPENBSD_REL` in `build-binaries.sh`).
-- **BSD packages are made here too**, with each BSD's own tools in the
-  `bc-bsdpkg` image (`packaging/bsd/`), and signed here: the keys no longer go
-  to a VM.
-- **loongarch64** needs `+crt-static -C link-self-contained=no` and has
-  `--no-rosegment` stripped (zcc.js); otherwise it links dynamically and twice.
-- **The armhf .deb is the armv6 binary**: one Debian architecture for two ARM
-  generations, and armv6 code runs on every ARMv7 board as well as the Pi
-  Zero/1. The Gentoo `arm` keyword uses it for the same reason.
-- **MIPS links with the OpenWrt SDK toolchain**, not zig: zig 0.16's bundled
-  `mipsel` musl emits references to its own std internals it then fails to
-  provide. Octeon (mips64) uses OpenWrt's octeon toolchain and **cannot run
-  under QEMU** (Octeon-only instructions, and no FPU in QEMU's Octeon model);
-  only real hardware verifies it.
-- **Termux is an Android build, linked by the NDK** (`packaging/termux/`), not
-  the musl binary: on Android musl finds no `/etc/localtime` and runs in UTC, so
-  schedules fire hours out. Android-only code is `cfg(target_os = "android")`;
-  the config directory default lives in ONE place, `breeze_store::config_dir()`.
-- **Termux debs are xz in both members.** nfpm always gzips `control.tar`, and
-  32-bit arm Termux's apt rejects that as "Corrupted archive" while `dpkg -i`
-  accepts it, so `dpkg-deb -f` passing proves nothing. The build repacks with
-  `dpkg-deb -Zxz`.
-- **termux-docker drops `-e` variables** (its entrypoint switches user with
-  `env -i`) and has no `/tmp` (use `$TMPDIR`); the 32-bit image needs
-  `--security-opt seccomp=unconfined` for bionic's `personality()` call.
-- **OpenWrt has no addgroup, adduser, useradd or getent.** The shared
-  preinstall uses `/lib/functions.sh` there (and creates `/var/lock`, which only
-  a booted system has); never reach for getent in a maintainer script without a
-  fallback to `/etc/passwd`. Until 4.3.0 every OpenWrt package installed with no
-  service account, so procd could not start it -- no verifier covered OpenWrt.
-- **OpenWrt 25.12 is apk-tools 3, not opkg**: a separate apk v3 feed
-  (`packaging/openwrt-apk/`). `apk mkndx` needs `--allow-untrusted` because the
-  packages are unsigned by design (the index carries their hashes and is
-  signed). `apk --print-arch` says `mipsel`; the package architecture is
-  `/etc/apk/arch` / `DISTRIB_ARCH` (`mipsel_24kc`).
-- **MIPS is static by three flags** (`packaging/mips/build-mips.sh`); a
-  `-Z build-std-features=llvm-libunwind` does NOT build a libunwind.
-- **Source packages paste in the nfpm scripts**, so editing
-  `packaging/nfpm/scripts/` changes four package formats, not one. The spec
-  doubles every `%` in them (rpm expands macros inside comments too), and sets
-  `_use_weak_usergroup_deps`: rpm 4.19+ otherwise turns `%attr(...,breeze,...)`
-  into a hard `Requires: user(breeze)` that nothing provides.
-- **`git archive` honours core.autocrlf** -- on this machine it writes CRLF into
-  the tarball unless run as `git -c core.autocrlf=false archive`.
-- Pin the Zig version in CI. `setup-zig@v1` could not fetch 0.16 at all — Zig
-  renamed release artifacts (arch before OS, under `/download/` not `/builds/`).
 
 ## Deliberately not implemented
 
@@ -410,101 +346,19 @@ the reference has it, and only the stale copies of the Python don't (see above).
 Alphabetised JSON keys: that one was real, and `preserve_order` fixed it for
 −1 KB of binary.
 
-## Packaging (phase 4)
+## Release machinery: not in this repository
 
-`packaging/README.md` has the flow and the reasoning; this is the list of things
-that cost real time to find out, so they are not found out twice.
+The scripts that build, sign, verify and publish the packages, and the setup
+of the host that serves them, are kept out of this public repository. They
+live in this working tree, tracked by a local-only repository
+(`M:\breeze-release.git`; `git rel status`, `git rel commit`), with their
+notes in `release/PRIVATE.md` -- read that before any packaging or release
+work. A local pre-commit hook refuses to commit them here; never `git add -f`
+them, and never `git clean -x` this tree, which would delete them.
 
-**The CLI's verb list is a contract, not a design space.** The reference's
-packaged binary answers `serve pair diag approve devices revoke version`, its
-postinstall tells people to run `breeze-core pair`, its unit passes
-`serve --host … --port … $BREEZE_OPTS`, and aliases in the wild pass
-`--config /etc/breeze-core/config.json`. `pair` used to be an alias for `login`
-here — a new user following the documentation was asked for a server URL by the
-command meant to find their air conditioners. Two more were missing outright
-(`devices`, `revoke`), `--config`/`--base-url` were rejected, and `--behind-proxy`
-was *silently ignored*, which would have made every proxied request look like it
-came from the LAN and quietly defeated the LAN-only admin check.
-
-**Build and packaging traps:**
-
-- **Static musl means no libc dependency at all** — one binary per architecture
-  serves every distro and every packager. The inverse is the trap: *glibc*-static
-  breaks `getaddrinfo`, so s390x (no musl std upstream) stays dynamic against a
-  Zig-pinned glibc 2.17 floor.
-- **The binary goes in `/usr/bin`,** not `/usr/lib`: `lib_t` is not an SELinux
-  domain-transition entrypoint, which is why the Python package needed a
-  `semanage` call in its postinstall. The old path stays as a symlink.
-- **rpm 4.14 (RHEL/Alma/Rocky 8) cannot import an ed25519 GPG key at all** —
-  `rpm --import` fails and every signature reads NOKEY. The repository key is
-  **RSA-4096** for that reason, and `verify-repo.sh` runs against both Alma 9 and
-  Alma 8 so it stays that way. rpm stores an RSA signature in `RSAHEADER` and an
-  ed25519 one in `DSAHEADER`, so query with `rpm -K` rather than a tag.
-- **nfpm's archlinux packager drops declared file ownership**: `/etc/breeze-core`
-  arrives `root:root` and the service cannot write `devices.json` — pairing 500s
-  with nothing to explain it. `postinstall.sh` chowns it for every packager.
-- **nfpm accepts unknown config keys in silence,** so `build-packages.sh` asks
-  each finished package what compression it actually used. zstd for deb and rpm;
-  apk and ipk stay gzip because those formats have no zstd their clients can
-  read.
-- **An apk repository URL must not contain the architecture** — apk appends it,
-  and `…/alpine/x86_64` becomes `…/alpine/x86_64/x86_64/APKINDEX.tar.gz`.
-
-**Docker Desktop on this machine, three separate ways:**
-
-- A writable bind mount does not reliably see a directory the host created
-  moments earlier: it failed once as a phantom `mkdir: No such file or directory`
-  and once as `input/output error` on a file nfpm was writing. Every stage now
-  writes into the container and **streams a tar back out**.
-- A container that inherits the loop's stdin **eats the here-string driving the
-  loop**: `build-packages.sh` built amd64 and stopped without a word. Hence
-  `< /dev/null` and no `-i` where none is needed.
-- `-w /work` gets rewritten by git-bash into `C:/Program Files/Git/work`. Every
-  script here exports `MSYS_NO_PATHCONV=1`.
-
-**Test harnesses lie in a specific way here.** A `'…'`-quoted shell string with
-single quotes nested inside it silently loses the inner double quotes: the
-verification container wrote `{api_key:x}` and the server rejected it, which read
-as five broken packages. The shared checks live in `packaging/nfpm/checks.sh`, a
-real file, for that reason — and every case is wrapped in `timeout`, because a
-check that waits for a refusal that never comes hung two containers for half an
-hour.
-
-**All three BSDs are full builds** — `ring` compiles for each, so each is the
-same ~2.5 MB binary with TLS, and no BSD package declares a dependency where the
-Python ones needed `python312`. Since October 2026 they are cross-built and packaged on
-the workstation (see Cross-compilation above and `packaging/bsd/README.md`);
-until 4.3.2 each was built on a VM of its own system.
-
-## Where this publishes: aspic, and the sunset
-
-**`aspic.salataputarica.hr.eu.org` is this project's host**, live since
-2026-08-24. `site/` holds its page, its nginx vhost and the two scripts that
-deploy it; `site/README.md` carries the reasoning and the host traps.
-
-The Python project's host, `bolero`, keeps the 3.x repositories exactly as they
-are — **3.2.0 is the last Python release** and this is its replacement. Aspic is
-meant to carry more than one project, so the layout is per-project subtrees
-(`/<project>/deb/…`) rather than one shared repository tree.
-
-- `site/aspic.conf` is the source of truth for the vhost; the live file is a
-  copy. Re-run `install-host.sh` to reinstall, test and reload it.
-- Publish with `./site/publish.sh` — it stages an **allow-list**, because the
-  vhost and these scripts sit in the same directory and an exclude-list would
-  publish the next file added to it.
-- **The page must not advertise a repository that is not there.** Today there are
-  none, and it says so. Same rule as the feature flags.
-- **No inline style, `style="…"` attributes included** — the vhost sends
-  `style-src 'self'`, so the section-accent attributes copied from bolero's page
-  were blocked and the page quietly lost every accent colour. Accents are classes
-  now. That is the panel's CSP rule turning up in a second place.
-- An nginx `map` regex key containing `{n}` **must be quoted**, or the config
-  fails to parse with a bare `unexpected "{"`.
-
-## The README is not the shape to ship
-
-The current README is a working document written while the repo was private. Before
-going public it must be rewritten to mirror **breeze-core's** README, with **one
-short line** (two at most) about how this differs and the bulk in the wiki. To a
-visitor this *is* Breeze Core; the rewrite is a footnote about implementation, and
-the point is that users migrate to it rather than adopt an experiment.
+What stays public is everything that ends up on a user's machine (service
+files, package install scripts and recipes, the OPNsense plugin, the Windows
+installer, the Dockerfiles, `site/migrate.sh`), plus `build-binaries.sh` and
+what it needs for the macOS workflow, and `packaging/windows/wingup/` in full:
+WinGUp is GPL-3.0, so its patch and build script are the corresponding source
+for the updater the installer ships.

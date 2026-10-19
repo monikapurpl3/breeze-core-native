@@ -52,6 +52,6 @@ Against notepad-plus-plus/wingup **v5.4.3** (`80b6e0ff669c9a173a112035d8a08ef06a
 Needs Visual Studio's C++ tools and CMake. Clones the pinned tag, checks the
 commit, applies the patch, builds curl (static, Schannel — no OpenSSL, the OS
 trust store) and then GUP, and writes to `packaging/out/gup/`: `GUP.exe`, the
-source archive, and the notices. `packaging/repo/build-repo.sh` publishes all
+source archive, and the notices. The release build publishes all
 three under `/windows/updater/` on aspic, and the installer downloads
 `GUP.exe` from there, checking it against the SHA-256 it was built with.

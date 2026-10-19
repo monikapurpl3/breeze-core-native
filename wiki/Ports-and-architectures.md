@@ -155,7 +155,7 @@ that uses deb, rpm or pacman still ships 32-bit MIPS. There are also plain
 tarballs.
 
 Every MIPS target is **tier 3** in Rust, with no prebuilt `std`.
-`packaging/mips/build-mips.sh` therefore builds `std` from source
+The release build therefore builds `std` from source
 (`-Z build-std`), in an image with a pinned nightly and OpenWrt 25.12.5's own
 toolchains, checked against OpenWrt's SHA-256s. It links with the OpenWrt
 toolchain, not Zig: Zig 0.16's bundled mipsel musl emits references to its own
@@ -179,11 +179,9 @@ subscriber counter was an `AtomicU64`. It is a mutex now; a client subscribes
 once per connection.
 
 **Verified in OpenWrt's own root filesystems under QEMU**, both endiannesses,
-both feeds (`packaging/repo/verify-repo.sh openwrt-mipsel openwrt-mips
-openwrt-mipsel-opkg`). Each is refused unsigned, then installed, gets its
+both feeds. Each is refused unsigned, then installed, gets its
 service account and serves. Docker Hub has big-endian `mips_24kc` OpenWrt
-images but no little-endian MIPS at all, so `packaging/mips/prepare-qemu.sh`
-imports OpenWrt's malta-le root filesystem, whose package architecture is
+images but no little-endian MIPS at all, so the release checks import OpenWrt's malta-le root filesystem, whose package architecture is
 mipsel_24kc. It also registers `qemu-mips` and `qemu-mipsel` with binfmt_misc.
 **That registration does not survive Docker Desktop's VM restarting**, so run
 the script again after a restart.
@@ -207,8 +205,7 @@ The traps still worth knowing:
 
 **OpenWrt 25.12 replaced opkg with apk-tools 3.** Its packages are apk v3,
 in the ADB format, which is neither the `.ipk` opkg reads nor the apk v2
-Alpine uses, and nfpm cannot write it. So `packaging/openwrt-apk/build-apk.sh`
-makes them with apk-tools 3 itself (`apk mkpkg`), from Alpine 3.24; OpenWrt's
+Alpine uses, and nfpm cannot write it. So the release build makes them with apk-tools 3 itself (`apk mkpkg`), from Alpine 3.24; OpenWrt's
 own apk is built without `mkpkg` and `mkndx`. They hold the same binaries,
 procd script and maintainer scripts as the `.ipk`.
 
@@ -318,8 +315,8 @@ is not:
   distribution**. `verify-repo.sh` covers Debian 12, AlmaLinux 9, AlmaLinux 8,
   Arch, Alpine, Void and Gentoo, against the live repository URL, and each case
   also proves that an untrusted key is *refused*.
-- **Every Linux binary is run, not only built**: `packaging/cross/smoke-linux.sh`
-  starts each one under QEMU, fetches `/api/health` and the panel, and passes
+- **Every Linux binary is run, not only built**: the release checks start
+  each one under QEMU, fetches `/api/health` and the panel, and passes
   `diag` against it. Only Octeon cannot be (see [MIPS](#mips)).
 - The three BSDs are **cross-built and verified on real machines** — FreeBSD
   15.1, NetBSD 11.0 and OpenBSD 7.9 — which install the package from the signed

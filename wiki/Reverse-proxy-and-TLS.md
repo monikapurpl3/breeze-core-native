@@ -61,8 +61,8 @@ everything back as it was:
 Two things stay. Packages it installed stay installed. A certificate stays in
 `/etc/letsencrypt`, and the undo prints the `certbot delete` line for it.
 
-It is tested for real against all three servers on Debian
-(`packaging/test/verify-proxy.sh`). The test includes a client forging
+It is tested for real against all three servers on Debian before every
+release. The test includes a client forging
 `X-Forwarded-For` from another machine, and an undo after certbot's Apache
 file. A container cannot get a real certificate, so certbot is a stand-in
 there. The Apache part supports the Debian

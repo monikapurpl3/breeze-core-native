@@ -1,7 +1,7 @@
 # Copyright 2026 Monika
 # Distributed under the terms of the GNU Affero General Public License v3
 
-# NOTE: this file is a TEMPLATE. packaging/portage/build-overlay.sh copies it
+# NOTE: this file is a TEMPLATE. The release build copies it
 # to breeze-core-bin-<version>.ebuild — the version lives in the filename and
 # reaches the body as ${PV}, so there is nothing to substitute inside.
 

@@ -43,6 +43,10 @@
 # because 0.17.0 arrived on the workstation by itself one night and could not
 # build i686 at all (its musl cache step fails). Point BC_ZIG at a 0.16.0 if
 # the one on PATH is not it.
+# In the public repository this script is here for the macOS workflow, which
+# builds the macOS and Linux targets. The BSD, LoongArch, MIPS and Termux
+# targets also need the release machinery (packaging/cross/, packaging/mips/,
+# packaging/termux/build-packages.sh), which is kept privately.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"

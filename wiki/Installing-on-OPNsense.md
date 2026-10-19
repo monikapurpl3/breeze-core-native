@@ -176,7 +176,6 @@ If the binary and the rc script are fine and only the page is wrong, the
 problem is in the plugin's PHP/XML, and everything still works from the shell
 and the REST API in the meantime.
 
-The plugin's own verification script — `packaging/opnsense/verify-plugin.sh` in
-the repository — lists exactly which checks pass and states plainly which do
-not. It lints the PHP and XML in a `php:8.3-cli` container, because neither
+The plugin's release verification lists exactly which checks pass and states
+plainly which do not. It lints the PHP and XML in a `php:8.3-cli` container, because neither
 the FreeBSD host nor the build root has PHP on it.

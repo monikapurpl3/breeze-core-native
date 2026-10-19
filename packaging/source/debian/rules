@@ -1,5 +1,5 @@
 #!/usr/bin/make -f
-# Generated into the source package by packaging/source/build-source.sh.
+# Generated into the source package by the release build.
 #
 # Recipes start with ">" rather than a tab (.RECIPEPREFIX, GNU make 3.82+), so
 # the file survives being edited on a machine whose editor turns tabs into

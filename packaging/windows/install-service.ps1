@@ -77,7 +77,7 @@ function Warn($m)  { Write-Host "[breeze] WARNING: $m" -ForegroundColor Yellow }
 function Die($m)   { Write-Host "[breeze] ERROR: $m" -ForegroundColor Red; exit 1 }
 
 # NSSM 2.24, the last release. nssm.cc serves the zip; aspic mirrors the same
-# bytes (packaging/repo/build-repo.sh checks them against the same hash before
+# bytes (the release build checks them against the same hash before
 # publishing). The zip is pinned so a download can be checked before it is
 # opened, and the executable is pinned so a copy found on disk - an existing
 # install, or one put beside the installer - is held to the same standard.
@@ -129,8 +129,8 @@ function Get-Sha256([string]$File) {
 #
 # NOT "the first non-loopback IPv4", which is what this used to be. On any
 # workstation with VMware, Hyper-V or WSL installed that picks a host-only
-# address: the machine this was first tested on offered 192.168.11.1,
-# 192.168.122.1 and 172.31.160.1 ahead of its real 192.168.1.67, and the
+# address: the machine this was first tested on offered two VMware host-only
+# adapters and a WSL one ahead of its real LAN address, and the
 # installer duly bound the service to a virtual adapter nothing on the LAN can
 # reach. Nothing errors; the panel is simply unreachable from every device you
 # own.
