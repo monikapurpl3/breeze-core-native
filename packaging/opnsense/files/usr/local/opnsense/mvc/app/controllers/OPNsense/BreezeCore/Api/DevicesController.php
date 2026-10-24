@@ -68,7 +68,10 @@ class DevicesController extends ApiControllerBase
         $raw = curl_exec($ch);
         $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);
-        curl_close($ch);
+        // No curl_close(): a no-op since PHP 8.0 and deprecated in 8.5, which
+        // OPNsense 26.7 runs. Its API turns any reported error into an
+        // exception, and with the deployment type set to development
+        // deprecations are reported, so it would fail every request here.
         if ($raw === false) {
             return sprintf(gettext('Could not reach Breeze Core at %s: %s'), $base, $err);
         }
