@@ -127,7 +127,15 @@ from the same reading as the code:
 - msmart's `discover_single` asks **Midea's cloud** for a V3 token as part of
   probing a LAN address, and that call now fails outright, so the reference
   cannot add a unit by address at all — caught by sending the same request to
-  both servers and reading the traceback.
+  both servers and reading the traceback;
+- a store save renames a fresh file into place, and the writer owns that file,
+  so the documented `sudo breeze-core pair` and `sudo breeze-core fetch` left
+  config.json `root:root 640` and the packaged service (`User=breeze`) could not
+  read it at its next start (on a fresh install, at its first). Breeze Core
+  writes in place, which keeps the owner without trying — caught by running
+  `pair` as root in a container against a breeze-mock unit, then starting
+  `serve` as `breeze`. The unit test for it proves something only as root, and
+  CI runs as a user.
 
 So: msmart's test vectors for the protocol, pydantic-generated fixtures for the
 stores, Python-generated signatures for auth, and `diag` for the HTTP surface.
@@ -196,6 +204,9 @@ pydantic models.
 - `Program.id` comes last, because pydantic appends subclass fields.
 - `config.json` is mode **640** so the admin CLIs work without `sudo` (2.4.3
   changed it from 600 for exactly that reason); the other three are 600.
+- **Owners are kept.** `save` gives a replaced file back to its owner and a new
+  one to its directory's, before the rename. Root running a CLI is the normal
+  case, not a misuse: the docs say `sudo breeze-core pair`.
 
 ### Protocol traps
 

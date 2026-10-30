@@ -23,6 +23,7 @@
 //!
 //! File modes are preserved too: `config.json` is 640 so the admin CLIs can read
 //! it, the other three are 600 because they are the app's own runtime state.
+//! And so are owners: a file written under `sudo` stays the service account's.
 
 pub mod control;
 pub mod models;
