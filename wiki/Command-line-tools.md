@@ -103,6 +103,16 @@ them typed in, and no cloud is involved.
 > token, but Midea may stop handing them out altogether. If that happens, your
 > copy is the only one there is.
 
+**Not on the server?** [breeze-token](https://aspic.salataputarica.hr.eu.org/breeze-token/)
+([source](https://github.com/monikapurpl3/breeze-token)) is this command on
+its own, built from the same code: the same questions, the same check on the
+unit. Run it once on any machine on the units' network, with
+`--write config.json` or `--to http://SERVER:8420`:
+
+```sh
+curl -fsSL https://aspic.salataputarica.hr.eu.org/breeze-token/run.sh | sh -s -- --write config.json
+```
+
 ## `control`
 
 New in 4.x, and the reason is that "turn the kitchen off" should not require

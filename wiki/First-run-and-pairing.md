@@ -80,6 +80,12 @@ and saves them. It explains each step as it goes, including what to do if
 your units came with **NetHome Plus**, which stopped handing out tokens in
 August 2026. Details: [Command-line tools](Command-line-tools#fetch).
 
+If the server cannot reach the internet, or you would rather not sign in to
+Midea from it, [breeze-token](https://aspic.salataputarica.hr.eu.org/breeze-token/)
+does the same from any machine on the units' network, your laptop for example.
+It either writes the tokens into a `config.json` for you to copy across, or
+adds the units to the running server over its API.
+
 That is the only step on this page that touches the internet, and it is
 needed once. Everything afterwards is local.
 
