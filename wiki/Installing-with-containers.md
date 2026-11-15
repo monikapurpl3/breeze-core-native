@@ -4,7 +4,7 @@ Two images. One to run, one to debug.
 
 | Tag | Base | Download | For |
 |---|---|---|---|
-| `4.4.0` | `scratch` | **1.6 MB** | everyone |
+| `4.4.0` | `scratch` | **1.7 MB** | everyone |
 | `4.4.0-debug` | `busybox:musl` | 2.5 MB | working out why something is wrong |
 
 Those are download sizes. On disk they are **4.3 MB** and **5.9 MB**,
