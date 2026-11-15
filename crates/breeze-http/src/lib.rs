@@ -24,6 +24,7 @@ pub mod program_routes;
 pub mod respond;
 pub mod server;
 pub mod state;
+pub mod state_log;
 pub mod stream;
 pub mod system;
 pub mod timer_routes;

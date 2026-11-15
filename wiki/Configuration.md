@@ -38,7 +38,7 @@ from it without `sudo`; everything else is owner-only.
 |---|---|
 | `api_key` | The **enrolment** secret — needed to *begin* pairing, and not sufficient on its own to control anything. See [Authentication and pairing](Authentication-and-pairing). |
 | `units[].name/ip/port/id` | Friendly name, LAN IP, control port (usually `6444`), Midea device id. |
-| `units[].token/key` | V3 credentials (`null` for V1/V2). **Back these up** — they cannot be re-derived once the vendor cloud stops issuing them for your unit. |
+| `units[].token/key` | V3 credentials (`null` for V1/V2). **Back these up** — they cannot be re-derived once the vendor cloud stops issuing them for your unit. Since 4.4.0, [`breeze-core backup`](Command-line-tools#backup-and-restore) does, encrypted. |
 
 ## Runtime settings (environment variables)
 
@@ -57,6 +57,8 @@ admin approval restricted to the LAN, proxy headers distrusted.
 | `BREEZE_WORKERS` | `8` | HTTP worker threads. A request waits on its unit for a round-trip, about 0.75 s, so this is how many fit in flight at once — but requests to one unit are merged or share an answer, so the useful ceiling is roughly the number of units you own |
 | `BREEZE_BG_WORKERS` | `1` | how many units the background state poller contacts **at once**. `1` is a sequential walk. Raise it when the walk stops fitting inside `AC_STREAM_TICK`. Not a count of background threads — see below |
 | `BREEZE_KEEP_WARM` | `30m` | how long to keep connections to the units open after the server was last used. A bare number is seconds, or `90s`, `30m`, `2h`; `0`/`off` never; `always` from startup. See [Keeping connections warm](#keeping-connections-warm) |
+| `BREEZE_STATE_LOG` | off | append every unit's state to a CSV file, on a clock (4.4.0+). `on` means `states.csv` in the store directory; a relative path is taken from there, an absolute one used as it is. See [The state log](#the-state-log) |
+| `BREEZE_STATE_LOG_INTERVAL` | `5m` | how often the state log writes a row per unit: seconds, or `90s`, `5m`, `1h`. `30s` at the least |
 | `AC_SCHED_TICK` | `30` | seconds between scheduler passes |
 | `AC_TIMER_TICK` | `15` | seconds between timer due-checks |
 | `AC_STREAM_TICK` | `5` | seconds between state polls **while at least one client is streaming** |
@@ -195,6 +197,64 @@ so a unit that is off the network is not asked every 20 seconds.
 
 The setting and whether it is active at this moment are on the Nerd panel,
 under `settings.keep_warm` and `settings.keep_warm_active`.
+
+## The state log
+
+New in 4.4.0, and off unless `BREEZE_STATE_LOG` is set. Then, every
+`BREEZE_STATE_LOG_INTERVAL` (five minutes unless it says otherwise) and on the
+clock -- :00, :05, :10 -- the server reads each unit and appends one row per
+unit to a CSV file, whether or not anything is connected. It is the long record
+the history endpoint is not: that one keeps about an hour in memory and loses
+it at a restart.
+
+```sh
+BREEZE_STATE_LOG=on                    # /etc/breeze-core/states.csv
+#BREEZE_STATE_LOG=/var/log/breeze-core/states.csv
+#BREEZE_STATE_LOG_INTERVAL=1m
+```
+
+```csv
+time,epoch,unit_id,name,online,power,mode,target,fan_speed,swing,eco,turbo,indoor,outdoor
+2026-11-15 12:15:00,1794741300,152832116426242,Living room,true,true,COOL,23.5,102,VERTICAL,false,false,25.1,31.0
+2026-11-15 12:15:00,1794741300,153519409691494,Bedroom,false,,,,,,,,,
+```
+
+| Column | |
+|---|---|
+| `time` | local time, `YYYY-MM-DD HH:MM:SS`, which a spreadsheet reads as a date |
+| `epoch` | the same moment in Unix seconds, unambiguous across clock changes |
+| `unit_id`, `name` | as the API gives them |
+| `online` | whether the unit answered. When it did not, the rest of the row is empty: the server still knows its last values, but nobody measured them then |
+| `power`, `eco`, `turbo` | `true` or `false` |
+| `mode`, `swing` | the API's names: `COOL`, `HEAT`, `VERTICAL`, `BOTH` and so on |
+| `target`, `indoor`, `outdoor` | °C, one decimal. A unit without an outdoor sensor leaves `outdoor` empty |
+| `fan_speed` | the API's value: `20` to `100`, or `102` for auto |
+
+- **Where it can go.** `on`, or a bare name, lands in the store directory,
+  which every packaged service can already write. Anywhere else, the service
+  account needs write access. Under systemd, whose unit is
+  `ProtectSystem=strict`, that is a drop-in, and the directory is then made
+  for the service account:
+
+  ```ini
+  # systemctl edit breeze-core
+  [Service]
+  LogsDirectory=breeze-core
+  ```
+
+  with `BREEZE_STATE_LOG=/var/log/breeze-core/states.csv`.
+- **Rotating it.** The file is opened for each write and closed again, so
+  logrotate, or you, can move or delete it at any moment; the next row starts a
+  new file, header first. Three units every five minutes come to about 100 KB
+  a day, 35 MB a year.
+- **Each row is a read of the unit**, the same LAN round-trip the app makes,
+  which is why 30 seconds is the shortest interval taken. A row read while an
+  app is open also reaches it as a live update, so the log never asks a unit
+  twice about the same moment.
+- **A name cannot run as a formula.** A unit named `=SUM(…)` is written
+  `'=SUM(…)`, the way spreadsheets expect text that must stay text.
+
+`GET /api/system` reports the file and the interval among its `settings`.
 
 ## Timezone
 

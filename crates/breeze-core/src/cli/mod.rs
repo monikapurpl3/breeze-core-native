@@ -22,10 +22,12 @@
 //! simply execs the binary keeps working.
 
 pub mod admin;
+pub mod backup;
 pub mod client;
 pub mod control;
 pub mod diag;
 pub mod fetch;
+pub mod files;
 pub mod pair;
 pub mod profile;
 pub mod proxy;
@@ -49,6 +51,10 @@ pub enum Command {
     },
     /// A V3 unit's token and key, from the Midea account it is paired with.
     Fetch(fetch::Options),
+    /// The store files, encrypted with a passphrase. Like `pair`, on the
+    /// server's own host and never through the API.
+    Backup(backup::BackupOptions),
+    Restore(backup::RestoreOptions),
     /// The reverse-proxy wizard.
     Proxy(proxy::Options),
     Diag {
@@ -207,6 +213,40 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
             Ok(Command::Fetch(options))
         }
 
+        "backup" => {
+            let mut options = backup::BackupOptions::default();
+            for arg in rest {
+                match arg.as_str() {
+                    "--passphrase-stdin" => options.passphrase_stdin = true,
+                    flag if flag.starts_with("--") => {
+                        return Err(format!("unexpected argument '{flag}'"))
+                    }
+                    file if options.out.is_none() => options.out = Some(file.to_string()),
+                    other => return Err(format!("unexpected argument '{other}'")),
+                }
+            }
+            Ok(Command::Backup(options))
+        }
+
+        "restore" => {
+            let mut options = backup::RestoreOptions::default();
+            let mut file = None;
+            for arg in rest {
+                match arg.as_str() {
+                    "--passphrase-stdin" => options.passphrase_stdin = true,
+                    "--yes" | "-y" => options.yes = true,
+                    "--force" => options.force = true,
+                    flag if flag.starts_with("--") => {
+                        return Err(format!("unexpected argument '{flag}'"))
+                    }
+                    name if file.is_none() => file = Some(name.to_string()),
+                    other => return Err(format!("unexpected argument '{other}'")),
+                }
+            }
+            options.file = file.ok_or("restore needs the backup file to restore from")?;
+            Ok(Command::Restore(options))
+        }
+
         "diag" => {
             let mut client = ClientOpts::default();
             let mut nerd = None;
@@ -312,6 +352,8 @@ usage:
   breeze-core fetch [UNIT...] [--cloud smarthome|meiju|nethome] [--account EMAIL]
                     [--config PATH] [--password-stdin]
   breeze-core diag [--base-url URL] [--config PATH] [--nerd [FILE]]
+  breeze-core backup [FILE] [--passphrase-stdin]
+  breeze-core restore FILE [--passphrase-stdin] [--yes] [--force]
   breeze-core units [--config PATH]
   breeze-core approve [CODE] [--config PATH]
   breeze-core devices [--config PATH]
@@ -335,6 +377,12 @@ day to day:
   units      list the configured units and their state
   diag       check a running server, end to end. --nerd also saves
              everything it saw to a JSON file, for a bug report.
+
+on the server itself, like pair:
+  backup     save the store files -- units with their keys, the API key,
+             paired devices, programs, timers -- encrypted with a passphrase.
+  restore    put them back from a backup. Checks everything opens and parses
+             before writing anything, and refuses while the server is running.
 
 admin, from the local network only:
   approve    approve a pairing code somebody is looking at

@@ -138,13 +138,23 @@ pub fn load<T: DeserializeOwned + Default>(path: impl AsRef<Path>) -> Result<T, 
 /// gave for free, and `Owner` below keeps.
 pub fn save<T: Serialize>(path: impl AsRef<Path>, value: &T, mode: Mode) -> Result<(), StoreError> {
     let path = path.as_ref();
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(io_at(parent))?;
-    }
     let text = to_json(value).map_err(|source| StoreError::Parse {
         path: path.display().to_string(),
         source,
     })?;
+    save_text(path, &text, mode)
+}
+
+/// Write a store file's text as given, the way [`save`] writes a value: same
+/// temporary file and rename, same mode, same owner.
+///
+/// For `breeze-core restore`, which puts back the exact bytes a backup took
+/// rather than re-serialising them. The caller checks the text parses first.
+pub fn save_text(path: impl AsRef<Path>, text: &str, mode: Mode) -> Result<(), StoreError> {
+    let path = path.as_ref();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(io_at(parent))?;
+    }
     let owner = Owner::of(path);
 
     let tmp = path.with_extension("tmp");

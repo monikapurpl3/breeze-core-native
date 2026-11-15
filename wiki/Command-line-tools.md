@@ -17,10 +17,14 @@ breeze-core login      enrol this machine's CLI against a server
 breeze-core approve    approve a pairing code            (admin, LAN-only)
 breeze-core devices    list enrolled device credentials   (admin, LAN-only)
 breeze-core revoke     revoke one by id                  (admin, LAN-only)
+breeze-core backup     the store files, encrypted         (4.4.0+, on the server)
+breeze-core restore    put them back from a backup        (4.4.0+, on the server)
 breeze-core --version  print the version and build commit
 ```
 
-**With no arguments at all it serves**, so an init script may simply `exec` it.
+**With no arguments it prints this list.** It used to serve, on the theory that
+an init script might simply exec it; none does, and a curious `breeze-core`
+starting a second server was the cost.
 
 ## `pair`
 
@@ -233,6 +237,12 @@ breeze-core diag --nerd                     # breeze-core-nerd-<host>-<date>-<ti
 breeze-core diag --nerd /tmp/report.json    # or a name of your own
 ```
 
+Without a name, the file goes in the current directory -- or, where that cannot
+be written, in your home folder, and `diag` says so (4.4.0+). An ssh session
+into Windows starts in `C:\Program Files\PowerShell\7`, and anything a
+systemd service runs starts in `/`; neither should cost you the report. A name
+you give is used as it is, or not at all.
+
 This is the file to attach to a bug report. It contains **no keys or tokens**:
 `/api/system` never contains a secret, and `diag` checks that. It does contain
 the server's hostname, LAN addresses and file paths, so look it over before
@@ -242,6 +252,57 @@ posting it anywhere public. The file is created readable by you only.
 > input validation. That is a control request, which the unit refuses — but if
 > you are working under a "do not touch the air conditioners" rule, this command
 > is not exempt from it.
+
+## Backup and restore
+
+New in 4.4.0. Run on the server's own host, like `pair`: they read and write the
+store files directly, never through the API, so no secret crosses the network
+and a server that will not start can still be restored.
+
+```sh
+sudo breeze-core backup                     # breeze-core-backup-<host>-<date>-<time>.breeze-backup, here
+sudo breeze-core backup /mnt/usb/ac.breeze-backup
+sudo breeze-core restore ac.breeze-backup
+```
+
+**What it holds:** all four store files, exactly as they were on disk --
+`config.json` with the API key and every unit's token and key, the paired
+devices, the programs, the timers. Not the env file, which belongs to the
+machine rather than to the installation.
+
+**The passphrase** is asked for twice, without echo, and must be at least ten
+characters: it is all that protects every key in the file, and it cannot be
+recovered. A backup without its passphrase cannot be opened by anyone, you
+included. From a script, pipe it in with `--passphrase-stdin`:
+
+```sh
+sudo breeze-core backup /var/backups/breeze.breeze-backup --passphrase-stdin < /root/.breeze-passphrase
+```
+
+**Restoring** asks for the passphrase once, then, before writing anything:
+
+- opens the whole backup and checks that every file in it parses -- half a
+  restore would be worse than none;
+- shows what it holds, and where each file will go;
+- **refuses while Breeze Core is running**, because the server keeps these
+  files in memory and would carry on with the old ones. Stop the service
+  first, or pass `--force` and restart it after;
+- asks before replacing them, unless `--yes`.
+
+Each file is written back with the mode and owner the server gives it, so a
+restore run with `sudo` leaves nothing the `breeze` service account cannot
+read. A file that was not in the backup -- timers, say, from before there were
+any -- is left as it is. Restart Breeze Core afterwards: it reads the store
+files only when it starts.
+
+**The format** is Breeze Core's own, and documented in full in
+`crates/breeze-core/src/cli/backup.rs`: a 50-byte header naming the Argon2id
+cost (19 MiB, two passes, one lane), the salt and the nonce, then the JSON of
+the four files under AES-256-GCM, with the header as associated data so that
+no byte of it can be changed unnoticed. Because the header carries the cost, a
+later version can raise it and still open every backup made before. The
+format was checked against independent implementations -- the reference
+Argon2 and OpenSSL's AES-GCM -- in both directions.
 
 ## `units`
 

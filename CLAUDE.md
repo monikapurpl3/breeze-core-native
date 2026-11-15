@@ -208,6 +208,20 @@ pydantic models.
   one to its directory's, before the rename. Root running a CLI is the normal
   case, not a misuse: the docs say `sudo breeze-core pair`.
 
+### Backups are a frozen format; the state log reads through the poller
+
+- `breeze-core backup` writes format 1 of the file `cli/backup.rs` documents:
+  an Argon2id cost, salt and nonce in a 50-byte header that is AES-256-GCM's
+  associated data. `the_format_does_not_drift` pins a known answer that
+  argon2-cffi and OpenSSL produced first. If it ever fails, the change broke
+  every backup already made: give the new layout format 2 and keep opening 1.
+- `restore` writes each file's **exact bytes** through
+  `breeze_store::save_text`, never a re-serialised value, for the same reason
+  the store round-trips byte for byte.
+- The state log (`BREEZE_STATE_LOG`, `state_log.rs`) samples through
+  `stream::poll_one`, so a logged reading also feeds the history and any open
+  stream. A second, private read path would read every unit twice.
+
 ### Protocol traps
 
 - **Key sizes differ per layer.** The packet layer uses a fixed 16-byte key

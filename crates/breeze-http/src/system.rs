@@ -347,7 +347,7 @@ fn network_facts(state: &AppState) -> serde_json::Value {
     })
 }
 
-fn hostname() -> Option<String> {
+pub fn hostname() -> Option<String> {
     // /etc/hostname is the portable-enough answer; a libc call for one string
     // would mean a dependency and a per-platform shim.
     std::fs::read_to_string("/etc/hostname")
@@ -435,6 +435,13 @@ pub fn snapshot(state: &AppState, connection: serde_json::Value) -> serde_json::
             "stream_tick_seconds": state.settings.stream_tick_seconds,
             "timer_tick_seconds": state.settings.timer_tick_seconds,
             "history_size": state.settings.history_size,
+            // Where the CSV state log goes, or null when it is off.
+            "state_log": state
+                .settings
+                .state_log
+                .as_ref()
+                .map(|p| p.display().to_string()),
+            "state_log_interval_seconds": state.settings.state_log_every.as_secs(),
             "compression": compression_setting(),
             // The live values, not the compile-time defaults. These were
             // reported as constants in 4.0.1, which was accurate then and would

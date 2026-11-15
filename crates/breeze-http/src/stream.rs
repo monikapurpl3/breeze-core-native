@@ -241,13 +241,14 @@ fn lane_count(units: usize, requested: usize) -> usize {
     requested.max(1).min(units.max(1))
 }
 
-/// Read one unit, record it, and broadcast it if it moved.
+/// Read one unit, record it, and broadcast it if it moved. Returns what it read.
 ///
 /// Extracted so the sequential and fanned-out paths cannot drift: both call
 /// exactly this, and every shared structure it touches (`last`, `history`, the
 /// subscriber list) was already behind its own lock because the HTTP workers
-/// reach them too.
-fn poll_one(state: &AppState, id: u64) {
+/// reach them too. The state log samples through it as well, so a logged
+/// reading is also a streamed and remembered one.
+pub(crate) fn poll_one(state: &AppState, id: u64) -> serde_json::Value {
     let value = read_unit(state, id);
     // Canonical form for change detection only. `serde_json` sorts object
     // keys, which is exactly the reference's `json.dumps(..., sort_keys=True)`
@@ -256,7 +257,7 @@ fn poll_one(state: &AppState, id: u64) {
 
     let changed = {
         let Ok(mut last) = state.stream.last.lock() else {
-            return;
+            return value;
         };
         match last.get(&id) {
             Some((previous, _)) if *previous == canonical => false,
@@ -274,8 +275,9 @@ fn poll_one(state: &AppState, id: u64) {
     // not news, and waking every client every tick is what this feature
     // exists to stop.
     if changed {
-        state.stream.broadcast(("state", value));
+        state.stream.broadcast(("state", value.clone()));
     }
+    value
 }
 
 /// Refresh one unit, falling back the way the reference does.

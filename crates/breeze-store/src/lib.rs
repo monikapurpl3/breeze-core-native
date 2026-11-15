@@ -40,7 +40,7 @@ pub use programs::{
     curve_request, curve_setpoint, due_entries, minute_stamp, round_half, ProgramError,
     ProgramSpec, PROGRAM_KINDS,
 };
-pub use store::{load, save, to_json, Mode, StoreError};
+pub use store::{load, save, save_text, to_json, Mode, StoreError};
 
 /// Where the four store files live when `AC_CONFIG_DIR` does not say.
 ///

@@ -54,6 +54,11 @@ pub struct Settings {
     pub token_ttl_days: i64,
     /// How far a signed request's timestamp may be from server time, each way.
     pub auth_skew_seconds: u64,
+    /// `BREEZE_STATE_LOG`: the CSV file every unit's state is appended to.
+    /// `None`, the default, is off. See [`crate::state_log`].
+    pub state_log: Option<PathBuf>,
+    /// `BREEZE_STATE_LOG_INTERVAL`: how often a row per unit is written.
+    pub state_log_every: std::time::Duration,
 }
 
 impl Settings {
@@ -167,6 +172,10 @@ impl Settings {
                 std::env::var("AC_BEHIND_PROXY").as_deref(),
                 Ok("1") | Ok("true") | Ok("yes")
             ),
+            // BREEZE_, not AC_: the reference has no state log, and AC_ is kept
+            // for the names an existing installation already sets.
+            state_log: crate::state_log::path_from_env(&dir),
+            state_log_every: crate::state_log::interval_from_env(),
         }
     }
 }
@@ -529,11 +538,14 @@ mod tests {
             token_ttl_days: 3650,
             auth_skew_seconds: 60,
             security_headers: true,
+            state_log: None,
+            state_log_every: crate::state_log::DEFAULT_EVERY,
         };
         assert_eq!(
             s.min_auth_version, 1,
             "must not lock out v1 devices by default"
         );
+        assert!(s.state_log.is_none(), "the state log is opt-in");
         assert!(s.bind.ends_with(":8420"));
         assert!(
             s.bind.starts_with("127.0.0.1"),

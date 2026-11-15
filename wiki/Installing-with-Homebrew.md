@@ -58,8 +58,10 @@ macOS, a systemd user unit on Linux.
   not. For a user unit that survives logging out, run
   `loginctl enable-linger $USER` once.
 - On a **Mac nobody logs in to**, `sudo brew services start breeze-core` runs it
-  from boot as root. Pick one or the other: files the root service writes are
-  then root's, and `breeze-core pair` as you cannot change them.
+  from boot as root. Pick one or the other rather than switching. Before
+  4.4.0, files the root service wrote became root's, and `breeze-core pair` as
+  you could not change them; since 4.4.0 a store file keeps its owner when it
+  is rewritten.
 
 ## What it installs
 

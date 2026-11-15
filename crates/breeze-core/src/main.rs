@@ -44,6 +44,8 @@ fn main() {
             Ok(code) => std::process::exit(code),
             Err(e) => Err(e),
         },
+        cli::Command::Backup(options) => cli::backup::backup(options),
+        cli::Command::Restore(options) => cli::backup::restore(options),
         cli::Command::Diag { client, nerd } => {
             match cli::diag::run(&client, nerd.as_ref().map(|p| p.as_deref())) {
                 // The exit code is the point of a diagnostic in a script.
@@ -119,6 +121,8 @@ fn serve(host: Option<String>, port: Option<u16>, behind_proxy: bool) {
     // Keeps unit connections open for a while after the server was last used
     // (BREEZE_KEEP_WARM), so opening the app again does not pay a reconnect.
     let _warm = breeze_http::warm::spawn_keep_warm(Arc::clone(&state));
+    // Only when BREEZE_STATE_LOG names a file; off otherwise.
+    let _state_log = breeze_http::state_log::spawn(Arc::clone(&state));
 
     if let Err(e) = breeze_http::serve(state) {
         eprintln!("breeze-core: {e}");

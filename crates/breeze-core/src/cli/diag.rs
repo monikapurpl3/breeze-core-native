@@ -420,49 +420,32 @@ fn write_nerd(client: &Client, report: &Report, path: Option<&str>) -> Result<()
         },
     });
 
-    let path = match path {
-        Some(p) => p.to_string(),
+    let text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n";
+    let saved = match path {
+        // Named by the person: written there or not at all.
+        Some(p) => {
+            let p = std::path::PathBuf::from(p);
+            super::files::write_private(&p, text.as_bytes())
+                .map_err(|e| format!("cannot write {}: {e}", p.display()))?;
+            p
+        }
         None => {
             // The server's own hostname, where it said, so two files from two
             // servers do not look alike in a downloads folder.
-            let host: String = doc["system"]["os"]["hostname"]
-                .as_str()
-                .unwrap_or("server")
-                .chars()
-                .map(|c| {
-                    if c.is_ascii_alphanumeric() || c == '-' {
-                        c
-                    } else {
-                        '_'
-                    }
-                })
-                .collect();
-            format!(
+            let host =
+                super::files::tidy(doc["system"]["os"]["hostname"].as_str().unwrap_or("server"));
+            let name = format!(
                 "breeze-core-nerd-{host}-{}.json",
                 now.format("%Y%m%d-%H%M%S")
-            )
+            );
+            super::files::save_here_or_home(&name, text.as_bytes())?
         }
     };
-    let text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n";
-    write_private(&path, &text).map_err(|e| format!("cannot write {path}: {e}"))?;
     println!("\n== nerd ==");
-    println!("  saved to {path}");
+    println!("  saved to {}", saved.display());
     println!("  It holds this server's hostname, LAN addresses and file paths, but no");
     println!("  keys or tokens. Look it over before posting it anywhere public.");
     Ok(())
-}
-
-/// Create (or replace) a file readable only by its owner.
-fn write_private(path: &str, text: &str) -> std::io::Result<()> {
-    use std::io::Write as _;
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt as _;
-        options.mode(0o600);
-    }
-    options.open(path)?.write_all(text.as_bytes())
 }
 
 /// The sanity of one state document.
