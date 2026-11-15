@@ -138,7 +138,7 @@ dependencies = [
 
 [[package]]
 name = "breeze-core"
-version = "4.3.2"
+version = "4.4.0"
 dependencies = [
  "aes-gcm",
  "argon2",

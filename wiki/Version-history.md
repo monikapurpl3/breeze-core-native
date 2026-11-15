@@ -7,6 +7,7 @@ and, for every package manager, on
 
 | | | |
 |---|---|---|
+| **4.4.0** | 15 Nov 2026 | a CSV log of every unit's state; encrypted backup and restore; `sudo pair` no longer leaves a service that cannot start; NetBSD's service stays up after a reboot; a rustls security fix; `diag --nerd` from any directory |
 | **4.3.2** | 4 Oct 2026 | a web panel usable without a mouse or without sight; `control` says when a unit refuses. **13 Oct:** the same release for more machines — 32-bit x86, ARMv6 (every Raspberry Pi), LoongArch, big-endian POWER and Cavium Octeon, with no code change. **24 Oct:** OPNsense plugin `4.3.2_1`, the Devices tab working on PHP 8.5 in a development deployment |
 | **4.3.1** | 3 Oct 2026 | macOS; a Homebrew tap for macOS and Linux; the panel's header on phones |
 | **4.3.0** | 2 Oct 2026 | Termux, MIPS, OpenWrt 25.12, source packages; `fetch`, `proxy`, `diag --nerd`; the X-Forwarded-For fix |
