@@ -59,6 +59,14 @@ VERSION="$(grep -m1 '^version' crates/breeze-core/Cargo.toml | cut -d'"' -f2)"
 # The OpenBSD release the openbsd-amd64 binary is linked against, and so the
 # only one it runs on. It is also the release in the published package path.
 OPENBSD_REL="7.9"
+# The nightly that builds OpenBSD's std, pinned, and moved together with
+# OPENBSD_REL. OpenBSD is tier 3, so std is compiled from source, and std
+# follows OpenBSD -current: the nightly of 2026-11-06 calls getexecpath(3),
+# which 7.9's libc does not have, so the link failed -- and had it linked, the
+# binary would have failed on every 7.9 machine instead. 2026-10-12's built
+# 4.3.2 for 7.9. Install with:
+#   rustup toolchain install <it> --profile minimal -c rust-src
+OPENBSD_TOOLCHAIN="${BC_OPENBSD_TOOLCHAIN:-nightly-2026-10-12}"
 
 ZIG_PIN="0.16.0"
 ZIG="${BC_ZIG:-zig}"
@@ -171,6 +179,11 @@ while IFS='|' read -r label target note; do
       # and a binary without endbr64 landing pads faults on its first indirect
       # call on a CPU that has it. OpenBSD's own rustc turns it on; this does
       # the same for the Rust code, std included, and for ring's C.
+      rustup run "$OPENBSD_TOOLCHAIN" rustc -V >/dev/null 2>&1 || {
+        echo "!! $OPENBSD_TOOLCHAIN is not installed; OpenBSD's std is built with it:"
+        echo "   rustup toolchain install $OPENBSD_TOOLCHAIN --profile minimal -c rust-src"
+        exit 1
+      }
       sysroot="$("$REPO/packaging/cross/openbsd-sysroot.sh" "$OPENBSD_REL" amd64)"
       cc="$(shim "cc-$target" node "$REPO/packaging/cross/xclang.js" \
              "x86_64-unknown-openbsd$OPENBSD_REL" "$sysroot" --)"
@@ -178,7 +191,7 @@ while IFS='|' read -r label target note; do
       env "CARGO_TARGET_${upper}_LINKER=$cc" "CC_${under}=$cc" "AR_${under}=$ar" \
           "CFLAGS_${under}=-fcf-protection=branch" \
           "CARGO_TARGET_${upper}_RUSTFLAGS=-Zcf-protection=branch" \
-        cargo +nightly build --release --target "$target" -Zbuild-std=std,panic_abort
+        cargo +"$OPENBSD_TOOLCHAIN" build --release --target "$target" -Zbuild-std=std,panic_abort
       ;;
     loongarch64-*)
       # Rust's loongarch64 musl target links dynamically unless told otherwise,
