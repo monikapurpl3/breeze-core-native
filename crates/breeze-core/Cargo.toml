@@ -35,6 +35,11 @@ aes-gcm = { version = "0.10", default-features = false, features = ["aes", "allo
 getrandom = "0.2"
 zeroize = "1"
 
+# SIGPIPE back to the default for the CLI commands (main.rs). Already linked:
+# std and half the dependency tree use it.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [features]
 default = ["cloud"]
 # Passed through to breeze-http. `--no-default-features` drops the TLS stack,

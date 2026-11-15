@@ -20,6 +20,21 @@ fn main() {
         }
     };
 
+    // A command whose output goes into a pipe that closes early -- `breeze-core
+    // --version | head -1`, `units | head` -- should stop there quietly, as any
+    // Unix tool does. Rust ignores SIGPIPE, so the next write failed with EPIPE,
+    // println! panicked, and panic=abort dumped core: seen in the 4.4.0 FreeBSD
+    // verify. The server keeps ignoring it: a client that hangs up mid-reply
+    // must cost that reply, never the process. Sockets are unaffected either
+    // way, since std sends with MSG_NOSIGNAL.
+    #[cfg(unix)]
+    if !matches!(command, cli::Command::Serve { .. }) {
+        // SAFETY: one thread exists yet, and SIG_DFL needs no handler.
+        unsafe {
+            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        }
+    }
+
     let result = match command {
         cli::Command::Serve {
             host,

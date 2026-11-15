@@ -149,6 +149,7 @@ dependencies = [
  "breeze-proto",
  "breeze-store",
  "getrandom",
+ "libc",
  "rpassword",
  "serde",
  "serde_json",
