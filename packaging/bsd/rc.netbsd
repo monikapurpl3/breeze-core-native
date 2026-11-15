@@ -45,13 +45,20 @@ breeze_start()
 	rm -f "${pidfile}"
 	touch "${pidfile}" "${logfile}"
 	chown breeze "${pidfile}" "${logfile}"
+	# nohup, and stdin from /dev/null: a background job is still in the
+	# session that started it, and when that session's leader exits, the job
+	# is sent SIGHUP. At boot the leader is /etc/rc on the console, so until
+	# 4.4.0 the server logged "listening" and was gone by the login prompt;
+	# started from an ssh login, it died at logout. FreeBSD's daemon(8) does
+	# this for its script. $! stays the server's pid: env and nohup each exec
+	# the next program rather than forking it.
 	su -m breeze -c "env \
 	  AC_CONFIG=${_etcdir}/config.json \
 	  AC_DEVICES=${_etcdir}/devices.json \
 	  AC_PROGRAMS=${_etcdir}/programs.json \
 	  AC_TIMERS=${_etcdir}/timers.json \
-	  ${_bin} serve --host ${BREEZE_HOST} --port ${BREEZE_PORT} ${BREEZE_OPTS} \
-	  >> ${logfile} 2>&1 & echo \$! > ${pidfile}"
+	  nohup ${_bin} serve --host ${BREEZE_HOST} --port ${BREEZE_PORT} ${BREEZE_OPTS} \
+	  < /dev/null >> ${logfile} 2>&1 & echo \$! > ${pidfile}"
 }
 
 breeze_stop()
