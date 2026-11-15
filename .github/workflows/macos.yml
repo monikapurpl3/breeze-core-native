@@ -178,6 +178,10 @@ jobs:
           ver=$(sed -n 's/^version = "\(.*\)"/\1/p' crates/breeze-core/Cargo.toml | head -1)
           bash packaging/homebrew/make-formula.sh "$ver" "file://$PWD/dist" dist > breeze-core.rb
           brew tap-new --no-git local/breeze
+          # Trusted like any third-party tap: since November 2026 Homebrew
+          # refuses to load a formula even from a `brew tap-new` one until it
+          # is, and brew audit failed on every runner for 4.4.0.
+          brew trust local/breeze
           cp breeze-core.rb "$(brew --repository local/breeze)/Formula/"
           # Enforced: brew's own lint is what keeps the formula loadable as
           # Homebrew changes (post_install is already rejected by it).
@@ -243,8 +247,9 @@ jobs:
           set -eux
           brew tap aspic/breeze https://aspic.salataputarica.hr.eu.org/homebrew/breeze.git
           # Homebrew loads nothing from a third-party tap until it is trusted,
-          # once. A `brew tap-new` tap, as in the job above, is trusted from
-          # the start, which is why only this job meets it -- as users do.
+          # once -- as users meet it. (The job above trusts its `brew tap-new`
+          # tap too: those stopped being trusted from the start in November
+          # 2026.)
           brew trust aspic/breeze
           brew install breeze-core
           breeze-core --version
